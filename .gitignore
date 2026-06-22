@@ -1,0 +1,13 @@
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+.build/
+dist-electron/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
