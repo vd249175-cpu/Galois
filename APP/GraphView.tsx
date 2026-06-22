@@ -52,7 +52,7 @@ function GraphView() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       
-      const zoomFactor = 1.08;
+      const zoomFactor = 1.03;
       const factor = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
       
       const rect = svg.getBoundingClientRect();
@@ -439,17 +439,6 @@ function GraphView() {
                 
                 {/* Node Title Box Label */}
                 <g transform="translate(0, 18)" style={{ pointerEvents: 'none' }}>
-                  <rect
-                    x={-((node.label.length * 6) / 2) - 4}
-                    y="-8"
-                    width={node.label.length * 6 + 8}
-                    height="13"
-                    rx="3"
-                    fill="var(--bg-panel)"
-                    stroke={isHovered ? 'var(--accent-color)' : 'var(--border-color)'}
-                    strokeWidth="0.8"
-                    style={{ transition: 'stroke 0.15s' }}
-                  />
                   <text
                     textAnchor="middle"
                     fill={isHovered ? 'var(--accent-color)' : 'var(--text-main)'}
@@ -458,6 +447,7 @@ function GraphView() {
                       fontWeight: 600,
                       fontFamily: 'var(--font-sans)',
                       userSelect: 'none',
+                      textShadow: '0px 1px 2px var(--bg-main), 0px 1px 2px var(--bg-main)', // Enhance readability against lines
                     }}
                   >
                     {node.label}
