@@ -160,7 +160,7 @@ function SettingsView() {
         <div className="settings-content" style={{ backgroundColor: 'transparent' }}>
           {activeCategory === 'shortcuts' && (
             <>
-              <div className="settings-header" style={{ backgroundColor: 'rgba(10, 10, 13, 0.25)' }}>
+              <div className="settings-header">
                 <h2>Keyboard Shortcuts</h2>
                 <div className="settings-search-container">
                   <input
@@ -179,7 +179,7 @@ function SettingsView() {
                   const isListening = editingActionId === act.id;
 
                   return (
-                    <div key={act.id} className="settings-row" style={{ backgroundColor: 'rgba(13, 13, 16, 0.5)' }}>
+                    <div key={act.id} className="settings-row">
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                         <span className="settings-row-label">{act.label}</span>
                         <span className="settings-row-id">{act.id}</span>
@@ -217,7 +217,7 @@ function SettingsView() {
             <div style={{ padding: '16px' }}>
               <h2>Appearance Settings</h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '12px' }}>
-                Theme: Charcoal Dark (Active)
+                Theme: Warm Beige (Active)
               </p>
             </div>
           )}
