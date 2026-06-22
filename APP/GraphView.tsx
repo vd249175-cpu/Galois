@@ -44,6 +44,21 @@ function GraphView() {
   const startPan = useRef({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Real-time Physics & Graphics Adjustment States (斥力和箭头可调)
+  const [repulsion, setRepulsion] = useState(1800);
+  const [arrowSize, setArrowSize] = useState(5);
+
+  const repulsionRef = useRef(repulsion);
+  const arrowSizeRef = useRef(arrowSize);
+
+  useEffect(() => {
+    repulsionRef.current = repulsion;
+  }, [repulsion]);
+
+  useEffect(() => {
+    arrowSizeRef.current = arrowSize;
+  }, [arrowSize]);
+
   // Mouse Wheel Zoom-to-Cursor Effect
   useEffect(() => {
     const svg = svgRef.current;
@@ -163,7 +178,7 @@ function GraphView() {
         return;
       }
 
-      const repulsionStrength = 1800;
+      const repulsionStrength = repulsionRef.current;
       const attractionStrength = 0.05;
       const gravity = 0.015; // Centering gravity
       const damping = 0.85;
@@ -338,6 +353,73 @@ function GraphView() {
         <button className="area-btn" onClick={() => { setPan({ x: 300, y: 250 }); setZoom(1.0); }} title="Recenter">⟲</button>
       </div>
 
+      {/* Floating Parameters Adjustment Panel (斥力和箭头可调 UI) */}
+      <div style={{
+        position: 'absolute',
+        bottom: '12px',
+        left: '12px',
+        backgroundColor: 'var(--bg-panel)',
+        border: '1px solid var(--border-color)',
+        borderRadius: '6px',
+        padding: '10px 12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        zIndex: 10,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        backdropFilter: 'blur(8px)',
+        width: '180px',
+        fontSize: '11px',
+      }}>
+        <div style={{ fontWeight: 600, color: 'var(--text-muted)', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.5px', fontSize: '9px' }}>
+          Graph Parameters
+        </div>
+        
+        {/* Repulsion Slider */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+            <span>Repulsion (斥力)</span>
+            <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{repulsion}</span>
+          </div>
+          <input
+            type="range"
+            min="500"
+            max="5000"
+            step="100"
+            value={repulsion}
+            onChange={(e) => setRepulsion(Number(e.target.value))}
+            style={{
+              width: '100%',
+              accentColor: 'var(--accent-color)',
+              height: '3px',
+              cursor: 'pointer',
+            }}
+          />
+        </div>
+
+        {/* Arrow Size Slider */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+            <span>Arrow Size (箭头)</span>
+            <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{arrowSize}</span>
+          </div>
+          <input
+            type="range"
+            min="3"
+            max="12"
+            step="1"
+            value={arrowSize}
+            onChange={(e) => setArrowSize(Number(e.target.value))}
+            style={{
+              width: '100%',
+              accentColor: 'var(--accent-color)',
+              height: '3px',
+              cursor: 'pointer',
+            }}
+          />
+        </div>
+      </div>
+
       <svg
         ref={svgRef}
         width="100%"
@@ -353,8 +435,8 @@ function GraphView() {
             viewBox="0 0 10 10"
             refX="6"
             refY="5"
-            markerWidth="5"
-            markerHeight="5"
+            markerWidth={arrowSize}
+            markerHeight={arrowSize}
             orient="auto"
           >
             <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--border-color)" />
@@ -364,8 +446,8 @@ function GraphView() {
             viewBox="0 0 10 10"
             refX="6"
             refY="5"
-            markerWidth="5"
-            markerHeight="5"
+            markerWidth={arrowSize}
+            markerHeight={arrowSize}
             orient="auto"
           >
             <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--accent-color)" />
@@ -384,7 +466,8 @@ function GraphView() {
             const dx = target.x - source.x;
             const dy = target.y - source.y;
             const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            const targetRadius = 16; // offset to end the line exactly outside target dot
+            // Adjust offset dynamically based on arrowhead size so line terminates cleanly
+            const targetRadius = 11 + arrowSize; 
             const x2 = target.x - (dx / len) * targetRadius;
             const y2 = target.y - (dy / len) * targetRadius;
 
