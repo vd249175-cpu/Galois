@@ -185,12 +185,26 @@ function GraphView() {
         }
       });
 
-      // 2c. Update positions, applying center gravity
+      // 2c. Update positions, applying center gravity and radial hierarchy force
       simNodes.forEach((n) => {
         if (n.id === dragNodeId.current) return;
 
-        n.vx -= n.x * gravity;
-        n.vy -= n.y * gravity;
+        const d = Math.sqrt(n.x * n.x + n.y * n.y) || 1;
+        
+        // General concepts (fewer tags) go to the center, specific concepts (more tags) go to the edge
+        const tagCount = n.tags ? n.tags.length : 1;
+        const targetR = Math.max(0, tagCount - 1) * 125; // 125px spacing per level of specificity
+        
+        // Radial constraint force pulling/pushing the node towards targetR
+        const radialStrength = 0.055;
+        const radialForce = (targetR - d) * radialStrength;
+        n.vx += (n.x / d) * radialForce;
+        n.vy += (n.y / d) * radialForce;
+
+        // Centering weak gravity to keep layout centered
+        const centeringGravity = 0.005;
+        n.vx -= n.x * centeringGravity;
+        n.vy -= n.y * centeringGravity;
 
         n.vx *= damping;
         n.vy *= damping;
