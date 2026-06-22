@@ -76,7 +76,7 @@ function GraphView() {
     return () => {
       svg.removeEventListener('wheel', handleWheel);
     };
-  }, []);
+  }, [projectPath, nodes]);
 
   // Physics Simulation
   const simRef = useRef<{ nodes: Node[]; links: Link[] }>({ nodes: [], links: [] });
