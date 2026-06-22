@@ -42,6 +42,41 @@ function GraphView() {
   const [zoom, setZoom] = useState(1.0);
   const isPanning = useRef(false);
   const startPan = useRef({ x: 0, y: 0 });
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Mouse Wheel Zoom-to-Cursor Effect
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      
+      const zoomFactor = 1.08;
+      const factor = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
+      
+      const rect = svg.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      
+      setZoom((prevZoom) => {
+        const nextZoom = Math.max(0.2, Math.min(3.0, prevZoom * factor));
+        const actualFactor = nextZoom / prevZoom;
+        
+        setPan((prevPan) => ({
+          x: screenX - (screenX - prevPan.x) * actualFactor,
+          y: screenY - (screenY - prevPan.y) * actualFactor,
+        }));
+        
+        return nextZoom;
+      });
+    };
+
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   // Physics Simulation
   const simRef = useRef<{ nodes: Node[]; links: Link[] }>({ nodes: [], links: [] });
@@ -304,6 +339,7 @@ function GraphView() {
       </div>
 
       <svg
+        ref={svgRef}
         width="100%"
         height="100%"
         onMouseDown={handleSVGMouseDown}
