@@ -57,14 +57,20 @@ def main():
         c_col = c.reshape(-1, 1)  # shape: (N, 1) - c_col[i] is size of node i
         c_row = c.reshape(1, -1)  # shape: (1, N) - c_row[k] is size of node k
 
-        # Condition 1: Tags(i) is subset of Tags(k) -> size of intersection equals size of node i
+        # Step 1: Compute proper subset inclusion DAG matrix A
+        # A[i, k] is True if Tags(i) is a proper subset of Tags(k) and Tags(i) is non-empty
         inclusion = (D == c_col)
+        proper = (c_col < c_row) & (c_col > 0)
+        A = inclusion & proper
 
-        # Condition 2: k has exactly one more tag than i, and node i must have at least one tag
-        layer = (c_row == c_col + 1) & (c_col > 0)
+        # Step 2: Compute transitive reduction of A to remove redundant edges.
+        # Since A is transitively closed, any path of length >= 2 implies a path of length exactly 2.
+        # A2[i, k] > 0 if there is some node j such that A[i, j] and A[j, k] are True.
+        A_int = A.astype(int)
+        A2 = np.dot(A_int, A_int)
 
-        # Boolean matrix of derived lattice edges
-        adjacency = inclusion & layer
+        # Keep only edges in A where there is no path of length 2 (direct covering relations)
+        adjacency = A & (A2 == 0)
 
         # Extract source and target indices where True
         sources, targets = np.where(adjacency)
