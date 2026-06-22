@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writeFile', filePath, content),
   listDir: (dirPath: string) => ipcRenderer.invoke('fs:listDir', dirPath),
+  openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+  archiveMedia: (srcPath: string, projectPath: string) => ipcRenderer.invoke('fs:archiveMedia', { srcPath, projectPath }),
   
   // Terminal commands execution
   execCommand: (command: string, cwd: string) => ipcRenderer.invoke('shell:exec', command, cwd),

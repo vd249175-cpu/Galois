@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import { exec } from 'child_process';
@@ -86,6 +86,46 @@ ipcMain.handle('fs:listDir', async (_, dirPath: string) => {
     });
   } catch (err: any) {
     throw new Error(`Failed to list directory: ${err.message}`);
+  }
+});
+
+// Native folder opener dialog IPC handler
+ipcMain.handle('dialog:openDirectory', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Select Project Directory',
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+// Drag and drop media auto-archiving IPC handler
+ipcMain.handle('fs:archiveMedia', async (_, { srcPath, projectPath }: { srcPath: string; projectPath: string }) => {
+  try {
+    const destDir = path.join(projectPath, 'media');
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    
+    // Extract base filename and sanitize it
+    const baseName = path.basename(srcPath);
+    let destPath = path.join(destDir, baseName);
+    
+    // Prevent name collisions
+    if (fs.existsSync(destPath)) {
+      const ext = path.extname(baseName);
+      const nameWithoutExt = path.basename(baseName, ext);
+      destPath = path.join(destDir, `${nameWithoutExt}_${Date.now()}${ext}`);
+    }
+    
+    fs.copyFileSync(srcPath, destPath);
+    // Return relative path from projectPath (e.g., 'media/pic.png') for Markdown embedding
+    return path.relative(projectPath, destPath);
+  } catch (err: any) {
+    throw new Error(`Failed to archive media: ${err.message}`);
   }
 });
 

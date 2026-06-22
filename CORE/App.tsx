@@ -8,6 +8,7 @@ import { EditorComponent } from '../APP/Editor';
 import { TerminalComponent } from '../APP/Terminal';
 import { FileTreeComponent } from '../APP/FileTree';
 import { SettingsComponent } from '../APP/Settings';
+import { GraphViewComponent } from '../APP/GraphView';
 import { RightSidebar } from './RightSidebar';
 import { Blood } from './Blood';
 import './index.css';
@@ -17,6 +18,7 @@ ComponentRegistry.register(FileTreeComponent);
 ComponentRegistry.register(EditorComponent);
 ComponentRegistry.register(TerminalComponent);
 ComponentRegistry.register(SettingsComponent);
+ComponentRegistry.register(GraphViewComponent);
 
 export function App() {
   const searchParams = new URLSearchParams(window.location.search);
@@ -95,7 +97,7 @@ export function App() {
   const [layout, setLayout] = useState<AreaLayout>({
     type: 'split',
     direction: 'horizontal',
-    ratio: 0.25,
+    ratio: 0.22,
     first: {
       type: 'area',
       id: 'file-tree-root',
@@ -103,8 +105,8 @@ export function App() {
     },
     second: {
       type: 'split',
-      direction: 'vertical',
-      ratio: 0.6,
+      direction: 'horizontal',
+      ratio: 0.55,
       first: {
         type: 'area',
         id: 'editor-root',
@@ -112,8 +114,8 @@ export function App() {
       },
       second: {
         type: 'area',
-        id: 'terminal-root',
-        componentType: 'terminal',
+        id: 'graph-root',
+        componentType: 'graphView',
       },
     },
   });
