@@ -30,6 +30,14 @@ export function App() {
   useEffect(() => {
     if (isPopped) return;
     
+    // Focus the editor by default so sidebar controls are active immediately
+    Blood.updateKey('system.focusedAreaId', 'editor-root');
+    
+    // Preload the template project workspace on startup
+    const defaultProj = '/Users/apexwave/Desktop/DNOTE/template-project';
+    Blood.updateKey('project.path', defaultProj);
+    Blood.updateKey('events.openFile.editor-root', `${defaultProj}/Welcome.md`);
+    
     const loadCustomShortcuts = async () => {
       try {
         const content = await (window as any).electronAPI.readFile('dnote_shortcuts.json');
