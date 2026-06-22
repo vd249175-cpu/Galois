@@ -297,6 +297,30 @@ function GraphView() {
         onMouseUp={handleSVGMouseUp}
         style={{ cursor: isPanning.current ? 'grabbing' : 'grab', backgroundColor: 'transparent' }}
       >
+        <defs>
+          <marker
+            id="arrowhead-default"
+            viewBox="0 0 10 10"
+            refX="6"
+            refY="5"
+            markerWidth="5"
+            markerHeight="5"
+            orient="auto"
+          >
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--border-color)" />
+          </marker>
+          <marker
+            id="arrowhead-hovered"
+            viewBox="0 0 10 10"
+            refX="6"
+            refY="5"
+            markerWidth="5"
+            markerHeight="5"
+            orient="auto"
+          >
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--accent-color)" />
+          </marker>
+        </defs>
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {/* Render Lattice links */}
           {links.map((link, idx) => {
@@ -305,16 +329,26 @@ function GraphView() {
             if (!source || !target) return null;
 
             const isRelated = hoveredNode === link.source || hoveredNode === link.target;
+            
+            // Calculate proper directional line endpoints with arrow markers
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            const targetRadius = 16; // offset to end the line exactly outside target dot
+            const x2 = target.x - (dx / len) * targetRadius;
+            const y2 = target.y - (dy / len) * targetRadius;
+
             return (
               <line
                 key={`link-${idx}`}
                 x1={source.x}
                 y1={source.y}
-                x2={target.x}
-                y2={target.y}
+                x2={x2}
+                y2={y2}
                 stroke={isRelated ? 'var(--accent-color)' : 'var(--border-color)'}
-                strokeWidth={isRelated ? 2.0 : 1.2}
+                strokeWidth={isRelated ? 1.8 : 1.1}
                 strokeOpacity={hoveredNode && !isRelated ? 0.2 : 0.8}
+                markerEnd={isRelated ? 'url(#arrowhead-hovered)' : 'url(#arrowhead-default)'}
                 style={{ transition: 'stroke 0.15s, stroke-width 0.15s' }}
               />
             );

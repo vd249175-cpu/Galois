@@ -60,11 +60,11 @@ def main():
         # Condition 1: Tags(i) is subset of Tags(k) -> size of intersection equals size of node i
         inclusion = (D == c_col)
 
-        # Condition 2: Proper subset -> size of node i is strictly less than size of node k, and node i must have at least one tag
-        proper = (c_col < c_row) & (c_col > 0)
+        # Condition 2: k has exactly one more tag than i, and node i must have at least one tag
+        layer = (c_row == c_col + 1) & (c_col > 0)
 
         # Boolean matrix of derived lattice edges
-        adjacency = inclusion & proper
+        adjacency = inclusion & layer
 
         # Extract source and target indices where True
         sources, targets = np.where(adjacency)
