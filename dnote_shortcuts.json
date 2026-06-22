@@ -1,0 +1,14 @@
+{
+  "editor.save": {
+    "key": "s",
+    "modifiers": ["command"]
+  },
+  "terminal.clear": {
+    "key": "k",
+    "modifiers": ["command"]
+  },
+  "sidebar.toggle": {
+    "key": "b",
+    "modifiers": ["command"]
+  }
+}

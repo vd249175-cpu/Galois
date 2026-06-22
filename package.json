@@ -1,0 +1,33 @@
+{
+  "name": "dnote",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build:vite": "vite build",
+    "build:electron": "tsc CORE/main.ts CORE/preload.ts --outDir dist-electron --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop true --ignoreConfig",
+    "dev:vite": "vite",
+    "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
+    "dev": "concurrently \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
+    "build": "npm run build:vite && npm run build:electron",
+    "start": "NODE_ENV=production electron ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "liquid-glass-react": "^1.1.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^10.0.3",
+    "electron": "^42.4.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
