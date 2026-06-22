@@ -433,18 +433,18 @@ function GraphView() {
           <marker
             id="arrowhead-default"
             viewBox="0 0 10 10"
-            refX="6"
+            refX="8"
             refY="5"
             markerWidth={arrowSize}
             markerHeight={arrowSize}
             orient="auto"
           >
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--border-color)" />
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--accent-color)" />
           </marker>
           <marker
             id="arrowhead-hovered"
             viewBox="0 0 10 10"
-            refX="6"
+            refX="8"
             refY="5"
             markerWidth={arrowSize}
             markerHeight={arrowSize}
@@ -466,8 +466,9 @@ function GraphView() {
             const dx = target.x - source.x;
             const dy = target.y - source.y;
             const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            // Adjust offset dynamically based on arrowhead size so line terminates cleanly
-            const targetRadius = 11 + arrowSize; 
+            // Anchor arrow tip exactly to target node boundary (independent of arrow size)
+            const isTargetHovered = hoveredNode === link.target;
+            const targetRadius = isTargetHovered ? 8.8 : 7.2; 
             const x2 = target.x - (dx / len) * targetRadius;
             const y2 = target.y - (dy / len) * targetRadius;
 
