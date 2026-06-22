@@ -1,20 +1,20 @@
 /* CORE/index.css */
 
 :root {
-  /* Premium Dark / Translucent cobalt-mesh color palette */
-  --bg-main: #0b0b0d;
-  --bg-panel: rgba(20, 20, 24, 0.28);    /* Translucent panels for liquid-glass visibility */
-  --bg-header: rgba(30, 30, 36, 0.45);   /* Translucent panel headers */
-  --bg-input: rgba(10, 10, 12, 0.22);     /* Translucent clean dark inputs */
-  --bg-terminal: rgba(0, 0, 0, 0.4);      /* Translucent terminal background */
-  --border-color: rgba(255, 255, 255, 0.08); /* Fine glowing light-dark borders */
-  --text-main: #e2e2e8;                  /* Crisp bright-grey text */
-  --text-muted: #8e8e9c;                 /* Muted subtitle slate-grey */
-  --accent-color: #4b6ef5;               /* Premium energetic cobalt blue */
-  --accent-hover: #3b5ed5;               /* Indigo blue hover */
-  --highlight-color: rgba(75, 110, 245, 0.12); /* Active selection highlight */
-  --error-color: #f85149;                /* Vibrant crimson red */
-  --terminal-green: #39ff14;             /* Retro console neon green text */
+  /* Warm off-white / minimalist beige color palette */
+  --bg-main: #f9f8f5;            /* Original beige base background */
+  --bg-panel: rgba(255, 255, 255, 0.32); /* Premium translucent frosted panels */
+  --bg-header: rgba(245, 243, 238, 0.45); /* Translucent cream for panel headers */
+  --bg-input: rgba(255, 255, 255, 0.28);   /* Translucent inputs */
+  --bg-terminal: rgba(244, 242, 238, 0.25); /* Translucent typewriter console background */
+  --border-color: rgba(0, 0, 0, 0.08);   /* Ultra-fine light borders */
+  --text-main: #2b2b2f;           /* Deep charcoal slate for content readability */
+  --text-muted: #7c7c85;          /* Sophisticated warm grey for subtitles */
+  --accent-color: #384e77;        /* Muted minimalist cobalt/slate blue */
+  --accent-hover: #263859;        /* Deeper slate blue on hover */
+  --highlight-color: rgba(56, 78, 119, 0.08); /* Light accent selection tint */
+  --error-color: #c0392b;         /* Muted warm red */
+  --terminal-green: #2a3439;      /* Dark slate gray terminal typewriter text */
   --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
@@ -27,11 +27,11 @@
 }
 
 body {
-  background-color: #0b0b0d;
+  background-color: var(--bg-main);
   background-image: 
-    radial-gradient(at 0% 0%, rgba(75, 110, 245, 0.1) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.08) 0px, transparent 50%),
-    radial-gradient(at 50% 100%, rgba(59, 130, 246, 0.06) 0px, transparent 50%);
+    radial-gradient(at 15% 15%, rgba(244, 187, 108, 0.07) 0px, transparent 50%),
+    radial-gradient(at 85% 15%, rgba(79, 110, 220, 0.05) 0px, transparent 50%),
+    radial-gradient(at 50% 85%, rgba(150, 200, 180, 0.06) 0px, transparent 50%);
   color: var(--text-main);
   font-family: var(--font-sans);
   overflow: hidden;
@@ -102,9 +102,9 @@ body {
   -webkit-backdrop-filter: url(#liquid-glass-refraction-global) blur(24px) saturate(125%) contrast(95%);
   /* Thick glass beveled edge highlights using double inset shadows */
   box-shadow: 
-    inset 1px 1px 0px rgba(255, 255, 255, 0.12), 
-    inset -1px -1px 0px rgba(0, 0, 0, 0.2), 
-    0 8px 32px rgba(0, 0, 0, 0.25);
+    inset 1px 1px 0px rgba(255, 255, 255, 0.55), 
+    inset -1px -1px 0px rgba(0, 0, 0, 0.03), 
+    0 8px 32px rgba(0, 0, 0, 0.03);
   overflow: hidden;
   height: 100%;
   width: 100%;
@@ -116,7 +116,7 @@ body {
   position: absolute;
   inset: 0;
   /* Regular Frosted Dot Pattern (Xperia 1 V style dot matrix) */
-  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 0.5px, transparent 0.5px);
+  background-image: radial-gradient(rgba(0, 0, 0, 0.035) 0.5px, transparent 0.5px);
   background-size: 3px 3px;
   pointer-events: none;
   z-index: 0;
@@ -125,10 +125,10 @@ body {
 .area-shell.focused {
   border-color: var(--accent-color);
   box-shadow: 
-    inset 1px 1px 0px rgba(255, 255, 255, 0.18), 
-    inset -1px -1px 0px rgba(0, 0, 0, 0.2), 
+    inset 1px 1px 0px rgba(255, 255, 255, 0.65), 
+    inset -1px -1px 0px rgba(0, 0, 0, 0.03), 
     0 0 0 1.2px var(--accent-color),
-    0 8px 32px rgba(0, 0, 0, 0.35);
+    0 8px 32px rgba(0, 0, 0, 0.05);
 }
 
 /* Header bar styling */
@@ -172,8 +172,8 @@ body {
 
 /* Header buttons and actions - Frosted Glass Button */
 .area-btn {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
@@ -184,15 +184,15 @@ body {
   border-radius: 4px;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  box-shadow: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.6);
   transition: all 0.15s ease;
 }
 
 .area-btn:hover {
   color: var(--text-main);
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.65);
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.8);
 }
 
 .area-btn.danger:hover {
@@ -357,7 +357,7 @@ body {
   flex-direction: column;
 }
 
-/* Terminal Tabs Styling */
+/* /* Terminal Tabs Styling */
 .terminal-tabs-bar {
   display: flex;
   align-items: center;
@@ -371,7 +371,7 @@ body {
 .terminal-tab-item {
   display: flex;
   align-items: center;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(0, 0, 0, 0.03);
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -387,7 +387,7 @@ body {
 }
 
 .terminal-tab-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(0, 0, 0, 0.06);
   color: var(--text-main);
 }
 
@@ -395,7 +395,7 @@ body {
   background-color: var(--bg-terminal);
   color: var(--terminal-green);
   border-color: var(--border-color);
-  border-top: 2px solid var(--terminal-green);
+  border-top: 2px solid var(--accent-color);
 }
 
 .terminal-tab-close {
@@ -432,7 +432,7 @@ body {
 }
 
 .terminal-tab-add:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(0, 0, 0, 0.06);
   color: var(--text-main);
 }
 
@@ -454,8 +454,8 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  /* Tactile regular dots matrixSony Xperia 1 V pattern */
-  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 0.5px, transparent 0.5px);
+  /* Tactile regular dots matrix Sony Xperia 1 V pattern (Light mode) */
+  background-image: radial-gradient(rgba(0, 0, 0, 0.035) 0.5px, transparent 0.5px);
   background-size: 3px 3px;
   pointer-events: none;
   z-index: 0;
@@ -465,8 +465,8 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
@@ -475,8 +475,8 @@ body {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: 
-    inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.15),
-    0 2px 4px rgba(0, 0, 0, 0.15);
+    inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.04);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
@@ -497,16 +497,16 @@ body {
 
 .right-sidebar-btn:hover {
   color: var(--text-main);
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.65);
+  border-color: rgba(0, 0, 0, 0.1);
   box-shadow: 
-    inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.3),
-    0 4px 12px rgba(0, 0, 0, 0.25);
+    inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.8),
+    0 3px 6px rgba(0, 0, 0, 0.06);
 }
 
 .right-sidebar-btn:active {
   transform: scale(0.92);
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.05);
 }
 
@@ -529,7 +529,7 @@ body {
   width: 150px;
   min-width: 150px;
   border-right: 1px solid var(--border-color);
-  background-color: rgba(255, 255, 255, 0.01);
+  background-color: rgba(0, 0, 0, 0.015);
   display: flex;
   flex-direction: column;
   padding: 12px 6px;
@@ -548,12 +548,12 @@ body {
 }
 
 .settings-sidebar-item:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(0, 0, 0, 0.03);
   color: var(--text-main);
 }
 
 .settings-sidebar-item.active {
-  background-color: rgba(75, 110, 245, 0.08);
+  background-color: rgba(56, 78, 119, 0.08);
   color: var(--accent-color);
   font-weight: 700;
 }
@@ -573,7 +573,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: rgba(0, 0, 0, 0.005);
 }
 
 .settings-header h2 {
@@ -614,13 +614,13 @@ body {
   justify-content: space-between;
   padding: 10px 14px;
   border-radius: 8px;
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.4);
   border: 1px solid var(--border-color);
   transition: all 0.15s ease;
 }
 
 .settings-row:hover {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: rgba(255, 255, 255, 0.65);
   border-color: var(--accent-color);
 }
 
@@ -655,15 +655,15 @@ body {
 }
 
 .settings-recorder-box.listening {
-  background-color: rgba(75, 110, 245, 0.08);
+  background-color: rgba(56, 78, 119, 0.08);
   border-color: var(--accent-color);
-  box-shadow: 0 0 10px rgba(75, 110, 245, 0.2);
+  box-shadow: 0 0 10px rgba(56, 78, 119, 0.15);
   animation: pulse-border 1.5s infinite;
 }
 
 @keyframes pulse-border {
   0% { border-color: var(--accent-color); }
-  50% { border-color: rgba(75, 110, 245, 0.2); }
+  50% { border-color: rgba(56, 78, 119, 0.2); }
   100% { border-color: var(--accent-color); }
 }
 
@@ -689,16 +689,16 @@ body {
 
 /* 3D Styled mechanical keycaps */
 .keycap {
-  background-color: #222228;
-  color: #f4f4f5;
-  border: 1px solid #2d2d35;
-  border-bottom: 2.5px solid #17171d;
+  background-color: #ffffff;
+  color: var(--text-main);
+  border: 1px solid #e2e2e6;
+  border-bottom: 2.5px solid #c9c9ce;
   border-radius: 4px;
   padding: 2px 6px;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   display: inline-block;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   user-select: none;
 }
