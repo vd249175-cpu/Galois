@@ -44,12 +44,14 @@ function GraphView() {
   const startPan = useRef({ x: 0, y: 0 });
   const svgRef = useRef<SVGSVGElement>(null);
 
-  // Real-time Physics & Graphics Adjustment States (斥力和箭头可调)
+  // Real-time Physics & Graphics Adjustment States (斥力、外挂箭头和间距可调)
   const [repulsion, setRepulsion] = useState(1800);
   const [arrowSize, setArrowSize] = useState(5);
+  const [spacing, setSpacing] = useState(120);
 
   const repulsionRef = useRef(repulsion);
   const arrowSizeRef = useRef(arrowSize);
+  const spacingRef = useRef(spacing);
 
   useEffect(() => {
     repulsionRef.current = repulsion;
@@ -58,6 +60,10 @@ function GraphView() {
   useEffect(() => {
     arrowSizeRef.current = arrowSize;
   }, [arrowSize]);
+
+  useEffect(() => {
+    spacingRef.current = spacing;
+  }, [spacing]);
 
   // Mouse Wheel Zoom-to-Cursor Effect
   useEffect(() => {
@@ -193,7 +199,7 @@ function GraphView() {
           const distSq = dx * dx + dy * dy + 1;
           const dist = Math.sqrt(distSq);
 
-          if (dist < 380) {
+          if (dist < spacingRef.current * 3.0) {
             const force = repulsionStrength / distSq;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
@@ -219,7 +225,7 @@ function GraphView() {
           const dx = targetNode.x - sourceNode.x;
           const dy = targetNode.y - sourceNode.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const desiredDist = 120;
+          const desiredDist = spacingRef.current;
           const k = attractionStrength * (dist - desiredDist);
           const fx = (dx / dist) * k;
           const fy = (dy / dist) * k;
@@ -243,7 +249,7 @@ function GraphView() {
         
         // General concepts (fewer tags) go to the center, specific concepts (more tags) go to the edge
         const tagCount = n.tags ? n.tags.length : 1;
-        const targetR = Math.max(0, tagCount - 1) * 125; // 125px spacing per level of specificity
+        const targetR = Math.max(0, tagCount - 1) * spacingRef.current; // Dynamic spacing per level
         
         // Radial constraint force pulling/pushing the node towards targetR
         const radialStrength = 0.055;
@@ -418,6 +424,28 @@ function GraphView() {
             }}
           />
         </div>
+
+        {/* Node Spacing Slider */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+            <span>Spacing (节点间距)</span>
+            <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{spacing}</span>
+          </div>
+          <input
+            type="range"
+            min="60"
+            max="220"
+            step="10"
+            value={spacing}
+            onChange={(e) => setSpacing(Number(e.target.value))}
+            style={{
+              width: '100%',
+              accentColor: 'var(--accent-color)',
+              height: '3px',
+              cursor: 'pointer',
+            }}
+          />
+        </div>
       </div>
 
       <svg
@@ -439,7 +467,7 @@ function GraphView() {
             markerHeight={arrowSize}
             orient="auto"
           >
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--accent-color)" />
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--border-color)" />
           </marker>
           <marker
             id="arrowhead-hovered"
