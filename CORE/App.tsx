@@ -36,7 +36,7 @@ export function App() {
     // Preload the template project workspace on startup
     const defaultProj = '/Users/apexwave/Desktop/DNOTE/template-project';
     Blood.updateKey('project.path', defaultProj);
-    Blood.updateKey('events.openFile.editor-root', `${defaultProj}/Welcome.md`);
+    Blood.updateKey('events.openFile.editor-root', `${defaultProj}/狗.md`);
     
     const loadCustomShortcuts = async () => {
       try {

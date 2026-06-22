@@ -71,6 +71,17 @@ ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string) => {
   }
 });
 
+ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    return true;
+  } catch (err: any) {
+    throw new Error(`Failed to delete file: ${err.message}`);
+  }
+});
+
 ipcMain.handle('fs:listDir', async (_, dirPath: string) => {
   try {
     const items = fs.readdirSync(dirPath);
@@ -139,6 +150,31 @@ ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
         resolve({ stdout, stderr });
       }
     });
+  });
+});
+
+// Tag Lattice subset inclusion calculations using uv and Python + numpy
+ipcMain.handle('shell:calculateLattice', async (_, { nodes, projectPath }: { nodes: any[]; projectPath: string }) => {
+  return new Promise((resolve) => {
+    const scriptPath = path.join(app.getAppPath(), 'CORE', 'lattice.py');
+    const child = exec(`uv run "${scriptPath}"`, { cwd: projectPath }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('[Lattice Python Error]', stderr || error.message);
+        resolve([]);
+      } else {
+        try {
+          const edges = JSON.parse(stdout);
+          resolve(edges);
+        } catch (e: any) {
+          console.error('[Lattice JSON Parse Error]', e.message, stdout);
+          resolve([]);
+        }
+      }
+    });
+
+    // Write input nodes payload to Python stdin
+    child.stdin?.write(JSON.stringify(nodes));
+    child.stdin?.end();
   });
 });
 

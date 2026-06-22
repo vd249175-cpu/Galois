@@ -4,9 +4,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Filesystem access
   readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', filePath),
   writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writeFile', filePath, content),
+  deleteFile: (filePath: string) => ipcRenderer.invoke('fs:deleteFile', filePath),
   listDir: (dirPath: string) => ipcRenderer.invoke('fs:listDir', dirPath),
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   archiveMedia: (srcPath: string, projectPath: string) => ipcRenderer.invoke('fs:archiveMedia', { srcPath, projectPath }),
+  calculateLattice: (nodes: any[], projectPath: string) => ipcRenderer.invoke('shell:calculateLattice', { nodes, projectPath }),
   
   // Terminal commands execution
   execCommand: (command: string, cwd: string) => ipcRenderer.invoke('shell:exec', command, cwd),
