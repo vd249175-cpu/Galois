@@ -219,3 +219,30 @@ ipcMain.handle('window:closeSecondary', async (_, id: string) => {
     win.close();
   }
 });
+
+// Shared Blood state store across windows
+let sharedState: Record<string, any> = {};
+
+ipcMain.handle('blood:getInitialState', () => {
+  return sharedState;
+});
+
+ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
+  sharedState = { ...sharedState, ...values };
+  
+  // Broadcast updates to all other open windows
+  const senderWebContents = event.sender;
+  
+  const broadcast = (win: BrowserWindow) => {
+    if (!win.isDestroyed() && win.webContents !== senderWebContents) {
+      win.webContents.send('blood:stateChanged', values);
+    }
+  };
+  
+  if (mainWindow) {
+    broadcast(mainWindow);
+  }
+  for (const [_, win] of secondaryWindows) {
+    broadcast(win);
+  }
+});

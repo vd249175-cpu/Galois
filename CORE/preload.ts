@@ -25,5 +25,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => {
       ipcRenderer.removeListener('window:secondaryClosed', listener);
     };
+  },
+
+  // Blood State Sync across multiple windows
+  getBloodState: () => ipcRenderer.invoke('blood:getInitialState'),
+  updateBloodState: (values: Record<string, any>) => ipcRenderer.invoke('blood:updateState', values),
+  onBloodStateChanged: (callback: (values: Record<string, any>) => void) => {
+    const listener = (_event: any, values: Record<string, any>) => callback(values);
+    ipcRenderer.on('blood:stateChanged', listener);
+    return () => {
+      ipcRenderer.removeListener('blood:stateChanged', listener);
+    };
   }
 });
