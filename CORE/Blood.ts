@@ -100,6 +100,12 @@ export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
   channelsRef.current = channels;
   getValueFnRef.current = getValueFn;
 
+  // Synchronize state value if target observed channels change dynamically
+  const channelsKey = channels.join(',');
+  useEffect(() => {
+    setValue(getValueFnRef.current());
+  }, [channelsKey]);
+
   useEffect(() => {
     const checkUpdates = (changedChannels: Set<string>) => {
       const matches = channelsRef.current.some((ch) => {
