@@ -271,29 +271,29 @@ ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
   });
 });
 
-// Tag Lattice subset inclusion calculations using uv and Python + numpy
-ipcMain.handle('shell:calculateLattice', async (_, { nodes, projectPath }: { nodes: any[]; projectPath: string }) => {
+// Generic script runner — replaces plugin-specific calculateLattice IPC
+// Plugins pass their own scriptPath; CORE stays business-logic-free
+ipcMain.handle('shell:runScript', async (_, scriptPath: string, stdinPayload: string, cwd: string) => {
   return new Promise((resolve) => {
-    const scriptPath = path.join(app.getAppPath(), 'CORE', 'lattice.py');
-    const child = exec(`uv run "${scriptPath}"`, { cwd: projectPath, env: getSecureEnv() }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('[Lattice Python Error]', stderr || error.message);
-        resolve([]);
+    const child = exec(`uv run "${scriptPath}"`, { cwd: cwd || path.dirname(scriptPath), env: getSecureEnv() }, (error, stdout, stderr) => {
+      if (error && !stdout) {
+        console.error('[shell:runScript Error]', scriptPath, stderr || error.message);
+        resolve({ stdout: '[]', stderr: stderr || error.message });
       } else {
-        try {
-          const edges = JSON.parse(stdout);
-          resolve(edges);
-        } catch (e: any) {
-          console.error('[Lattice JSON Parse Error]', e.message, stdout);
-          resolve([]);
-        }
+        resolve({ stdout, stderr });
       }
     });
-
-    // Write input nodes payload to Python stdin
-    child.stdin?.write(JSON.stringify(nodes));
-    child.stdin?.end();
+    if (stdinPayload) {
+      child.stdin?.write(stdinPayload);
+      child.stdin?.end();
+    }
   });
+});
+
+// Resolve the absolute path of a service script inside an APP plugin folder
+// e.g. getServiceScriptPath('graph-view', 'lattice.py') => APP/graph-view/services/lattice.py
+ipcMain.handle('shell:getServiceScriptPath', async (_, pluginFolder: string, scriptName: string) => {
+  return path.join(app.getAppPath(), 'APP', pluginFolder, 'services', scriptName);
 });
 
 // IPC Window Manager APIs for Popped-out panels

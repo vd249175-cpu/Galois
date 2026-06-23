@@ -8,6 +8,7 @@ import { RightSidebar } from './RightSidebar';
 import { SettingsModal } from './SettingsModal';
 import { BloodDebugPanel } from './BloodDebugPanel';
 import { Blood } from './Blood';
+import { BC } from './BloodChannels';
 import './index.css';
 // Auto-register plugins through the normalized APP/[plugin]/index.ts entrypoint.
 const modules = import.meta.glob('../APP/*/index.ts', { eager: true });
@@ -27,18 +28,35 @@ export function App() {
   const poppedAreaId = searchParams.get('areaId') || '';
   const poppedType = searchParams.get('type') || '';
 
-  // Load customized keyboard shortcuts from disk on launch (反射通路)
   useEffect(() => {
     if (isPopped) return;
-    
-    // Focus the editor by default so sidebar controls are active immediately
-    Blood.updateKey('system.focusedAreaId', 'editor-root');
-    
-    // Preload the template project workspace on startup
-    const defaultProj = '/Users/apexwave/Desktop/DNOTE/template-project';
-    Blood.updateKey('project.path', defaultProj);
-    Blood.updateKey('events.openFile.editor-root', `${defaultProj}/狗.md`);
-    
+
+    // Focus the default area on startup
+    Blood.updateKey(BC.system.focusedAreaId, 'editor-root');
+
+    // Restore last opened project from localStorage (dev fallback to template-project)
+    const lastProject =
+      localStorage.getItem('dnote_last_project') ||
+      (process.env.NODE_ENV === 'development'
+        ? '/Users/apexwave/Desktop/DNOTE/template-project'
+        : '');
+
+    if (lastProject) {
+      Blood.updateKey(BC.system.projectPath, lastProject);
+      // Persist for next launch
+      localStorage.setItem('dnote_last_project', lastProject);
+    }
+
+    // Validate plugin dependency graph on startup (dev only)
+    if (process.env.NODE_ENV === 'development') {
+      const issues = ComponentRegistry.validateDependencies();
+      if (issues.length > 0) {
+        console.warn('[App] Plugin dependency issues:', issues);
+      } else {
+        console.log('[App] All plugin dependencies satisfied.');
+      }
+    }
+
     const loadCustomShortcuts = async () => {
       try {
         const content = await (window as any).electronAPI.readFile('dnote_shortcuts.json');
@@ -46,8 +64,8 @@ export function App() {
           ActionRegistry.loadShortcuts(content);
           console.log('[App] Custom shortcuts loaded from disk.');
         }
-      } catch (err) {
-        console.log('[App] Custom shortcuts configuration file not found, using default keybindings.');
+      } catch (_) {
+        console.log('[App] No custom shortcuts config found, using defaults.');
       }
     };
     loadCustomShortcuts();

@@ -1,9 +1,18 @@
 import { parseFrontmatterTags, resolveTagsSync } from '../utils';
 
+/**
+ * calculateAllResolvedTags — 计算所有笔记文件的已解析标签
+ *
+ * WRITES: system.resolvedTags (通过调用者 FileTree 写入 Blood)
+ * READS:  electronAPI.readFile, electronAPI.execCommand
+ *
+ * @param onError 脚本执行错误回调，供调用者广播 events.scriptError
+ */
 export async function calculateAllResolvedTags(
   projectPath: string,
   mdFiles: { name: string; path: string }[],
-  maxIterations: number
+  maxIterations: number,
+  onError?: (message: string) => void
 ): Promise<Record<string, string[]>> {
   const initialTagsMap: Record<string, string[]> = {};
   const fileRawTags: Record<string, string[]> = {};
@@ -16,7 +25,7 @@ export async function calculateAllResolvedTags(
       initialTagsMap[file.path] = tags;
       fileRawTags[file.path] = rawTags;
     } catch (e) {
-      console.error('[Tags Initializer] Failed to read/parse:', file.path, e);
+      console.error('[tagResolver] Failed to read/parse:', file.path, e);
       initialTagsMap[file.path] = [];
       fileRawTags[file.path] = [];
     }
@@ -42,26 +51,33 @@ export async function calculateAllResolvedTags(
           const envResolvedTags = JSON.stringify(resolvedTagsMap).replace(/'/g, "'\\''");
           const cmd = `DNOTE_NOTE_PATH="${file.path}" DNOTE_RESOLVED_TAGS='${envResolvedTags}' uv run ${scriptName}`;
           const result = await (window as any).electronAPI.execCommand(cmd, scriptDir);
-          
+
           if (result && result.stdout) {
             const parsed = JSON.parse(result.stdout.trim());
             const scriptCalculated = Array.isArray(parsed) ? parsed : (parsed.tags || []);
             scriptCalculated.forEach((t: any) => {
               const val = String(t).trim();
-              if (val && !currentFileResolved.includes(val)) {
-                currentFileResolved.push(val);
-              }
+              if (val && !currentFileResolved.includes(val)) currentFileResolved.push(val);
             });
           }
-        } catch (err) {
-          console.error(`[Tags Resolver] Iterative script failed for note: ${file.name}, script: ${scriptName}`, err);
+
+          if (result && result.stderr && result.stderr.trim()) {
+            const msg = `Script "${scriptName}" (${file.name}): ${result.stderr.trim()}`;
+            console.warn('[tagResolver]', msg);
+            onError?.(msg);
+          }
+        } catch (err: any) {
+          const msg = `Script "${scriptName}" failed for "${file.name}": ${err.message || err}`;
+          console.error('[tagResolver]', msg);
+          onError?.(msg);
         }
       }
 
       currentFileResolved.sort();
       const prevTags = resolvedTagsMap[file.path] || [];
-      const isDifferent = prevTags.length !== currentFileResolved.length || 
-                          prevTags.some((t, idx) => t !== currentFileResolved[idx]);
+      const isDifferent =
+        prevTags.length !== currentFileResolved.length ||
+        prevTags.some((t, idx) => t !== currentFileResolved[idx]);
 
       if (isDifferent) {
         nextTagsMap[file.path] = currentFileResolved;
@@ -70,10 +86,7 @@ export async function calculateAllResolvedTags(
     });
 
     await Promise.all(runTasks);
-
-    if (!hasChanges) {
-      break;
-    }
+    if (!hasChanges) break;
     resolvedTagsMap = nextTagsMap;
   }
 

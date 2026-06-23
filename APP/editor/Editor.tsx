@@ -1,10 +1,17 @@
 import { useEffect, useState, useRef } from 'react';
 import { parseFrontmatterTags, parseMarkdownBody } from '../utils';
-import { getFrontmatterLineCount, updateYamlFrontmatterTags } from './editorUtils';
+import { updateYamlFrontmatterTags } from './editorUtils';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TagToolbar } from './TagToolbar';
 import { editorActions } from './actions';
+import { useMediaDrop } from './hooks/useMediaDrop';
+import { useLinkNavigator } from './hooks/useLinkNavigator';
+import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 
+/**
+ * EditorComponent — 插件注册对象（完整契约）
+ * 在 APP/editor/index.ts 重新导出，此处声明 manifest
+ */
 export const EditorComponent = {
   typeId: 'editor',
   displayName: 'Lattice Editor',
@@ -12,14 +19,33 @@ export const EditorComponent = {
   component: EditorView,
   actions: editorActions,
   bloodChannels: (areaId: string) => [
-    'project.path',
-    'project.resolvedTags',
-    `events.openFile.${areaId}`,
-    'system.focusedAreaId',
-    'system.activeEditors',
-    'system.lastFocusedEditorId',
-    'script_json:'
-  ]
+    BC.system.projectPath,
+    BC.system.resolvedTags,
+    BC.events.openFile(areaId),
+    BC.system.focusedAreaId,
+    BC.system.activeEditors,
+    BC.system.lastFocusedEditorId,
+    BC_PREFIX.scriptJson,
+  ],
+  manifest: {
+    description: 'Markdown 笔记编辑器，支持 YAML frontmatter 标签和 WikiLink 导航',
+    reads: [
+      BC.system.projectPath,        // 项目根目录（由 fileTree 写入）
+      BC.system.resolvedTags,       // 解析后的全局标签 map（由 fileTree 写入）
+      BC.events.openFile('*'),      // 打开文件请求（由 fileTree/graphView 写入）
+      BC.system.focusedAreaId,
+      BC.system.activeEditors,
+      BC.system.lastFocusedEditorId,
+    ],
+    writes: [
+      BC.events.fileSaved('*'),         // 文件保存事件 → fileTree, graphView
+      BC.system.activeEditors,          // 注册/注销自身
+      BC.system.lastFocusedEditorId,    // 聚焦时更新
+      BC.system.focusedAreaId,          // 聚焦时更新
+      BC.events.openFile('*'),          // WikiLink 跳转时写入目标 areaId
+    ],
+    dependsOn: ['fileTree'],           // 需要 fileTree 提供 system.resolvedTags
+  },
 };
 
 function EditorView({
@@ -33,102 +59,18 @@ function EditorView({
   updateBloodKey: (key: string, value: any) => void;
   lastAction: { id: string; timestamp: number } | null;
 }) {
-  const [tags, setTags] = useState<string[]>([]); // Raw tags list (as in YAML, e.g. run:x.py)
-  const [activeTags, setActiveTags] = useState<string[]>([]); // Resolved tags (fully evaluated)
-  const [content, setContent] = useState<string>(''); // Full Markdown content including YAML header
-  const [currentFile, setCurrentFile] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<string>('No file open');
+  const [tags, setTags] = useState<string[]>([]);
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [content, setContent] = useState<string>('');
+  const [currentFile, setCurrentFile] = useState('');
+  const [statusMessage, setStatusMessage] = useState('No file open');
   const [isPreviewMode, setIsPreviewMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('dnote_editor_preview_mode');
     return saved !== null ? saved === 'true' : true;
   });
-  const [newTagInput, setNewTagInput] = useState<string>('');
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
-  const dragCounter = useRef(0);
-  const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
+  const [newTagInput, setNewTagInput] = useState('');
   const [ruleMatches, setRuleMatches] = useState<Record<string, string[]>>({});
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current++;
-    if (e.dataTransfer.types.includes('Files')) {
-      // Show full-editor overlay only when in Edit Mode
-      if (!isPreviewMode) {
-        setIsDraggingFile(true);
-      }
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current--;
-    if (dragCounter.current === 0) {
-      setIsDraggingFile(false);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setHoveredLineIndex(null);
-
-    if (!projectPath || !currentFile) {
-      setStatusMessage('Open a notebook directory and select a note first.');
-      return;
-    }
-
-    const files = e.dataTransfer.files;
-    if (files.length === 0) return;
-
-    setStatusMessage('Archiving media drop to target line...');
-    let fileAdded = false;
-
-    // Use the first file dropped for precise inline insertion
-    const file = files[0];
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isMedia = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'mp4', 'webm'].includes(ext);
-
-    if (isMedia) {
-      try {
-        const sysPath = (window as any).electronAPI.getPathForFile(file);
-        if (!sysPath) {
-          throw new Error('Could not retrieve file path.');
-        }
-        const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
-        
-        let linkMarkup = `![media](${relativePath})`;
-        if (['mp4', 'webm'].includes(ext)) {
-          linkMarkup = `![video](${relativePath})`;
-        } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
-          linkMarkup = `![audio](${relativePath})`;
-        }
-
-        const yamlLinesCount = getFrontmatterLineCount(contentRef.current);
-        const lines = contentRef.current.split('\n');
-        // Insert below the targeted paragraph line (accounting for yaml block offset)
-        lines.splice(yamlLinesCount + lineIdx + 1, 0, linkMarkup);
-        const nextContent = lines.join('\n');
-        
-        setContent(nextContent);
-        saveNodeFile(nextContent);
-        fileAdded = true;
-      } catch (err: any) {
-        console.error(err);
-        setStatusMessage(`Failed to archive ${file.name}: ${err.message}`);
-      }
-    }
-
-    if (fileAdded) {
-      setStatusMessage('Media successfully inserted into targeted line.');
-    } else {
-      setStatusMessage('Only image, audio, and video files are supported.');
-    }
-  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef(content);
@@ -137,72 +79,102 @@ function EditorView({
   tagsRef.current = tags;
   const lastSavedContentRef = useRef<string>('');
 
-  const projectPath = state['project.path'] || '';
+  const projectPath = state[BC.system.projectPath] || '';
+  const openedFile = state[BC.events.openFile(areaId)] || '';
+  const isFocused = state[BC.system.focusedAreaId] === areaId;
 
-  // 1. Register editor instance
-  useEffect(() => {
-    const editors = state['system.activeEditors'] || [];
-    if (!editors.includes(areaId)) {
-      updateBloodKey('system.activeEditors', [...editors, areaId]);
+  // ── saveNodeFile ──────────────────────────────────────────────────────────
+  const saveNodeFile = async (customContent?: string) => {
+    if (!currentFile) { setStatusMessage('No file open to save'); return; }
+    const fullContent = customContent !== undefined ? customContent : contentRef.current;
+    if (fullContent === lastSavedContentRef.current) return;
+    try {
+      await (window as any).electronAPI.writeFile(currentFile, fullContent);
+      lastSavedContentRef.current = fullContent;
+      setStatusMessage(`Saved at ${new Date().toLocaleTimeString()}`);
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+    } catch (err: any) {
+      console.error('[Editor] Save failed:', err);
+      setStatusMessage(`Error saving: ${err.message}`);
+      updateBloodKey(BC.events.scriptError('editor'), { message: err.message, ts: Date.now() });
     }
-    if (!state['system.lastFocusedEditorId']) {
-      updateBloodKey('system.lastFocusedEditorId', areaId);
+  };
+
+  // ── MediaDrop ─────────────────────────────────────────────────────────────
+  const {
+    isDraggingFile,
+    hoveredLineIndex,
+    setHoveredLineIndex,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+    handleLineDrop,
+  } = useMediaDrop({
+    projectPath,
+    currentFile,
+    isPreviewMode,
+    contentRef,
+    setContent,
+    saveNodeFile,
+    setStatusMessage,
+  });
+
+  // ── LinkNavigator ─────────────────────────────────────────────────────────
+  const { handleLinkClick } = useLinkNavigator({ projectPath, areaId, updateBloodKey });
+
+  // ── 1. Register editor instance ───────────────────────────────────────────
+  useEffect(() => {
+    const editors = state[BC.system.activeEditors] || [];
+    if (!editors.includes(areaId)) {
+      updateBloodKey(BC.system.activeEditors, [...editors, areaId]);
+    }
+    if (!state[BC.system.lastFocusedEditorId]) {
+      updateBloodKey(BC.system.lastFocusedEditorId, areaId);
     }
     return () => {
-      const remaining = (state['system.activeEditors'] || []).filter((id: string) => id !== areaId);
-      updateBloodKey('system.activeEditors', remaining);
-      if (state['system.lastFocusedEditorId'] === areaId) {
-        updateBloodKey('system.lastFocusedEditorId', remaining[0] || null);
+      const remaining = (state[BC.system.activeEditors] || []).filter((id: string) => id !== areaId);
+      updateBloodKey(BC.system.activeEditors, remaining);
+      if (state[BC.system.lastFocusedEditorId] === areaId) {
+        updateBloodKey(BC.system.lastFocusedEditorId, remaining[0] || null);
       }
     };
   }, [areaId]);
 
-  // 2. Focus state tracking
-  const isFocused = state['system.focusedAreaId'] === areaId;
-
+  // ── 2. Focus tracking ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (isFocused) {
-      updateBloodKey('system.lastFocusedEditorId', areaId);
-    }
+    if (isFocused) updateBloodKey(BC.system.lastFocusedEditorId, areaId);
   }, [isFocused, areaId]);
 
-  // 3. Listen to file loading requests targeting this area
-  const openedFile = state[`events.openFile.${areaId}`] || '';
-
+  // ── 3. File loading ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!openedFile) return;
-
     const loadMarkdownFile = async () => {
       try {
         const rawContent = await (window as any).electronAPI.readFile(openedFile);
         const parsedTags = parseFrontmatterTags(rawContent);
-
         lastSavedContentRef.current = rawContent;
         setTags(parsedTags);
         setContent(rawContent);
         setCurrentFile(openedFile);
-        
         const noteName = openedFile.split('/').pop()?.replace('.md', '') || '';
         setStatusMessage(`Editing Note: ${noteName}`);
       } catch (err: any) {
-        console.error('Failed to load note:', openedFile, err);
+        console.error('[Editor] Failed to load note:', openedFile, err);
         setStatusMessage(`Error loading note file.`);
       }
     };
-
     loadMarkdownFile();
   }, [openedFile]);
 
-  // 4. Resolve raw tags to active tags (handles regex and reads script-calculated tags from Blood state)
+  // ── 4. Tag resolver ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentFile || !projectPath) return;
-
     const staticTags = tags.filter((t) => !t.startsWith('re:') && !t.startsWith('run:'));
     const bodyText = parseMarkdownBody(content);
     const matchesMap: Record<string, string[]> = {};
     const allRegexMatches: string[] = [];
 
-    // Resolve regex matches locally in real-time for each regex rule
     for (const tag of tags) {
       if (tag.startsWith('re:')) {
         const patternStr = tag.substring(3).trim();
@@ -215,7 +187,6 @@ function EditorView({
           } else {
             regex = new RegExp(patternStr, 'g');
           }
-          
           const matches = bodyText.matchAll(regex);
           for (const m of matches) {
             const val = m[1] !== undefined ? m[1].trim() : m[0].trim();
@@ -225,233 +196,62 @@ function EditorView({
             }
           }
         } catch (e) {
-          console.error('[Tags Resolver] Invalid regex:', patternStr, e);
+          console.error('[Editor] Invalid regex:', patternStr, e);
         }
         matchesMap[tag] = ruleMatchesList.sort();
       }
     }
 
-    // Retrieve globally resolved tags for this file (computed iteratively on project open/save)
-    const globalResolved = state['project.resolvedTags']?.[currentFile] || [];
-    
-    // Script-calculated tags are those in globalResolved that are not static tags
+    const globalResolved = state[BC.system.resolvedTags]?.[currentFile] || [];
     const scriptDerived = globalResolved.filter((t: string) => !staticTags.includes(t));
-
-    // Distribute script-calculated tags to the run: scripts
     const runScripts = tags.filter((t: string) => t.startsWith('run:'));
     if (runScripts.length > 0) {
       const pureScriptTags = scriptDerived.filter((t: string) => !allRegexMatches.includes(t));
-      runScripts.forEach((scriptTag) => {
-        matchesMap[scriptTag] = pureScriptTags.sort();
-      });
+      runScripts.forEach((scriptTag) => { matchesMap[scriptTag] = pureScriptTags.sort(); });
     }
 
-    // Combine local regex matches and script-derived tags
     const combinedDerived = Array.from(new Set([...allRegexMatches, ...scriptDerived])).sort();
     const combinedActive = Array.from(new Set([...staticTags, ...combinedDerived])).sort();
-
     setRuleMatches(matchesMap);
     setActiveTags(combinedActive);
-  }, [tags, content, currentFile, projectPath, state['project.resolvedTags']]);
+  }, [tags, content, currentFile, projectPath, state[BC.system.resolvedTags]]);
 
-  // Handle saving content (merges YAML frontmatter + body)
-  const saveNodeFile = async (customContent?: string) => {
-    if (!currentFile) {
-      updateBloodKey('debug.editorSaveError', 'No file open to save');
-      setStatusMessage('No file open to save');
-      return;
-    }
-    const fullContent = customContent !== undefined ? customContent : contentRef.current;
-    if (fullContent === lastSavedContentRef.current) {
-      return; // skip saving identical content
-    }
-    updateBloodKey('debug.editorSaveAttempt', { file: currentFile, contentLen: fullContent.length });
-    try {
-      await (window as any).electronAPI.writeFile(currentFile, fullContent);
-      lastSavedContentRef.current = fullContent;
-      setStatusMessage(`Saved at ${new Date().toLocaleTimeString()}`);
-      // Notify sidebar & graph view
-      updateBloodKey(`events.fileSaved.${currentFile}`, Date.now());
-    } catch (err: any) {
-      updateBloodKey('debug.editorSaveError', err.message);
-      setStatusMessage(`Error saving: ${err.message}`);
-    }
-  };
+  // ── 5. Auto-save (debounced) ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentFile || isPreviewMode || content === '') return;
+    const timer = setTimeout(() => { saveNodeFile(content); }, 1200);
+    return () => clearTimeout(timer);
+  }, [content, currentFile, isPreviewMode]);
 
-  // Modify tags list in YAML and write back to the same file
+  // ── 6. Tag update helper ──────────────────────────────────────────────────
   const handleUpdateTags = async (nextTags: string[]) => {
-    if (!currentFile) {
-      updateBloodKey('debug.editorTagsError', 'No file open to update tags');
-      return;
-    }
-
+    if (!currentFile) return;
     const cleanTags = Array.from(new Set(nextTags.map((t) => t.trim()).filter(Boolean))).sort();
     setTags(cleanTags);
-
     const fullContent = updateYamlFrontmatterTags(contentRef.current, cleanTags);
-    if (fullContent === lastSavedContentRef.current) {
-      return; // skip saving identical content
-    }
-    updateBloodKey('debug.editorTagsAttempt', { file: currentFile, cleanTags, contentLen: fullContent.length });
+    if (fullContent === lastSavedContentRef.current) return;
     setContent(fullContent);
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
-      setStatusMessage(`Tags updated inline.`);
-      
-      // Notify HMR / redraw
-      updateBloodKey(`events.fileSaved.${currentFile}`, Date.now());
+      setStatusMessage('Tags updated inline.');
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
     } catch (err: any) {
-      updateBloodKey('debug.editorTagsError', err.message);
+      console.error('[Editor] Tag update failed:', err);
       alert(`Failed to save tag updates: ${err.message}`);
     }
   };
-
-  // Debounced Auto-Save effect when content is edited
-  useEffect(() => {
-    if (!currentFile || isPreviewMode) return;
-    if (content === '') return;
-
-    const timer = setTimeout(() => {
-      saveNodeFile(content);
-    }, 1200);
-
-    return () => clearTimeout(timer);
-  }, [content, currentFile, isPreviewMode]);
 
   const handleAddTag = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanInput = newTagInput.trim();
     if (!cleanInput) return;
-
-    const nextTags = [...tags, cleanInput];
-    handleUpdateTags(nextTags);
+    handleUpdateTags([...tags, cleanInput]);
     setNewTagInput('');
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
-    const nextTags = tags.filter((t) => t !== tagToRemove);
-    handleUpdateTags(nextTags);
-  };
-
-  // Drag and drop media auto-archiver
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current = 0;
-    setIsDraggingFile(false);
-
-    if (!projectPath || !currentFile) {
-      setStatusMessage('Open a notebook directory and select a note first.');
-      return;
-    }
-
-    const files = e.dataTransfer.files;
-    if (files.length === 0) return;
-
-    setStatusMessage('Archiving media drop...');
-    let fileAdded = false;
-    let errorOccurred = false;
-
-    // Process the first dropped file (most typical case)
-    const file = files[0];
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isMedia = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'mp4', 'webm'].includes(ext);
-
-    if (isMedia) {
-      try {
-        const sysPath = (window as any).electronAPI.getPathForFile(file);
-        if (!sysPath) {
-          throw new Error('Could not retrieve file path. Empty drop target.');
-        }
-        const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
-        
-        if (isPreviewMode) {
-          // Dropped in the blank workspace background: append to note tail
-          let linkMarkup = `![media](${relativePath})`;
-          if (['mp4', 'webm'].includes(ext)) {
-            linkMarkup = `![video](${relativePath})`;
-          } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
-            linkMarkup = `![audio](${relativePath})`;
-          }
-          const nextContent = contentRef.current + '\n' + linkMarkup + '\n';
-          setContent(nextContent);
-          saveNodeFile(nextContent);
-        } else {
-          // Edit mode text insertion
-          insertMediaLink(relativePath);
-        }
-        fileAdded = true;
-      } catch (err: any) {
-        console.error(err);
-        setStatusMessage(`Failed to archive ${file.name}: ${err.message}`);
-        errorOccurred = true;
-      }
-    }
-
-    if (errorOccurred) {
-      return;
-    }
-
-    if (fileAdded) {
-      setStatusMessage('Media archived and embedded successfully.');
-    } else {
-      setStatusMessage('Only image, audio, and video files are supported.');
-    }
-  };
-
-  const insertMediaLink = (mediaRelativePath: string) => {
-    const textarea = textareaRef.current;
-    const text = contentRef.current;
-    const ext = mediaRelativePath.split('.').pop()?.toLowerCase() || '';
-    
-    let linkMarkup = `![media](${mediaRelativePath})`;
-    if (['mp4', 'webm'].includes(ext)) {
-      linkMarkup = `![video](${mediaRelativePath})`;
-    } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
-      linkMarkup = `![audio](${mediaRelativePath})`;
-    }
-
-    let nextContent = '';
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      nextContent = text.substring(0, start) + '\n' + linkMarkup + '\n' + text.substring(end);
-    } else {
-      nextContent = text + '\n' + linkMarkup + '\n';
-    }
-
-    setContent(nextContent);
-    saveNodeFile(nextContent);
-  };
-
-  // Click on WikiLinks or standard note links
-  const handleLinkClick = async (targetNodeText: string) => {
-    if (!projectPath) return;
-
-    const cleanTargetName = targetNodeText.trim().replace(/\.md$/, '');
-    const targetFilename = `${cleanTargetName}.md`;
-    const targetFilePath = `${projectPath}/${targetFilename}`;
-
-    try {
-      const list = await (window as any).electronAPI.listDir(projectPath);
-      const exists = list.some((f: any) => f.name.toLowerCase() === targetFilename.toLowerCase());
-
-      if (exists) {
-        // Navigate
-        updateBloodKey(`events.openFile.${areaId}`, targetFilePath);
-      } else {
-        // Create if missing
-        const create = confirm(`Note "${cleanTargetName}" does not exist. Do you want to create it?`);
-        if (create) {
-          const defaultContent = `---\ntags:\n  - ${cleanTargetName}\n---\n# ${cleanTargetName}\n\nStart writing here...\n`;
-          await (window as any).electronAPI.writeFile(targetFilePath, defaultContent);
-          updateBloodKey(`events.fileSaved.${targetFilePath}`, Date.now());
-          updateBloodKey(`events.openFile.${areaId}`, targetFilePath);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to resolve note links:', e);
-    }
+    handleUpdateTags(tags.filter((t) => t !== tagToRemove));
   };
 
   const togglePreviewMode = () => {
@@ -462,23 +262,18 @@ function EditorView({
     });
   };
 
-
-
-  // Listen for action triggers carried by lastAction prop
+  // ── 7. lastAction handler ─────────────────────────────────────────────────
   useEffect(() => {
-    if (lastAction) {
-      if (lastAction.id === 'editor.save') {
-        saveNodeFile();
-      } else if (lastAction.id === 'editor.toggleMode') {
-        togglePreviewMode();
-      }
-    }
+    if (!lastAction) return;
+    if (lastAction.id === 'editor.save') saveNodeFile();
+    else if (lastAction.id === 'editor.toggleMode') togglePreviewMode();
   }, [lastAction]);
 
   const handleFocus = () => {
-    updateBloodKey('system.focusedAreaId', areaId);
+    updateBloodKey(BC.system.focusedAreaId, areaId);
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
       className="code-editor"
@@ -513,7 +308,7 @@ function EditorView({
         handleAddTag={handleAddTag}
         newTagInput={newTagInput}
         setNewTagInput={setNewTagInput}
-        maxIterations={state['project.maxIterations'] || 3}
+        maxIterations={state[BC.system.maxIterations] || 3}
         updateBloodKey={updateBloodKey}
       />
 
@@ -539,7 +334,6 @@ function EditorView({
           onChange={(e) => {
             const nextVal = e.target.value;
             setContent(nextVal);
-            // Parse tags in real-time as the user types
             try {
               const parsed = parseFrontmatterTags(nextVal);
               setTags((prev) => {
@@ -547,9 +341,7 @@ function EditorView({
                 const nextClean = parsed.slice().sort().join(',');
                 return prevClean === nextClean ? prev : parsed;
               });
-            } catch (e) {
-              // ignore syntax errors during typing
-            }
+            } catch (_) {}
           }}
           onFocus={handleFocus}
           placeholder="Start writing note..."
@@ -565,49 +357,16 @@ function EditorView({
       </div>
 
       {isDraggingFile && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(255, 255, 255, 0.88)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            border: '2.5px dashed var(--accent-color)',
-            margin: '8px',
-            borderRadius: '10px',
-            pointerEvents: 'none',
-          }}
-        >
-          <div
-            style={{
-              padding: '20px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--highlight-color)',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(10px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: '2.5px dashed var(--accent-color)', margin: '8px', borderRadius: '10px', pointerEvents: 'none' }}>
+          <div style={{ padding: '20px', borderRadius: '50%', backgroundColor: 'var(--highlight-color)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
           </div>
-          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
-            Drop media to import
-          </span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-            Supports Image, Audio, and Video files
-          </span>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Drop media to import</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Supports Image, Audio, and Video files</span>
         </div>
       )}
     </div>

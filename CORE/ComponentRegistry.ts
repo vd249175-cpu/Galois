@@ -3,27 +3,54 @@ import { Blood } from './Blood';
 import { ActionRegistry } from './ActionRegistry';
 
 /**
- * OrganAction — unified declaration interface for all plugin toolbar buttons and shortcuts.
- * Follows the "仿生双向反射链路" protocol in AGENTS.md.
+ * OrganAction — 统一动作与按钮接口定义（见 AGENTS.md §B）
  *
- *   id format:  "[plugin-name].[actionName]"   e.g. "editor.save"
- *   icon:        14×14 px thin-stroke SVG (currentColor, strokeWidth=1.5)
- *   signal:      actions.[id].[areaId] = Date.now()   (timestamp, not boolean)
+ *   id:              "[plugin-name].[actionName]"   e.g. "editor.save"
+ *   icon:            14×14 px 细线条 SVG (currentColor, strokeWidth=1.5)
+ *   signal:          actions.[id].[areaId] = Date.now()
  */
 export interface OrganAction {
-  id: string;               // global unique: "[plugin-name].[actionName]"
-  label: string;            // tooltip / display name
-  defaultShortcut?: string; // lowercase "+" separated, e.g. "meta+s"
-  isToolbar?: boolean;      // mount to right sidebar when focused
-  icon?: React.ReactNode;   // 14×14 SVG, currentColor, strokeWidth=1.5
+  id: string;               // 全局唯一: "[plugin-name].[actionName]"
+  label: string;            // 按钮 tooltip / 动作名
+  defaultShortcut?: string; // 小写 + 连接, e.g. "meta+s"
+  isToolbar?: boolean;      // 是否挂载到右侧栏
+  icon?: React.ReactNode;   // 14×14 SVG
 }
 
+/**
+ * PluginManifest — 插件契约明文声明
+ *
+ * 每个 APP 插件必须声明：
+ *   reads     — 它读取哪些 Blood 频道（消费者）
+ *   writes    — 它写入哪些 Blood 频道（生产者）
+ *   dependsOn — 它隐式依赖哪些其他插件提供数据
+ *
+ * 这消除了插件间的隐式合同，让依赖关系在类型系统层面可见。
+ */
+export interface PluginManifest {
+  /** 这个插件读取的 Blood 频道列表（可含前缀用于通配）*/
+  reads: readonly string[];
+  /** 这个插件写入的 Blood 频道列表 */
+  writes: readonly string[];
+  /** 依赖的其他插件 typeId（隐式数据来源，需对方先 mount）*/
+  dependsOn?: readonly string[];
+  /** 插件功能描述 */
+  description?: string;
+}
+
+/**
+ * AreaComponent — 插件注册对象（完整声明）
+ */
 export interface AreaComponent {
   typeId: string;
   displayName: string;
   iconName: string;
   component: React.ComponentType<{ areaId: string }>;
   actions?: OrganAction[];
+  /** 数据频道订阅（ComponentWrapper 用于 stateValues） */
+  bloodChannels?: string[] | ((areaId: string) => string[]);
+  /** 插件契约声明（明文 reads/writes/dependsOn）*/
+  manifest: PluginManifest;
 }
 
 class ComponentRegistryClass {
@@ -37,7 +64,6 @@ class ComponentRegistryClass {
     // Register actions and default shortcuts dynamically
     if (comp.actions) {
       comp.actions.forEach((act) => {
-        // Register action into central action registry
         ActionRegistry.register({
           id: act.id,
           label: act.label,
@@ -45,22 +71,30 @@ class ComponentRegistryClass {
           defaultShortcut: act.defaultShortcut,
           sourceType: comp.typeId,
           run: (context) => {
-            // Modify Blood state to trigger action on targeted area
+            // 动作信号必须使用 timestamp（同一按钮连续点击可区分）
             Blood.updateKey(`actions.${act.id}.${context.areaId}`, Date.now());
           },
         });
 
-        // Add to toolbar if flag is set
         if (act.isToolbar) {
           toolbarActions.push(act.id);
         }
       });
     }
 
-    // Inject toolbar actions into Blood state for this component type
     if (toolbarActions.length > 0) {
       Blood.updateKey(`injections.${comp.typeId}.toolbar`, toolbarActions);
     }
+
+    // Dev: log plugin registration with manifest
+    console.log(
+      `[ComponentRegistry] Registered plugin: ${comp.typeId}`,
+      `\n  reads:     ${comp.manifest.reads.join(', ')}`,
+      `\n  writes:    ${comp.manifest.writes.join(', ')}`,
+      comp.manifest.dependsOn?.length
+        ? `\n  dependsOn: ${comp.manifest.dependsOn.join(', ')}`
+        : ''
+    );
   }
 
   public getComponent(typeId: string): AreaComponent | undefined {
@@ -69,6 +103,20 @@ class ComponentRegistryClass {
 
   public getAvailableTypes(): string[] {
     return Array.from(this.registry.keys());
+  }
+
+  /** 检查某插件的依赖是否都已注册（可在启动时校验） */
+  public validateDependencies(): { plugin: string; missing: string[] }[] {
+    const issues: { plugin: string; missing: string[] }[] = [];
+    this.registry.forEach((comp) => {
+      const missing = (comp.manifest.dependsOn || []).filter(
+        (dep) => !this.registry.has(dep)
+      );
+      if (missing.length > 0) {
+        issues.push({ plugin: comp.typeId, missing });
+      }
+    });
+    return issues;
   }
 }
 

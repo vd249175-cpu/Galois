@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { GraphControls } from './GraphControls';
 import { graphViewActions } from './actions';
-
+import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 
 interface Node {
   id: string;
@@ -14,12 +14,21 @@ interface Node {
   level?: number;
 }
 
-
 interface Link {
   source: string;
   target: string;
 }
 
+/**
+ * GraphViewComponent — Lattice Graph 插件注册对象
+ *
+ * 契约声明：
+ *   READS:  system.projectPath, system.resolvedTags, events.fileSaved.*,
+ *           system.lastFocusedEditorId, system.activeEditors
+ *   WRITES: events.openFile.{editorId}  (双击节点跳转)
+ *           events.scriptError.graphView (lattice 脚本错误)
+ *   DEPENDS ON: fileTree (提供 system.resolvedTags)
+ */
 export const GraphViewComponent = {
   typeId: 'graphView',
   displayName: 'Lattice Graph',
@@ -27,25 +36,42 @@ export const GraphViewComponent = {
   component: GraphView,
   actions: graphViewActions,
   bloodChannels: [
-    'project.path',
-    'project.resolvedTags',
-    'events.fileSaved.',
-    'system.lastFocusedEditorId',
-    'system.activeEditors'
-  ]
+    BC.system.projectPath,
+    BC.system.resolvedTags,
+    BC_PREFIX.fileSavedAll,
+    BC.system.lastFocusedEditorId,
+    BC.system.activeEditors,
+  ],
+  manifest: {
+    description: 'Tag Lattice 关系图，使用 Python subset-inclusion 算法绘制笔记包含关系',
+    reads: [
+      BC.system.projectPath,
+      BC.system.resolvedTags,       // 由 fileTree 写入，graphView 是消费者
+      BC_PREFIX.fileSavedAll,       // 文件保存时重建图谱
+      BC.system.lastFocusedEditorId,
+      BC.system.activeEditors,
+    ],
+    writes: [
+      BC.events.openFile('*'),              // 双击节点时发送打开请求
+      BC.events.scriptError('graphView'),   // lattice.py 失败时广播错误
+    ],
+    dependsOn: ['fileTree'],  // 依赖 fileTree 提供 resolvedTags（必须先 mount）
+  },
 };
 
 function GraphView({
+  areaId: _areaId,
   state,
   updateBloodKey,
   lastAction,
 }: {
+  areaId: string;
   state: Record<string, any>;
   updateBloodKey: (key: string, value: any) => void;
   lastAction: { id: string; timestamp: number } | null;
 }) {
-  const projectPath = state['project.path'] || '';
-  const fileSavedMap = state['events.fileSaved.'] || {};
+  const projectPath = state[BC.system.projectPath] || '';
+  const fileSavedMap = state[BC_PREFIX.fileSavedAll] || {};
   const fileSavedEvent = Object.values(fileSavedMap).reduce((max: number, val: any) => Math.max(max, Number(val) || 0), 0);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -143,23 +169,17 @@ function GraphView({
     }
 
     const buildLatticeGraph = async () => {
-      console.log('[GraphView] buildLatticeGraph called. project.resolvedTags:', state['project.resolvedTags']);
       try {
         const files = await (window as any).electronAPI.listDir(projectPath);
         const mdFiles = files.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
 
-        const currentResolvedTags = state['project.resolvedTags'] || {};
+        const currentResolvedTags = state[BC.system.resolvedTags] || {};
         const rawNodes: { id: string; tags: string[]; label: string }[] = [];
         for (const file of mdFiles) {
           const tags = currentResolvedTags[file.path] || [];
           const noteTitle = file.name.substring(0, file.name.lastIndexOf('.md'));
-          rawNodes.push({
-            id: file.path,
-            tags,
-            label: noteTitle,
-          });
+          rawNodes.push({ id: file.path, tags, label: noteTitle });
         }
-        console.log('[GraphView] rawNodes for lattice:', rawNodes);
 
         if (rawNodes.length === 0) {
           simRef.current = { nodes: [], links: [] };
@@ -168,9 +188,21 @@ function GraphView({
           return;
         }
 
-        // Call the Python backend matrix inclusion algorithm via IPC
-        const calculatedEdges: Link[] = await (window as any).electronAPI.calculateLattice(rawNodes, projectPath);
-        console.log('[GraphView] calculatedEdges:', calculatedEdges);
+        // Call Python lattice.py via generic runScript IPC
+        // lattice.py 位于 APP/graph-view/services/ 目录下
+        const scriptPath = await (window as any).electronAPI.getServiceScriptPath('graph-view', 'lattice.py');
+        const result = await (window as any).electronAPI.runScript(scriptPath, JSON.stringify(rawNodes), projectPath);
+
+        if (result.stderr && result.stderr.trim()) {
+          updateBloodKey(BC.events.scriptError('graphView'), { message: result.stderr.trim(), ts: Date.now() });
+        }
+
+        let calculatedEdges: Link[] = [];
+        try {
+          calculatedEdges = JSON.parse(result.stdout || '[]');
+        } catch (parseErr) {
+          updateBloodKey(BC.events.scriptError('graphView'), { message: `lattice.py JSON parse error: ${result.stdout}`, ts: Date.now() });
+        }
 
         // Convert raw nodes to physics-enabled nodes
         const levels: Record<string, number> = {};
@@ -226,7 +258,7 @@ function GraphView({
     };
 
     buildLatticeGraph();
-  }, [projectPath, state['project.resolvedTags'], fileSavedEvent]);
+  }, [projectPath, state[BC.system.resolvedTags], fileSavedEvent]);
 
   // 2. Physics Simulation Loop - Free 2D Force-Directed Layout
   useEffect(() => {
@@ -395,13 +427,13 @@ function GraphView({
   };
 
   const handleNodeDoubleClick = (nodeId: string) => {
-    const targetEditorId = state['system.lastFocusedEditorId']
-      || (state['system.activeEditors'] || [])[0];
+    const targetEditorId = state[BC.system.lastFocusedEditorId]
+      || (state[BC.system.activeEditors] || [])[0];
 
     if (targetEditorId) {
-      updateBloodKey(`events.openFile.${targetEditorId}`, nodeId);
+      updateBloodKey(BC.events.openFile(targetEditorId), nodeId);
     } else {
-      updateBloodKey('events.openFile.global', nodeId);
+      updateBloodKey(BC.events.openFile('global'), nodeId);
     }
   };
 
