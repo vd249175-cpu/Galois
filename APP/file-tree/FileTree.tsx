@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { parseFrontmatterTags, resolveTagsSync } from '../utils';
+import { calculateAllResolvedTags } from './tagResolver';
+import { useProjectLifecycle } from './useProjectLifecycle';
+
 
 interface FileInfo {
   name: string;
@@ -39,86 +42,12 @@ function FileTreeView({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPath, setSelectedPath] = useState<string>('');
 
+  // Project-level lifecycle scripts coordinator (open, close, background daemon)
+  useProjectLifecycle(projectPath);
+
   // Load project markdown files and parse their YAML frontmatter tags
   useEffect(() => {
     if (!projectPath) return;
-
-    const calculateAllResolvedTags = async (mdFiles: any[]) => {
-      const initialTagsMap: Record<string, string[]> = {};
-      const fileRawTags: Record<string, string[]> = {};
-
-      for (const file of mdFiles) {
-        try {
-          const rawContent = await (window as any).electronAPI.readFile(file.path);
-          const rawTags = parseFrontmatterTags(rawContent);
-          const tags = resolveTagsSync(rawTags, rawContent);
-          initialTagsMap[file.path] = tags;
-          fileRawTags[file.path] = rawTags;
-        } catch (e) {
-          console.error('[Tags Initializer] Failed to read/parse:', file.path, e);
-          initialTagsMap[file.path] = [];
-          fileRawTags[file.path] = [];
-        }
-      }
-
-      const maxIterations = state['project.maxIterations'] || 3;
-      let resolvedTagsMap = { ...initialTagsMap };
-
-      for (let iteration = 1; iteration <= maxIterations; iteration++) {
-        const nextTagsMap = { ...resolvedTagsMap };
-        let hasChanges = false;
-
-        const runTasks = mdFiles.map(async (file) => {
-          const rawTags = fileRawTags[file.path] || [];
-          const scriptTags = rawTags.filter(t => t.startsWith('run:'));
-          if (scriptTags.length === 0) return;
-
-          const currentFileResolved = [...(initialTagsMap[file.path] || [])];
-          const scriptDir = `${projectPath}/script`;
-
-          for (const tag of scriptTags) {
-            const scriptName = tag.substring(4).trim();
-            try {
-              const envResolvedTags = JSON.stringify(resolvedTagsMap).replace(/'/g, "'\\''");
-              const cmd = `DNOTE_NOTE_PATH="${file.path}" DNOTE_RESOLVED_TAGS='${envResolvedTags}' uv run ${scriptName}`;
-              const result = await (window as any).electronAPI.execCommand(cmd, scriptDir);
-              
-              if (result && result.stdout) {
-                const parsed = JSON.parse(result.stdout.trim());
-                const scriptCalculated = Array.isArray(parsed) ? parsed : (parsed.tags || []);
-                scriptCalculated.forEach((t: any) => {
-                  const val = String(t).trim();
-                  if (val && !currentFileResolved.includes(val)) {
-                    currentFileResolved.push(val);
-                  }
-                });
-              }
-            } catch (err) {
-              console.error(`[Tags Resolver] Iterative script failed for note: ${file.name}, script: ${scriptName}`, err);
-            }
-          }
-
-          currentFileResolved.sort();
-          const prevTags = resolvedTagsMap[file.path] || [];
-          const isDifferent = prevTags.length !== currentFileResolved.length || 
-                              prevTags.some((t, idx) => t !== currentFileResolved[idx]);
-
-          if (isDifferent) {
-            nextTagsMap[file.path] = currentFileResolved;
-            hasChanges = true;
-          }
-        });
-
-        await Promise.all(runTasks);
-
-        if (!hasChanges) {
-          break;
-        }
-        resolvedTagsMap = nextTagsMap;
-      }
-
-      return resolvedTagsMap;
-    };
 
     const loadFiles = async () => {
       console.log('[FileTree] loadFiles called. fileSavedEvent:', fileSavedEvent);
@@ -127,7 +56,8 @@ function FileTreeView({
         const mdFiles = list.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
 
         // Iterative calculation of dynamic tags
-        const allResolved = await calculateAllResolvedTags(mdFiles);
+        const maxIterations = state['project.maxIterations'] || 3;
+        const allResolved = await calculateAllResolvedTags(projectPath, mdFiles, maxIterations);
         console.log('[FileTree] resolvedTags computed:', allResolved);
         updateBloodKey('project.resolvedTags', allResolved);
 
@@ -152,120 +82,6 @@ function FileTreeView({
     loadFiles();
   }, [projectPath, fileSavedEvent, state['project.maxIterations']]);
 
-  // Notebook project-level lifecycle scripts coordinator
-  useEffect(() => {
-    if (!projectPath) return;
-
-    let isUnloading = false;
-
-    // Helper to check if a script exists in the script/ directory
-    const checkScriptExists = async (scriptName: string) => {
-      try {
-        const list = await (window as any).electronAPI.listDir(projectPath);
-        const hasScriptDir = list.some((f: any) => f.isDir && f.name === 'script');
-        if (!hasScriptDir) return false;
-        
-        const scriptDir = `${projectPath}/script`;
-        const scriptList = await (window as any).electronAPI.listDir(scriptDir);
-        return scriptList.some((f: any) => !f.isDir && f.name === scriptName);
-      } catch (err) {
-        return false;
-      }
-    };
-
-    // 1. Run on_project_open.py and on_project_run.py
-    const triggerLifecycleScripts = async () => {
-      const scriptDir = `${projectPath}/script`;
-      
-      // A. Open hook (runs once, blocking subsequent commands)
-      const hasOpenScript = await checkScriptExists('on_project_open.py');
-      if (hasOpenScript) {
-        console.log('[Project Lifecycle] Executing on_project_open.py...');
-        const outPath = `${projectPath}/script/on_project_open.json`;
-        const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_open.py`;
-        try {
-          await (window as any).electronAPI.execCommand(cmd, scriptDir);
-          console.log('[Project Lifecycle] on_project_open.py completed successfully.');
-        } catch (err: any) {
-          console.error('[Project Lifecycle] on_project_open.py failed:', err.message || err);
-        }
-      }
-
-      // B. Run hook (spawns in background as a daemon)
-      const hasRunScript = await checkScriptExists('on_project_run.py');
-      if (hasRunScript) {
-        console.log('[Project Lifecycle] Executing on_project_run.py (background daemon)...');
-        const outPath = `${projectPath}/script/on_project_run.json`;
-        // Use '&' to run in background in macOS shell
-        const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_run.py &`;
-        try {
-          await (window as any).electronAPI.execCommand(cmd, scriptDir);
-        } catch (err: any) {
-          console.error('[Project Lifecycle] Failed to launch on_project_run.py daemon:', err.message || err);
-        }
-      }
-    };
-
-    triggerLifecycleScripts();
-
-    // 2. Handle app close (window exit) via beforeunload
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isUnloading) return; // Allow unload if already completed/handling
-
-      // Prevent immediate close
-      e.preventDefault();
-      e.returnValue = ''; // Standard cancellation returnValue
-
-      isUnloading = true;
-
-      // Run cleanup close script
-      const runCloseOnUnload = async () => {
-        try {
-          const hasCloseScript = await checkScriptExists('on_project_close.py');
-          if (hasCloseScript) {
-            console.log('[Project Lifecycle] Executing on_project_close.py on unload...');
-            const scriptDir = `${projectPath}/script`;
-            const outPath = `${projectPath}/script/on_project_close.json`;
-            const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_close.py`;
-            await (window as any).electronAPI.execCommand(cmd, scriptDir);
-            console.log('[Project Lifecycle] on_project_close.py unload completed.');
-          }
-        } catch (err: any) {
-          console.error('[Project Lifecycle] on_project_close.py unload failed:', err.message || err);
-        } finally {
-          // Re-trigger window close which will exit since isUnloading is now true
-          window.close();
-        }
-      };
-
-      runCloseOnUnload();
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // 3. Handle project switch (cleanup of previous project)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-
-      const runCloseOnSwitch = async () => {
-        try {
-          const hasCloseScript = await checkScriptExists('on_project_close.py');
-          if (hasCloseScript) {
-            console.log('[Project Lifecycle] Executing on_project_close.py on switch from:', projectPath);
-            const scriptDir = `${projectPath}/script`;
-            const outPath = `${projectPath}/script/on_project_close.json`;
-            const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_close.py`;
-            await (window as any).electronAPI.execCommand(cmd, scriptDir);
-            console.log('[Project Lifecycle] on_project_close.py switch completed.');
-          }
-        } catch (err: any) {
-          console.error('[Project Lifecycle] on_project_close.py switch failed:', err.message || err);
-        }
-      };
-
-      runCloseOnSwitch();
-    };
-  }, [projectPath]);
 
   // Open directory selection dialog
   const handleOpenFolder = async () => {
