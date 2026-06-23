@@ -8,7 +8,7 @@ import { RightSidebar } from './RightSidebar';
 import { Blood } from './Blood';
 import './index.css';
 // Auto-Register Plugins from the APP/ directory using Vite's static glob importer
-const modules = import.meta.glob('../APP/*/*.tsx', { eager: true });
+const modules = import.meta.glob(['../APP/*/*.tsx', '!../APP/demo——plugging/*.tsx'], { eager: true });
 for (const path in modules) {
   const mod = modules[path] as any;
   for (const key in mod) {
