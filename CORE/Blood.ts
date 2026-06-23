@@ -112,7 +112,9 @@ export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
   }
 
   useEffect(() => {
+    let isMounted = true;
     const checkUpdates = (changedChannels: Set<string>) => {
+      if (!isMounted) return;
       const matches = channelsRef.current.some((ch) => {
         return (
           changedChannels.has(ch) ||
@@ -125,7 +127,10 @@ export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
     };
 
     const unsubscribe = Blood.subscribe(checkUpdates);
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   return value;
