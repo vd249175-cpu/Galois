@@ -248,7 +248,6 @@ function GraphView({
         });
 
 
-        console.warn('[GraphView] buildLatticeGraph completed. Nodes:', physicsNodes.length, 'Links:', calculatedEdges.length, JSON.stringify(calculatedEdges));
         simRef.current = { nodes: physicsNodes, links: calculatedEdges };
         setNodes(physicsNodes);
         setLinks(calculatedEdges);
@@ -484,7 +483,6 @@ function GraphView({
       />
 
 
-      {console.warn('[GraphView Render] links count:', links.length, 'resolved links:', links.filter(l => nodes.find(n => n.id === l.source) && nodes.find(n => n.id === l.target)).length, 'nodes count:', nodes.length)}
       <svg
         ref={svgRef}
         width="100%"
