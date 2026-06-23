@@ -1,0 +1,11 @@
+{
+  "id": "settings",
+  "name": "Preferences",
+  "version": "1.0.0",
+  "description": "Application settings and hotkey customizer panel.",
+  "dependencies": [],
+  "bloodChannels": [
+    "system.focusedAreaId"
+  ],
+  "triggerConditions": {}
+}

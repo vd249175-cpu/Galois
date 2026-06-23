@@ -1,0 +1,14 @@
+{
+  "id": "fileTree",
+  "name": "Lattice Explorer",
+  "version": "1.0.0",
+  "description": "File explorer and notebook tree manager for Lattice markdown note archives.",
+  "dependencies": [],
+  "bloodChannels": [
+    "project.path",
+    "events.fileSaved.*"
+  ],
+  "triggerConditions": {
+    "click": "events.openFile.${targetEditorId}"
+  }
+}

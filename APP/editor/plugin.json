@@ -1,0 +1,18 @@
+{
+  "id": "editor",
+  "name": "Lattice Editor",
+  "version": "1.0.0",
+  "description": "Custom Markdown note editor with real-time tag editing, wiki links, media drop support, and reactive python execution bindings.",
+  "dependencies": [],
+  "bloodChannels": [
+    "project.path",
+    "events.openFile.editor-root",
+    "events.openFile.${areaId}",
+    "script_json:*"
+  ],
+  "triggerConditions": {
+    "open": "events.openFile.${areaId}",
+    "save": "actions.editor.save.${areaId}",
+    "toggleMode": "actions.editor.toggleMode.${areaId}"
+  }
+}

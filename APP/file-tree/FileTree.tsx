@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Blood, useBloodChannel } from '../CORE/Blood';
+import { Blood, useBloodChannel } from '../../CORE/Blood';
 
 interface FileInfo {
   name: string;

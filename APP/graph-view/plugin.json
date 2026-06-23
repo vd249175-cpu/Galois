@@ -1,0 +1,12 @@
+{
+  "id": "graphView",
+  "name": "Lattice Graph",
+  "version": "1.0.0",
+  "description": "Force-directed DAG visualization of transitive inclusion relations between tags.",
+  "dependencies": [],
+  "bloodChannels": [
+    "project.path",
+    "events.fileSaved.*"
+  ],
+  "triggerConditions": {}
+}

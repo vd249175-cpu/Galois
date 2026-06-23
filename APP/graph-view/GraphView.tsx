@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Blood, useBloodChannel } from '../CORE/Blood';
-import { parseFrontmatterTags } from './FileTree';
+import { Blood, useBloodChannel } from '../../CORE/Blood';
+import { parseFrontmatterTags } from '../file-tree/FileTree';
 
 interface Node {
   id: string;
@@ -186,7 +186,6 @@ function GraphView() {
 
       const repulsionStrength = repulsionRef.current;
       const attractionStrength = 0.05;
-      const gravity = 0.015; // Centering gravity
       const damping = 0.85;
 
       // 2a. Repulsion (Push nodes apart)
@@ -526,7 +525,7 @@ function GraphView() {
               <g
                 key={node.id}
                 transform={`translate(${node.x}, ${node.y})`}
-                onMouseDown={(e) => handleSVGMouseUp() || handleNodeMouseDown(node.id, e)}
+                onMouseDown={(e) => { handleSVGMouseUp(); handleNodeMouseDown(node.id, e); }}
                 onDoubleClick={() => handleNodeDoubleClick(node.id)}
                 onMouseEnter={() => setHoveredNode(node.id)}
                 onMouseLeave={() => setHoveredNode(null)}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ActionRegistry } from '../CORE/ActionRegistry';
+import { ActionRegistry } from '../../CORE/ActionRegistry';
 
 export const SettingsComponent = {
   typeId: 'settings',

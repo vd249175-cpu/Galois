@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useOrganAntibody } from '../CORE/Antibody';
+import { useOrganAntibody } from '../../CORE/Antibody';
 
 export interface TerminalTab {
   id: string;
