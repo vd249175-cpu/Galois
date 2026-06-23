@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { parseFrontmatterTags } from '../utils';
+import { parseFrontmatterTags, parseMarkdownBody } from '../utils';
 import { getFrontmatterLineCount, updateYamlFrontmatterTags } from './editorUtils';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TagToolbar } from './TagToolbar';
