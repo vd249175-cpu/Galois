@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Blood, useBloodChannel } from '../../CORE/Blood';
+import { parseFrontmatterTags } from '../utils';
 
 interface FileInfo {
   name: string;
@@ -14,63 +14,27 @@ export const FileTreeComponent = {
   displayName: 'Lattice Explorer',
   iconName: 'folder',
   component: FileTreeView,
+  bloodChannels: [
+    'project.path',
+    'events.fileSaved.',
+    'system.lastFocusedEditorId',
+    'system.activeEditors'
+  ]
 };
 
-// Helper to parse YAML frontmatter tags from markdown content
-export function parseFrontmatterTags(content: string): string[] {
-  const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-  const match = content.match(yamlRegex);
-  if (!match) return [];
-  
-  const yamlText = match[1];
-  const tags: string[] = [];
-  
-  // Try inline array format first: tags: [t1, t2]
-  const tagsInline = yamlText.match(/tags:\s*\[([^\]]*)\]/);
-  if (tagsInline) {
-    tagsInline[1].split(',').forEach((t) => {
-      const clean = t.trim().replace(/['"]/g, '');
-      if (clean) tags.push(clean);
-    });
-    return tags;
-  }
-  
-  // Parse multiline format
-  const lines = yamlText.split('\n');
-  let inTagsList = false;
-  for (const line of lines) {
-    const trimLine = line.trim();
-    if (trimLine.startsWith('tags:')) {
-      const inlineValue = trimLine.substring(5).trim();
-      if (inlineValue && inlineValue !== '-') {
-        tags.push(inlineValue);
-      } else {
-        inTagsList = true;
-      }
-    } else if (inTagsList && trimLine.startsWith('-')) {
-      const val = trimLine.substring(1).trim().replace(/['"]/g, '');
-      if (val) tags.push(val);
-    } else if (trimLine === '') {
-      // ignore empty lines
-    } else if (line.includes(':')) {
-      inTagsList = false;
-    }
-  }
-  return tags;
-}
-
-function FileTreeView() {
-  const projectPath = useBloodChannel(['project.path'], () =>
-    Blood.getValue<string>('project.path', '')
-  );
+function FileTreeView({
+  state,
+  updateBloodKey,
+}: {
+  state: Record<string, any>;
+  updateBloodKey: (key: string, value: any) => void;
+}) {
+  const projectPath = state['project.path'] || '';
+  const fileSavedEvent = state['events.fileSaved.'] || {};
 
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPath, setSelectedPath] = useState<string>('');
-
-  const fileSavedEvent = useBloodChannel(['events.fileSaved.'], () =>
-    Blood.getValue<Record<string, number>>('events.fileSaved.', {})
-  );
 
   // Load project markdown files and parse their YAML frontmatter tags
   useEffect(() => {
@@ -114,7 +78,7 @@ function FileTreeView() {
     try {
       const selectedDir = await (window as any).electronAPI.openDirectory();
       if (selectedDir) {
-        Blood.updateKey('project.path', selectedDir);
+        updateBloodKey('project.path', selectedDir);
         setSelectedPath('');
       }
     } catch (err) {
@@ -149,7 +113,7 @@ function FileTreeView() {
       await (window as any).electronAPI.writeFile(fullPath, defaultContent);
       
       // Trigger file system redraw
-      Blood.updateKey(`events.fileSaved.${fullPath}`, Date.now());
+      updateBloodKey(`events.fileSaved.${fullPath}`, Date.now());
 
       // Open node in editor
       handleFileClick({ name: cleanName, path: fullPath, isDir: false, size: 0, tags: [name.trim()] });
@@ -160,13 +124,13 @@ function FileTreeView() {
 
   const handleFileClick = (file: FileInfo) => {
     setSelectedPath(file.path);
-    const targetEditorId = Blood.getValue<string | null>('system.lastFocusedEditorId', null)
-      || Blood.getValue<string[]>('system.activeEditors', [])[0];
+    const targetEditorId = state['system.lastFocusedEditorId']
+      || (state['system.activeEditors'] || [])[0];
 
     if (targetEditorId) {
-      Blood.updateKey(`events.openFile.${targetEditorId}`, file.path);
+      updateBloodKey(`events.openFile.${targetEditorId}`, file.path);
     } else {
-      Blood.updateKey('events.openFile.global', file.path);
+      updateBloodKey('events.openFile.global', file.path);
     }
   };
 

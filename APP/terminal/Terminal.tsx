@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useOrganAntibody } from '../../CORE/Antibody';
 
 export interface TerminalTab {
   id: string;
@@ -21,9 +20,15 @@ export const TerminalComponent = {
       isToolbar: true,
     },
   ],
+  bloodChannels: []
 };
 
-function TerminalView({ areaId }: { areaId: string }) {
+function TerminalView({
+  lastAction,
+}: {
+  areaId: string;
+  lastAction: { id: string; timestamp: number } | null;
+}) {
   const [tabs, setTabs] = useState<TerminalTab[]>([
     {
       id: 'tab-default',
@@ -115,15 +120,12 @@ function TerminalView({ areaId }: { areaId: string }) {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
 
-  // Organ Antibody: listen for clear triggers carried by Blood state
-  useOrganAntibody([
-    {
-      key: `actions.terminal.clear.${areaId}`,
-      condition: (val) => val === true,
-      action: () => setHistory(''),
-      autoResetValue: false,
-    },
-  ]);
+  // Listen for clear triggers carried by lastAction prop
+  useEffect(() => {
+    if (lastAction && lastAction.id === 'terminal.clear') {
+      setHistory('');
+    }
+  }, [lastAction]);
 
   return (
     <div

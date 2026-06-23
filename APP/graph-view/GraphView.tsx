@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Blood, useBloodChannel } from '../../CORE/Blood';
-import { parseFrontmatterTags } from '../file-tree/FileTree';
+import { parseFrontmatterTags } from '../utils';
 
 interface Node {
   id: string;
@@ -22,16 +21,23 @@ export const GraphViewComponent = {
   displayName: 'Lattice Graph',
   iconName: 'git-branch',
   component: GraphView,
+  bloodChannels: [
+    'project.path',
+    'events.fileSaved.',
+    'system.lastFocusedEditorId',
+    'system.activeEditors'
+  ]
 };
 
-function GraphView() {
-  const projectPath = useBloodChannel(['project.path'], () =>
-    Blood.getValue<string>('project.path', '')
-  );
-
-  const fileSavedEvent = useBloodChannel(['events.fileSaved.'], () =>
-    Blood.getValue<Record<string, number>>('events.fileSaved.', {})
-  );
+function GraphView({
+  state,
+  updateBloodKey,
+}: {
+  state: Record<string, any>;
+  updateBloodKey: (key: string, value: any) => void;
+}) {
+  const projectPath = state['project.path'] || '';
+  const fileSavedEvent = state['events.fileSaved.'] || {};
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -322,13 +328,13 @@ function GraphView() {
   };
 
   const handleNodeDoubleClick = (nodeId: string) => {
-    const targetEditorId = Blood.getValue<string | null>('system.lastFocusedEditorId', null)
-      || Blood.getValue<string[]>('system.activeEditors', [])[0];
+    const targetEditorId = state['system.lastFocusedEditorId']
+      || (state['system.activeEditors'] || [])[0];
 
     if (targetEditorId) {
-      Blood.updateKey(`events.openFile.${targetEditorId}`, nodeId);
+      updateBloodKey(`events.openFile.${targetEditorId}`, nodeId);
     } else {
-      Blood.updateKey('events.openFile.global', nodeId);
+      updateBloodKey('events.openFile.global', nodeId);
     }
   };
 

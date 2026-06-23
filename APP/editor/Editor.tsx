@@ -1,7 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { Blood, useBloodChannel } from '../../CORE/Blood';
-import { useOrganAntibody } from '../../CORE/Antibody';
-import { parseFrontmatterTags } from '../file-tree/FileTree';
+import { parseFrontmatterTags } from '../utils';
 
 export const EditorComponent = {
   typeId: 'editor',
@@ -22,6 +20,14 @@ export const EditorComponent = {
       isToolbar: true,
     },
   ],
+  bloodChannels: (areaId: string) => [
+    'project.path',
+    `events.openFile.${areaId}`,
+    'system.focusedAreaId',
+    'system.activeEditors',
+    'system.lastFocusedEditorId',
+    'script_json:'
+  ]
 };
 
 // Helper to serialize tags list and body text into Markdown frontmatter format
@@ -99,10 +105,14 @@ function ReactiveExpression({
   rawExpression,
   areaId,
   projectPath,
+  state,
+  updateBloodKey,
 }: {
   rawExpression: string;
   areaId: string;
   projectPath: string;
+  state: Record<string, any>;
+  updateBloodKey: (key: string, value: any) => void;
 }) {
   const parsed = parseExpression(rawExpression);
   if (!parsed) {
@@ -145,10 +155,8 @@ function ReactiveExpression({
 
   const absoluteOutputPath = `${projectPath}/script/${resolvedRelativeJsonPath}`;
 
-  // 3. Subscribe to Blood channel for this JSON data
-  const jsonData = useBloodChannel([`script_json:${resolvedRelativeJsonPath}`], () =>
-    Blood.getValue<any>(`script_json:${resolvedRelativeJsonPath}`, null)
-  );
+  // 3. Read JSON data from injected state prop instead of using useBloodChannel
+  const jsonData = state[`script_json:${resolvedRelativeJsonPath}`] || null;
 
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -162,7 +170,7 @@ function ReactiveExpression({
         const rawContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
         if (rawContent) {
           const parsedData = JSON.parse(rawContent);
-          Blood.updateKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+          updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
         }
       } catch (e) {
         // File might not exist yet
@@ -194,7 +202,7 @@ function ReactiveExpression({
       const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
       if (updatedContent) {
         const parsedData = JSON.parse(updatedContent);
-        Blood.updateKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+        updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
       }
       setStatus('success');
     } catch (err: any) {
@@ -373,7 +381,17 @@ function ReactiveExpression({
   );
 }
 
-function EditorView({ areaId }: { areaId: string }) {
+function EditorView({
+  areaId,
+  state,
+  updateBloodKey,
+  lastAction,
+}: {
+  areaId: string;
+  state: Record<string, any>;
+  updateBloodKey: (key: string, value: any) => void;
+  lastAction: { id: string; timestamp: number } | null;
+}) {
   const [tags, setTags] = useState<string[]>([]);
   const [content, setContent] = useState<string>(''); // Body content only
   const [currentFile, setCurrentFile] = useState<string>('');
@@ -387,44 +405,37 @@ function EditorView({ areaId }: { areaId: string }) {
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
 
-  const projectPath = useBloodChannel(['project.path'], () =>
-    Blood.getValue<string>('project.path', '')
-  );
+  const projectPath = state['project.path'] || '';
 
   // 1. Register editor instance
   useEffect(() => {
-    const editors = Blood.getValue<string[]>('system.activeEditors', []);
+    const editors = state['system.activeEditors'] || [];
     if (!editors.includes(areaId)) {
-      Blood.updateKey('system.activeEditors', [...editors, areaId]);
+      updateBloodKey('system.activeEditors', [...editors, areaId]);
     }
-    if (!Blood.getValue<string | null>('system.lastFocusedEditorId', null)) {
-      Blood.updateKey('system.lastFocusedEditorId', areaId);
+    if (!state['system.lastFocusedEditorId']) {
+      updateBloodKey('system.lastFocusedEditorId', areaId);
     }
     return () => {
-      const remaining = Blood.getValue<string[]>('system.activeEditors', [])
-        .filter((id) => id !== areaId);
-      Blood.updateKey('system.activeEditors', remaining);
-      if (Blood.getValue<string | null>('system.lastFocusedEditorId', null) === areaId) {
-        Blood.updateKey('system.lastFocusedEditorId', remaining[0] || null);
+      const remaining = (state['system.activeEditors'] || []).filter((id: string) => id !== areaId);
+      updateBloodKey('system.activeEditors', remaining);
+      if (state['system.lastFocusedEditorId'] === areaId) {
+        updateBloodKey('system.lastFocusedEditorId', remaining[0] || null);
       }
     };
   }, [areaId]);
 
   // 2. Focus state tracking
-  const isFocused = useBloodChannel(['system.focusedAreaId'], () =>
-    Blood.getValue<string | null>('system.focusedAreaId', null) === areaId
-  );
+  const isFocused = state['system.focusedAreaId'] === areaId;
 
   useEffect(() => {
     if (isFocused) {
-      Blood.updateKey('system.lastFocusedEditorId', areaId);
+      updateBloodKey('system.lastFocusedEditorId', areaId);
     }
   }, [isFocused, areaId]);
 
   // 3. Listen to file loading requests targeting this area
-  const openedFile = useBloodChannel([`events.openFile.${areaId}`], () =>
-    Blood.getValue<string>(`events.openFile.${areaId}`, '')
-  );
+  const openedFile = state[`events.openFile.${areaId}`] || '';
 
   useEffect(() => {
     if (!openedFile) return;
@@ -463,7 +474,7 @@ function EditorView({ areaId }: { areaId: string }) {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       setStatusMessage(`Saved at ${new Date().toLocaleTimeString()}`);
       // Notify sidebar & graph view
-      Blood.updateKey(`events.fileSaved.${currentFile}`, Date.now());
+      updateBloodKey(`events.fileSaved.${currentFile}`, Date.now());
     } catch (err: any) {
       setStatusMessage(`Error saving: ${err.message}`);
     }
@@ -482,7 +493,7 @@ function EditorView({ areaId }: { areaId: string }) {
       setStatusMessage(`Tags updated inline.`);
       
       // Notify HMR / redraw
-      Blood.updateKey(`events.fileSaved.${currentFile}`, Date.now());
+      updateBloodKey(`events.fileSaved.${currentFile}`, Date.now());
     } catch (err: any) {
       alert(`Failed to save tag updates: ${err.message}`);
     }
@@ -580,15 +591,15 @@ function EditorView({ areaId }: { areaId: string }) {
 
       if (exists) {
         // Navigate
-        Blood.updateKey(`events.openFile.${areaId}`, targetFilePath);
+        updateBloodKey(`events.openFile.${areaId}`, targetFilePath);
       } else {
         // Create if missing
         const create = confirm(`Note "${cleanTargetName}" does not exist. Do you want to create it?`);
         if (create) {
           const defaultContent = `---\ntags:\n  - ${cleanTargetName}\n---\n# ${cleanTargetName}\n\nStart writing here...\n`;
           await (window as any).electronAPI.writeFile(targetFilePath, defaultContent);
-          Blood.updateKey(`events.fileSaved.${targetFilePath}`, Date.now());
-          Blood.updateKey(`events.openFile.${areaId}`, targetFilePath);
+          updateBloodKey(`events.fileSaved.${targetFilePath}`, Date.now());
+          updateBloodKey(`events.openFile.${areaId}`, targetFilePath);
         }
       }
     } catch (e) {
@@ -596,24 +607,19 @@ function EditorView({ areaId }: { areaId: string }) {
     }
   };
 
-  // Organ Antibodies
-  useOrganAntibody([
-    {
-      key: `actions.editor.save.${areaId}`,
-      condition: (val) => val === true,
-      action: () => saveNodeFile(),
-      autoResetValue: false,
-    },
-    {
-      key: `actions.editor.toggleMode.${areaId}`,
-      condition: (val) => val === true,
-      action: () => setIsPreviewMode((prev) => !prev),
-      autoResetValue: false,
-    },
-  ]);
+  // Listen for action triggers carried by lastAction prop
+  useEffect(() => {
+    if (lastAction) {
+      if (lastAction.id === 'editor.save') {
+        saveNodeFile();
+      } else if (lastAction.id === 'editor.toggleMode') {
+        setIsPreviewMode((prev) => !prev);
+      }
+    }
+  }, [lastAction]);
 
   const handleFocus = () => {
-    Blood.updateKey('system.focusedAreaId', areaId);
+    updateBloodKey('system.focusedAreaId', areaId);
   };
 
   // Custom Markdown Parser
@@ -679,6 +685,8 @@ function EditorView({ areaId }: { areaId: string }) {
           rawExpression={rawExpression}
           areaId={areaId}
           projectPath={projectPath}
+          state={state}
+          updateBloodKey={updateBloodKey}
         />
       );
     });

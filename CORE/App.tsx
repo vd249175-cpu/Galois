@@ -4,21 +4,20 @@ import { AreaLayout } from './AreaLayout';
 import { AreaShell } from './AreaShell';
 import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
-import { EditorComponent } from '../APP/editor/Editor';
-import { TerminalComponent } from '../APP/terminal/Terminal';
-import { FileTreeComponent } from '../APP/file-tree/FileTree';
-import { SettingsComponent } from '../APP/settings/Settings';
-import { GraphViewComponent } from '../APP/graph-view/GraphView';
 import { RightSidebar } from './RightSidebar';
 import { Blood } from './Blood';
 import './index.css';
-
-// Register Plugins into the Registry
-ComponentRegistry.register(FileTreeComponent);
-ComponentRegistry.register(EditorComponent);
-ComponentRegistry.register(TerminalComponent);
-ComponentRegistry.register(SettingsComponent);
-ComponentRegistry.register(GraphViewComponent);
+// Auto-Register Plugins from the APP/ directory using Vite's static glob importer
+const modules = import.meta.glob('../APP/*/*.tsx', { eager: true });
+for (const path in modules) {
+  const mod = modules[path] as any;
+  for (const key in mod) {
+    const exportVal = mod[key];
+    if (exportVal && typeof exportVal === 'object' && exportVal.typeId && exportVal.component) {
+      ComponentRegistry.register(exportVal);
+    }
+  }
+}
 
 export function App() {
   const searchParams = new URLSearchParams(window.location.search);

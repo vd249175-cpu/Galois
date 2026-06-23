@@ -3,6 +3,86 @@ import { Blood, useBloodChannel } from './Blood';
 import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
 
+// Component wrapper middleware to subscribe to Blood keys and inject dependencies
+function ComponentWrapper({
+  areaId,
+  currentComponent,
+}: {
+  areaId: string;
+  currentComponent: any;
+}) {
+  // 1. Resolve state keys to listen to
+  const channels = typeof currentComponent.bloodChannels === 'function'
+    ? currentComponent.bloodChannels(areaId)
+    : (currentComponent.bloodChannels || []);
+
+  const actionChannels = (currentComponent.actions || []).map((act: any) => `actions.${act.id}.${areaId}`);
+  const allChannels = [...channels, ...actionChannels];
+
+  // 2. Subscribe using useBloodChannel
+  const stateValues = useBloodChannel(allChannels, () => {
+    const val: Record<string, any> = {};
+    const allState = Blood.getRawState() || {};
+    
+    allChannels.forEach(ch => {
+      if (ch.endsWith('.') || ch.endsWith(':')) {
+        const subMap: Record<string, any> = {};
+        Object.keys(allState).forEach(key => {
+          if (key.startsWith(ch)) {
+            subMap[key] = allState[key];
+          }
+        });
+        val[ch] = subMap;
+      } else {
+        val[ch] = Blood.getValue(ch, undefined);
+      }
+    });
+    return val;
+  });
+
+  // 3. Track lastAction triggered
+  const [lastAction, setLastAction] = React.useState<any>(null);
+  
+  useEffect(() => {
+    actionChannels.forEach((ch: string) => {
+      if (Blood.getValue(ch, false)) {
+        // Reset the value in Blood so it doesn't fire repeatedly
+        Blood.updateKey(ch, false);
+        const actionId = ch.split('.')[1];
+        setLastAction({ id: actionId, timestamp: Date.now() });
+      }
+    });
+  }, [stateValues, actionChannels]);
+
+  // 4. Expose update actions
+  const updateBloodState = (values: Record<string, any>) => {
+    Blood.update(values);
+  };
+  const updateBloodKey = (key: string, value: any) => {
+    Blood.updateKey(key, value);
+  };
+
+  // 5. Expose shortcut management API
+  const shortcutAPI = {
+    getAllActions: () => ActionRegistry.getAllActions(),
+    getShortcutForAction: (actionId: string) => ActionRegistry.getShortcutForAction(actionId),
+    registerShortcut: (actionId: string, combo: string) => ActionRegistry.registerShortcut(combo, actionId),
+    removeShortcutForAction: (actionId: string) => ActionRegistry.removeShortcutForAction(actionId),
+    serializeShortcuts: () => ActionRegistry.serializeShortcuts(),
+  };
+
+  return (
+    <currentComponent.component
+      areaId={areaId}
+      state={stateValues}
+      updateBloodState={updateBloodState}
+      updateBloodKey={updateBloodKey}
+      lastAction={lastAction}
+      shortcutAPI={shortcutAPI}
+    />
+  );
+}
+
 interface AreaShellProps {
   areaId: string;
   componentType: string;
@@ -325,7 +405,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
       {/* Render Component Content */}
       <div className="area-content">
         {currentComponent ? (
-          <currentComponent.component areaId={areaId} />
+          <ComponentWrapper areaId={areaId} currentComponent={currentComponent} />
         ) : (
           <div style={{ padding: '20px', color: 'var(--text-muted)' }}>
             Select Component in Header Dropdown

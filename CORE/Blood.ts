@@ -42,6 +42,10 @@ class BloodClass {
     return this.state[key] !== undefined ? (this.state[key] as T) : defaultValue;
   }
 
+  public getRawState(): Record<string, any> {
+    return this.state;
+  }
+
   public update(values: Record<string, any>, sync: boolean = true): void {
     const modified = new Set<string>();
     const changedValues: Record<string, any> = {};

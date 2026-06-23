@@ -1,14 +1,26 @@
 import { useState, useEffect } from 'react';
-import { ActionRegistry } from '../../CORE/ActionRegistry';
 
 export const SettingsComponent = {
   typeId: 'settings',
   displayName: 'Preferences',
   iconName: 'settings',
   component: SettingsView,
+  bloodChannels: [
+    'system.focusedAreaId'
+  ]
 };
 
-function SettingsView() {
+function SettingsView({
+  shortcutAPI,
+}: {
+  shortcutAPI: {
+    getAllActions: () => any[];
+    getShortcutForAction: (actionId: string) => string | undefined;
+    registerShortcut: (actionId: string, combo: string) => void;
+    removeShortcutForAction: (actionId: string) => void;
+    serializeShortcuts: () => string;
+  };
+}) {
   const [activeCategory, setActiveCategory] = useState<'shortcuts' | 'appearance' | 'system'>('shortcuts');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
@@ -52,10 +64,10 @@ function SettingsView() {
   }, [editingActionId]);
 
   const saveNewShortcut = async (actionId: string, combo: string) => {
-    ActionRegistry.registerShortcut(combo, actionId);
+    shortcutAPI.registerShortcut(actionId, combo);
 
     try {
-      const serialized = ActionRegistry.serializeShortcuts();
+      const serialized = shortcutAPI.serializeShortcuts();
       await (window as any).electronAPI.writeFile('dnote_shortcuts.json', serialized);
       console.log(`[Preferences] Shortcut updated: ${actionId} -> ${combo}`);
     } catch (err) {
@@ -68,13 +80,13 @@ function SettingsView() {
 
   const handleReset = async (actionId: string, defaultShortcut?: string) => {
     if (defaultShortcut) {
-      ActionRegistry.registerShortcut(defaultShortcut, actionId);
+      shortcutAPI.registerShortcut(actionId, defaultShortcut);
     } else {
-      ActionRegistry.removeShortcutForAction(actionId);
+      shortcutAPI.removeShortcutForAction(actionId);
     }
 
     try {
-      const serialized = ActionRegistry.serializeShortcuts();
+      const serialized = shortcutAPI.serializeShortcuts();
       await (window as any).electronAPI.writeFile('dnote_shortcuts.json', serialized);
     } catch (err) {
       console.error('[Preferences] Failed to reset shortcut:', err);
@@ -106,7 +118,7 @@ function SettingsView() {
     );
   };
 
-  const actions = ActionRegistry.getAllActions();
+  const actions = shortcutAPI.getAllActions();
   const filteredActions = actions.filter(
     (act) =>
       act.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -175,7 +187,7 @@ function SettingsView() {
 
               <div className="settings-list">
                 {filteredActions.map((act) => {
-                  const currentCombo = ActionRegistry.getShortcutForAction(act.id);
+                  const currentCombo = shortcutAPI.getShortcutForAction(act.id);
                   const isListening = editingActionId === act.id;
 
                   return (
