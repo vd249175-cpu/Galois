@@ -248,6 +248,7 @@ function GraphView({
         });
 
 
+        console.warn('[GraphView] buildLatticeGraph completed. Nodes:', physicsNodes.length, 'Links:', calculatedEdges.length, JSON.stringify(calculatedEdges));
         simRef.current = { nodes: physicsNodes, links: calculatedEdges };
         setNodes(physicsNodes);
         setLinks(calculatedEdges);
@@ -483,6 +484,7 @@ function GraphView({
       />
 
 
+      {console.warn('[GraphView Render] links count:', links.length, 'resolved links:', links.filter(l => nodes.find(n => n.id === l.source) && nodes.find(n => n.id === l.target)).length, 'nodes count:', nodes.length)}
       <svg
         ref={svgRef}
         width="100%"
@@ -502,7 +504,7 @@ function GraphView({
             markerHeight={arrowSize}
             orient="auto"
           >
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--border-color)" />
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--text-muted)" fillOpacity={0.45} />
           </marker>
           <marker
             id="arrowhead-hovered"
@@ -542,9 +544,9 @@ function GraphView({
                 y1={source.y}
                 x2={x2}
                 y2={y2}
-                stroke={isRelated ? 'var(--accent-color)' : 'var(--border-color)'}
+                stroke={isRelated ? 'var(--accent-color)' : 'var(--text-muted)'}
                 strokeWidth={isRelated ? 1.8 : 1.1}
-                strokeOpacity={hoveredNode && !isRelated ? 0.2 : 0.8}
+                strokeOpacity={hoveredNode && !isRelated ? 0.15 : 0.45}
                 markerEnd={isRelated ? 'url(#arrowhead-hovered)' : 'url(#arrowhead-default)'}
                 style={{ transition: 'stroke 0.15s, stroke-width 0.15s' }}
               />
