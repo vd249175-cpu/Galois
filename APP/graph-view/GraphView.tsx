@@ -12,6 +12,7 @@ interface Node {
   vx: number;
   vy: number;
   level?: number;
+  isVirtual?: boolean;
 }
 
 interface Link {
@@ -177,7 +178,9 @@ function GraphView({
         const mdFiles = files.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
 
         const currentResolvedTags = state[BC.system.resolvedTags] || {};
-        const rawNodes: { id: string; tags: string[]; label: string }[] = [];
+        const rawNodes: { id: string; tags: string[]; label: string; isVirtual?: boolean }[] = [];
+        const allUniqueDecomposedTags = new Set<string>();
+
         for (const file of mdFiles) {
           let tags = currentResolvedTags[file.path] || [];
           if (isHierarchicalMode) {
@@ -193,9 +196,35 @@ function GraphView({
               decomposed.add(tag);
             });
             tags = Array.from(decomposed);
+            tags.forEach((t: string) => allUniqueDecomposedTags.add(t));
           }
           const noteTitle = file.name.substring(0, file.name.lastIndexOf('.md'));
           rawNodes.push({ id: file.path, tags, label: noteTitle });
+        }
+
+        // Add virtual nodes for tags that are not represented by explicit notes
+        if (isHierarchicalMode) {
+          allUniqueDecomposedTags.forEach((tag) => {
+            const isRepresented = rawNodes.some(rn => rn.label === tag || rn.id.endsWith(`/${tag}.md`) || rn.id.endsWith(`\\${tag}.md`));
+            if (!isRepresented) {
+              const decomposed = new Set<string>();
+              const parts = tag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
+              let path = '';
+              parts.forEach((part, index) => {
+                path = index === 0 ? part : `${path}#${part}`;
+                decomposed.add(path);
+                decomposed.add(part);
+              });
+              decomposed.add(tag);
+
+              rawNodes.push({
+                id: `tag:${tag}`,
+                tags: Array.from(decomposed),
+                label: `#${tag}`,
+                isVirtual: true
+              });
+            }
+          });
         }
 
         if (rawNodes.length === 0) {
@@ -261,6 +290,7 @@ function GraphView({
             vx: existing ? existing.vx : 0,
             vy: existing ? existing.vy : 0,
             level: levels[rn.id] || 0,
+            isVirtual: rn.isVirtual,
           };
         });
 
@@ -444,6 +474,10 @@ function GraphView({
   };
 
   const handleNodeDoubleClick = (nodeId: string) => {
+    if (nodeId.startsWith('tag:')) {
+      // It's a virtual tag node.
+      return;
+    }
     const targetEditorId = state[BC.system.lastFocusedEditorId]
       || (state[BC.system.activeEditors] || [])[0];
 
@@ -593,27 +627,42 @@ function GraphView({
                   opacity={isHovered ? 0.18 : 0.05}
                   style={{ transition: 'r 0.15s, opacity 0.15s' }}
                 />
-                
-                {/* Node Center Dot */}
-                <circle
-                  r={isHovered ? 7 : 5.5}
-                  fill={isHovered ? 'var(--accent-color)' : 'var(--text-main)'}
-                  stroke="var(--bg-main)"
-                  strokeWidth="1.5"
-                  style={{ transition: 'fill 0.15s, r 0.15s' }}
-                />
+                {/* Node Center Dot or Tag Pill */}
+                {node.isVirtual ? (
+                  <rect
+                    x={-Math.max(36, node.label.length * 5.2 + 8) / 2}
+                    y={-7}
+                    width={Math.max(36, node.label.length * 5.2 + 8)}
+                    height={14}
+                    rx={4}
+                    fill={isHovered ? 'var(--accent-color)' : 'rgba(124, 124, 133, 0.08)'}
+                    stroke={isHovered ? 'var(--accent-color)' : 'var(--text-muted)'}
+                    strokeWidth="1.1"
+                    strokeDasharray="3,2"
+                    style={{ transition: 'fill 0.15s, stroke 0.15s' }}
+                  />
+                ) : (
+                  <circle
+                    r={isHovered ? 7 : 5.5}
+                    fill={isHovered ? 'var(--accent-color)' : 'var(--text-main)'}
+                    stroke="var(--bg-main)"
+                    strokeWidth="1.5"
+                    style={{ transition: 'fill 0.15s, r 0.15s' }}
+                  />
+                )}
                 
                 {/* Node Title Box Label */}
-                <g transform="translate(0, 18)" style={{ pointerEvents: 'none' }}>
+                <g transform={node.isVirtual ? "translate(0, 3)" : "translate(0, 18)"} style={{ pointerEvents: 'none' }}>
                   <text
                     textAnchor="middle"
-                    fill={isHovered ? 'var(--accent-color)' : 'var(--text-main)'}
+                    fill={isHovered ? (node.isVirtual ? '#ffffff' : 'var(--accent-color)') : 'var(--text-main)'}
                     style={{
-                      fontSize: '8.5px',
+                      fontSize: node.isVirtual ? '8px' : '8.5px',
                       fontWeight: 600,
                       fontFamily: 'var(--font-sans)',
                       userSelect: 'none',
-                      textShadow: '0px 1px 2px var(--bg-main), 0px 1px 2px var(--bg-main)', // Enhance readability against lines
+                      textShadow: node.isVirtual ? 'none' : '0px 1px 2px var(--bg-main), 0px 1px 2px var(--bg-main)',
+                      transition: 'fill 0.15s',
                     }}
                   >
                     {node.label}
