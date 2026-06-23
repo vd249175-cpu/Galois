@@ -12,6 +12,8 @@ interface TagToolbarProps {
   setNewTagInput: (val: string) => void;
   maxIterations: number;
   updateBloodKey: (key: string, value: any) => void;
+  allProjectTags: string[];
+  handleUpdateTags: (nextTags: string[]) => void;
 }
 
 export function TagToolbar({
@@ -26,7 +28,19 @@ export function TagToolbar({
   setNewTagInput,
   maxIterations,
   updateBloodKey,
+  allProjectTags,
+  handleUpdateTags,
 }: TagToolbarProps) {
+  const [showAutocomplete, setShowAutocomplete] = React.useState(false);
+  const [autocompleteIndex, setAutocompleteIndex] = React.useState(0);
+
+  const filteredSuggestions = React.useMemo(() => {
+    const query = newTagInput.trim().toLowerCase();
+    if (!query) return [];
+    return allProjectTags.filter(
+      (t) => t.toLowerCase().includes(query) && !tags.includes(t)
+    );
+  }, [newTagInput, allProjectTags, tags]);
   if (!currentFile) return null;
 
   return (
@@ -119,28 +133,119 @@ export function TagToolbar({
           );
         })}
         
-        {/* Add Tag Form */}
-        <form onSubmit={handleAddTag} style={{ display: 'inline-block' }}>
-          <input
-            type="text"
-            placeholder="+ Add tag..."
-            value={newTagInput}
-            onChange={(e) => setNewTagInput(e.target.value)}
-            style={{
-              border: '1px dashed var(--border-color)',
-              backgroundColor: 'transparent',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              fontSize: '10px',
-              outline: 'none',
-              color: 'var(--text-main)',
-              width: '75px',
-              transition: 'border-color 0.15s',
+        {/* Add Tag Form with Autocomplete */}
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (showAutocomplete && filteredSuggestions.length > 0) {
+                const selected = filteredSuggestions[autocompleteIndex];
+                if (selected) {
+                  handleUpdateTags([...tags, selected]);
+                  setNewTagInput('');
+                  setShowAutocomplete(false);
+                  return;
+                }
+              }
+              handleAddTag(e);
             }}
-            onFocus={(e) => (e.target.style.borderColor = 'var(--accent-color)')}
-            onBlur={(e) => (e.target.style.borderColor = 'var(--border-color)')}
-          />
-        </form>
+            style={{ display: 'inline-block' }}
+          >
+            <input
+              type="text"
+              placeholder="+ Add tag..."
+              value={newTagInput}
+              onChange={(e) => {
+                setNewTagInput(e.target.value);
+                setAutocompleteIndex(0);
+                setShowAutocomplete(true);
+              }}
+              onFocus={() => setShowAutocomplete(true)}
+              onBlur={() => {
+                setTimeout(() => setShowAutocomplete(false), 200);
+              }}
+              onKeyDown={(e) => {
+                if (showAutocomplete && filteredSuggestions.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setAutocompleteIndex((prev) => (prev + 1) % filteredSuggestions.length);
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setAutocompleteIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowAutocomplete(false);
+                  }
+                }
+              }}
+              style={{
+                border: '1px dashed var(--border-color)',
+                backgroundColor: 'transparent',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                fontSize: '10px',
+                outline: 'none',
+                color: 'var(--text-main)',
+                width: '100px',
+                transition: 'border-color 0.15s',
+              }}
+            />
+          </form>
+
+          {/* Autocomplete Dropdown List */}
+          {showAutocomplete && filteredSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              top: '22px',
+              left: 0,
+              zIndex: 1000,
+              width: '180px',
+              maxHeight: '160px',
+              overflowY: 'auto',
+              backgroundColor: 'var(--bg-main)',
+              border: '1.2px solid rgba(0, 0, 0, 0.12)',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '2px',
+            }}>
+              {filteredSuggestions.map((suggestion, index) => {
+                const isSelected = index === autocompleteIndex;
+                const isRegex = suggestion.startsWith('re:') || suggestion.startsWith('run:');
+                return (
+                  <div
+                    key={suggestion}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleUpdateTags([...tags, suggestion]);
+                      setNewTagInput('');
+                      setShowAutocomplete(false);
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '10px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
+                      color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    <span>{isRegex ? '⚡' : '#'}</span>
+                    <span style={{ fontWeight: isSelected ? 700 : 500 }}>{suggestion}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
       </div>
 
@@ -148,7 +253,7 @@ export function TagToolbar({
         <span>Iteration Limit:</span>
         <select
           value={maxIterations}
-          onChange={(e) => updateBloodKey('project.maxIterations', Number(e.target.value))}
+          onChange={(e) => updateBloodKey('system.maxIterations', Number(e.target.value))}
           style={{
             backgroundColor: 'var(--bg-input)',
             border: '1px solid var(--border-color)',
