@@ -5,6 +5,8 @@ interface GraphControlsProps {
   setArrowSize: (val: number) => void;
   spacing: number;
   setSpacing: (val: number) => void;
+  isHierarchicalMode: boolean;
+  setIsHierarchicalMode: (val: boolean) => void;
 }
 
 export function GraphControls({
@@ -14,6 +16,8 @@ export function GraphControls({
   setArrowSize,
   spacing,
   setSpacing,
+  isHierarchicalMode,
+  setIsHierarchicalMode,
 }: GraphControlsProps) {
   return (
     <div style={{
@@ -101,6 +105,38 @@ export function GraphControls({
             cursor: 'pointer',
           }}
         />
+      </div>
+
+      {/* Hierarchical Decomposition Mode Toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+        <span style={{ color: 'var(--text-main)' }}>Implicit Deconstruct (级数拆解)</span>
+        <button
+          onClick={() => setIsHierarchicalMode(!isHierarchicalMode)}
+          style={{
+            background: isHierarchicalMode ? 'var(--accent-color)' : 'rgba(0,0,0,0.08)',
+            border: 'none',
+            borderRadius: '12px',
+            width: '32px',
+            height: '18px',
+            position: 'relative',
+            cursor: 'pointer',
+            transition: 'background 0.2s',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <div style={{
+            width: '14px',
+            height: '14px',
+            borderRadius: '50%',
+            backgroundColor: '#ffffff',
+            position: 'absolute',
+            left: isHierarchicalMode ? '16px' : '2px',
+            transition: 'left 0.2s',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+          }} />
+        </button>
       </div>
     </div>
   );

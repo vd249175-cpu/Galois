@@ -93,6 +93,9 @@ function GraphView({
   const arrowSizeRef = useRef(arrowSize);
   const spacingRef = useRef(spacing);
 
+  // Toggle mode for hierarchical tag decomposition (級數拆解 / 隐式关联模式)
+  const [isHierarchicalMode, setIsHierarchicalMode] = useState(false);
+
   useEffect(() => {
     repulsionRef.current = repulsion;
     wakeSimulation();
@@ -176,7 +179,21 @@ function GraphView({
         const currentResolvedTags = state[BC.system.resolvedTags] || {};
         const rawNodes: { id: string; tags: string[]; label: string }[] = [];
         for (const file of mdFiles) {
-          const tags = currentResolvedTags[file.path] || [];
+          let tags = currentResolvedTags[file.path] || [];
+          if (isHierarchicalMode) {
+            const decomposed = new Set<string>();
+            tags.forEach((tag: string) => {
+              const parts = tag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
+              let path = '';
+              parts.forEach((part, index) => {
+                path = index === 0 ? part : `${path}#${part}`;
+                decomposed.add(path);
+                decomposed.add(part);
+              });
+              decomposed.add(tag);
+            });
+            tags = Array.from(decomposed);
+          }
           const noteTitle = file.name.substring(0, file.name.lastIndexOf('.md'));
           rawNodes.push({ id: file.path, tags, label: noteTitle });
         }
@@ -258,7 +275,7 @@ function GraphView({
     };
 
     buildLatticeGraph();
-  }, [projectPath, state[BC.system.resolvedTags], fileSavedEvent]);
+  }, [projectPath, state[BC.system.resolvedTags], fileSavedEvent, isHierarchicalMode]);
 
   // 2. Physics Simulation Loop - Free 2D Force-Directed Layout
   useEffect(() => {
@@ -480,6 +497,8 @@ function GraphView({
         setArrowSize={setArrowSize}
         spacing={spacing}
         setSpacing={setSpacing}
+        isHierarchicalMode={isHierarchicalMode}
+        setIsHierarchicalMode={setIsHierarchicalMode}
       />
 
 

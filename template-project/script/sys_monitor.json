@@ -1,10 +1,10 @@
 {
   "system": {
-    "cpu": "15.1%",
-    "ram": "5.7 GB / 16 GB (35.9%)",
-    "disk": "12Gi / 228Gi (19% used, 51Gi free)",
+    "cpu": "34.1%",
+    "ram": "4.2 GB / 16 GB (26.4%)",
+    "disk": "12Gi / 228Gi (20% used, 48Gi free)",
     "uptime": "7 days",
-    "last_updated": "10:50:19",
+    "last_updated": "12:35:46",
     "thread_id": "project"
   }
 }
