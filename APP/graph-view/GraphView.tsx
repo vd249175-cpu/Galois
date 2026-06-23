@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { GraphControls, PALETTE_PRESETS } from './GraphControls';
+import { GraphControls } from './GraphControls';
 import { graphViewActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 
@@ -519,17 +519,18 @@ function GraphView({
   };
 
   const handleNodeDoubleClick = (nodeId: string) => {
+    let targetPath = nodeId;
     if (nodeId.startsWith('tag:')) {
-      // It's a virtual tag node.
-      return;
+      const tagName = nodeId.substring(4);
+      targetPath = `${projectPath}/${tagName}.md`;
     }
     const targetEditorId = state[BC.system.lastFocusedEditorId]
       || (state[BC.system.activeEditors] || [])[0];
 
     if (targetEditorId) {
-      updateBloodKey(BC.events.openFile(targetEditorId), nodeId);
+      updateBloodKey(BC.events.openFile(targetEditorId), targetPath);
     } else {
-      updateBloodKey(BC.events.openFile('global'), nodeId);
+      updateBloodKey(BC.events.openFile('global'), targetPath);
     }
   };
 
@@ -539,6 +540,7 @@ function GraphView({
 
   // Listen for dynamic zoom/recenter/color actions triggered from sidebar
   useEffect(() => {
+    console.log('[GraphView] Received lastAction:', lastAction);
     if (lastAction) {
       if (lastAction.id === 'graphView.zoomIn') {
         handleZoom(1.15);
@@ -547,14 +549,9 @@ function GraphView({
       } else if (lastAction.id === 'graphView.recenter') {
         setPan({ x: 300, y: 250 });
         setZoom(1.0);
-      } else if (lastAction.id === 'graphView.colorTahoe') {
-        setActivePaletteName('Tahoe');
-      } else if (lastAction.id === 'graphView.colorSunset') {
-        setActivePaletteName('Sunset');
-      } else if (lastAction.id === 'graphView.colorNordic') {
-        setActivePaletteName('Nordic');
-      } else if (lastAction.id === 'graphView.colorMono') {
-        setActivePaletteName('Mono');
+      } else if (lastAction.id === 'graphView.openPaletteManager') {
+        console.log('[GraphView] Opening Palette Manager...');
+        setIsPaletteEditorOpen(true);
       }
     }
   }, [lastAction]);

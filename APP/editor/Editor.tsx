@@ -148,7 +148,14 @@ function EditorView({
 
   // ── 3. File loading ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!openedFile) return;
+    if (!openedFile) {
+      setContent('');
+      setCurrentFile('');
+      setTags([]);
+      lastSavedContentRef.current = '';
+      setStatusMessage('No file open');
+      return;
+    }
     const loadMarkdownFile = async () => {
       try {
         const rawContent = await (window as any).electronAPI.readFile(openedFile);
@@ -161,7 +168,19 @@ function EditorView({
         setStatusMessage(`Editing Note: ${noteName}`);
       } catch (err: any) {
         console.error('[Editor] Failed to load note:', openedFile, err);
-        setStatusMessage(`Error loading note file.`);
+        const errMsg = err.message || '';
+        if (errMsg.includes('ENOENT') || errMsg.includes('no such file')) {
+          const noteName = openedFile.split(/[/\\]/).pop()?.replace('.md', '') || '';
+          const template = `---\ntags:\n  - ${noteName}\n---\n# ${noteName}\n\n`;
+          lastSavedContentRef.current = template;
+          setTags([noteName]);
+          setContent(template);
+          setCurrentFile(openedFile);
+          setStatusMessage(`Draft Note: ${noteName} (Unsaved)`);
+          setIsPreviewMode(false);
+        } else {
+          setStatusMessage(`Error loading note file.`);
+        }
       }
     };
     loadMarkdownFile();
@@ -218,7 +237,7 @@ function EditorView({
 
   // ── 5. Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {
-    if (!currentFile || isPreviewMode || content === '') return;
+    if (!currentFile || isPreviewMode || content === '' || content === lastSavedContentRef.current) return;
     const timer = setTimeout(() => { saveNodeFile(content); }, 1200);
     return () => clearTimeout(timer);
   }, [content, currentFile, isPreviewMode]);
@@ -262,11 +281,51 @@ function EditorView({
     });
   };
 
+  const handleDeleteCurrentFile = async () => {
+    if (!currentFile) return;
+    const noteName = currentFile.split(/[/\\]/).pop()?.replace('.md', '') || '';
+
+    let isUnsaved = false;
+    try {
+      const exists = await (window as any).electronAPI.readFile(currentFile).then(() => true).catch(() => false);
+      isUnsaved = !exists;
+    } catch (_) {}
+
+    const message = isUnsaved
+      ? `Are you sure you want to discard this draft note "${noteName}"?`
+      : `Are you sure you want to delete note "${noteName}"?\nThis cannot be undone.`;
+
+    const ok = confirm(message);
+    if (!ok) return;
+
+    try {
+      if (!isUnsaved) {
+        await (window as any).electronAPI.deleteFile(currentFile);
+      }
+
+      const activeEditors = state[BC.system.activeEditors] || [];
+      activeEditors.forEach((editorId: string) => {
+        const opened = state[BC.events.openFile(editorId)] || '';
+        if (opened === currentFile) {
+          updateBloodKey(BC.events.openFile(editorId), '');
+        }
+      });
+      if (state[BC.events.openFile('global')] === currentFile) {
+        updateBloodKey(BC.events.openFile('global'), '');
+      }
+
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+    } catch (err: any) {
+      alert(`Failed to delete note: ${err.message}`);
+    }
+  };
+
   // ── 7. lastAction handler ─────────────────────────────────────────────────
   useEffect(() => {
     if (!lastAction) return;
     if (lastAction.id === 'editor.save') saveNodeFile();
     else if (lastAction.id === 'editor.toggleMode') togglePreviewMode();
+    else if (lastAction.id === 'editor.delete') handleDeleteCurrentFile();
   }, [lastAction]);
 
   const handleFocus = () => {

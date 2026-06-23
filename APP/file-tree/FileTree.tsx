@@ -96,7 +96,7 @@ function FileTreeView({
         const mdFiles = list.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
         const maxIterations = state[BC.system.maxIterations] || 3;
 
-        const allResolved = await calculateAllResolvedTags(
+        const { resolved: allResolved, staticTags: allStaticTags } = await calculateAllResolvedTags(
           projectPath,
           mdFiles,
           maxIterations,
@@ -113,7 +113,7 @@ function FileTreeView({
           path: file.path,
           isDir: false,
           size: file.size,
-          tags: allResolved[file.path] || [],
+          tags: allStaticTags[file.path] || [],
         }));
         parsedFiles.sort((a, b) => a.name.localeCompare(b.name));
         setFiles(parsedFiles);
@@ -172,6 +172,36 @@ function FileTreeView({
       updateBloodKey(BC.events.openFile(targetEditorId), file.path);
     } else {
       updateBloodKey(BC.events.openFile('global'), file.path);
+    }
+  };
+
+  const handleDeleteFile = async (e: React.MouseEvent, file: FileInfo) => {
+    e.stopPropagation();
+    const displayName = file.name.substring(0, file.name.lastIndexOf('.md'));
+    const ok = confirm(`Are you sure you want to delete note "${displayName}"?\nThis cannot be undone.`);
+    if (!ok) return;
+
+    try {
+      await (window as any).electronAPI.deleteFile(file.path);
+      
+      const activeEditors = state[BC.system.activeEditors] || [];
+      activeEditors.forEach((editorId: string) => {
+        const opened = state[BC.events.openFile(editorId)] || '';
+        if (opened === file.path) {
+          updateBloodKey(BC.events.openFile(editorId), '');
+        }
+      });
+      if (state[BC.events.openFile('global')] === file.path) {
+        updateBloodKey(BC.events.openFile('global'), '');
+      }
+
+      if (selectedPath === file.path) {
+        setSelectedPath('');
+      }
+
+      updateBloodKey(BC.events.fileSaved(file.path), Date.now());
+    } catch (err: any) {
+      alert(`Failed to delete note: ${err.message}`);
     }
   };
 
@@ -242,18 +272,66 @@ function FileTreeView({
                 onClick={() => handleFileClick(file)}
                 style={{ display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: isSelected ? 'var(--highlight-color)' : 'rgba(0,0,0,0.015)', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', border: isSelected ? '1px solid var(--accent-color)' : '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 8px', cursor: 'pointer', transition: 'background-color 0.15s, border-color 0.15s' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)' }}>
-                    <path d="M3 1.5h7.5L13 4v10.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-14z" />
-                    <path d="M10 1.5V4h3.5" />
-                  </svg>
-                  <span style={{ fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexGrow: 1 }}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)', flexShrink: 0 }}>
+                      <path d="M3 1.5h7.5L13 4v10.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-14z" />
+                      <path d="M10 1.5V4h3.5" />
+                    </svg>
+                    <span style={{ fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
+                  </div>
+                  <button
+                    className="file-delete-btn"
+                    onClick={(e) => handleDeleteFile(e, file)}
+                    title="Delete Note"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '2px',
+                      borderRadius: '4px',
+                      opacity: 0.5,
+                      transition: 'opacity 0.15s, color 0.15s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-color)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M2 4h12M4 4v10a1 1 0 001 1h6a1 1 0 001-1V4M5.5 4V2.5a1 1 0 011-1h3a1 1 0 011-1V4M6.5 7.5v4.5M9.5 7.5v4.5" />
+                    </svg>
+                  </button>
                 </div>
-                {file.tags && file.tags.length > 0 && (
+                 {file.tags && file.tags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                    {file.tags.map((t) => (
-                      <span key={t} style={{ fontSize: '8.5px', fontWeight: 600, backgroundColor: isSelected ? 'rgba(255,59,48,0.12)' : 'rgba(0,0,0,0.04)', padding: '1px 3.5px', borderRadius: '3px', color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)' }}>#{t}</span>
-                    ))}
+                    {file.tags.map((t) => {
+                      const isRule = t.startsWith('re:') || t.startsWith('run:');
+                      return (
+                        <span
+                          key={t}
+                          style={{
+                            fontSize: '8.5px',
+                            fontWeight: 600,
+                            backgroundColor: isSelected
+                              ? (isRule ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 59, 48, 0.12)')
+                              : (isRule ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
+                            padding: '1px 3.5px',
+                            borderRadius: '3px',
+                            color: isSelected
+                              ? 'var(--accent-color)'
+                              : (isRule ? 'var(--accent-color)' : 'var(--text-muted)'),
+                            border: isRule
+                              ? `1px dashed ${isSelected ? 'var(--accent-color)' : 'var(--border-color)'}`
+                              : 'none',
+                          }}
+                        >
+                          {isRule ? `⚡️ ${t}` : `#${t}`}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
               </div>

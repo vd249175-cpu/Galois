@@ -13,9 +13,13 @@ export async function calculateAllResolvedTags(
   mdFiles: { name: string; path: string }[],
   maxIterations: number,
   onError?: (message: string) => void
-): Promise<Record<string, string[]>> {
+): Promise<{
+  resolved: Record<string, string[]>;
+  staticTags: Record<string, string[]>;
+}> {
   const initialTagsMap: Record<string, string[]> = {};
   const fileRawTags: Record<string, string[]> = {};
+  const staticTagsMap: Record<string, string[]> = {};
 
   for (const file of mdFiles) {
     try {
@@ -24,10 +28,12 @@ export async function calculateAllResolvedTags(
       const tags = resolveTagsSync(rawTags, rawContent);
       initialTagsMap[file.path] = tags;
       fileRawTags[file.path] = rawTags;
+      staticTagsMap[file.path] = rawTags;
     } catch (e) {
       console.error('[tagResolver] Failed to read/parse:', file.path, e);
       initialTagsMap[file.path] = [];
       fileRawTags[file.path] = [];
+      staticTagsMap[file.path] = [];
     }
   }
 
@@ -90,5 +96,8 @@ export async function calculateAllResolvedTags(
     resolvedTagsMap = nextTagsMap;
   }
 
-  return resolvedTagsMap;
+  return {
+    resolved: resolvedTagsMap,
+    staticTags: staticTagsMap,
+  };
 }
