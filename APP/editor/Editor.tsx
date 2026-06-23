@@ -25,6 +25,7 @@ export const EditorComponent = {
     BC.system.focusedAreaId,
     BC.system.activeEditors,
     BC.system.lastFocusedEditorId,
+    BC_PREFIX.fileSavedAll,
     BC_PREFIX.scriptJson,
   ],
   manifest: {
@@ -33,12 +34,13 @@ export const EditorComponent = {
       BC.system.projectPath,        // 项目根目录（由 fileTree 写入）
       BC.system.resolvedTags,       // 解析后的全局标签 map（由 fileTree 写入）
       BC.events.openFile('*'),      // 打开文件请求（由 fileTree/graphView 写入）
+      BC_PREFIX.fileSavedAll,       // 读取外部脚本修改文件的保存事件
       BC.system.focusedAreaId,
       BC.system.activeEditors,
       BC.system.lastFocusedEditorId,
     ],
     writes: [
-      BC.events.fileSaved('*'),         // 文件保存事件 → fileTree, graphView
+      BC_PREFIX.fileSavedAll,           // 文件保存事件 → fileTree, graphView
       BC.system.activeEditors,          // 注册/注销自身
       BC.system.lastFocusedEditorId,    // 聚焦时更新
       BC.system.focusedAreaId,          // 聚焦时更新
@@ -655,6 +657,8 @@ function EditorView({
   }, [recordingActionId]);
 
   // ── 3. File loading ───────────────────────────────────────────────────────
+  const fileSavedEvent = state[BC.events.fileSaved(openedFile)] || 0;
+
   useEffect(() => {
     if (!openedFile) {
       setContent('');
@@ -667,6 +671,7 @@ function EditorView({
     const loadMarkdownFile = async () => {
       try {
         const rawContent = await (window as any).electronAPI.readFile(openedFile);
+        if (rawContent === contentRef.current) return;
         const parsedTags = parseFrontmatterTags(rawContent);
         lastSavedContentRef.current = rawContent;
         setTags(parsedTags);
@@ -680,6 +685,7 @@ function EditorView({
         if (errMsg.includes('ENOENT') || errMsg.includes('no such file')) {
           const noteName = openedFile.split(/[/\\]/).pop()?.replace('.md', '') || '';
           const template = `---\ntags:\n  - ${noteName}\n---\n# ${noteName}\n\n`;
+          if (template === contentRef.current) return;
           lastSavedContentRef.current = template;
           setTags([noteName]);
           setContent(template);
@@ -692,7 +698,7 @@ function EditorView({
       }
     };
     loadMarkdownFile();
-  }, [openedFile]);
+  }, [openedFile, fileSavedEvent]);
 
   // ── 4. Tag resolver ───────────────────────────────────────────────────────
   useEffect(() => {

@@ -92,7 +92,14 @@ export function updateYamlFrontmatterTags(content: string, newTags: string[]): s
 
 // Helper to parse key-value expression options
 export function parseExpression(expr: string) {
-  const parts = expr.trim().split('|');
+  let normalized = expr.trim();
+  const qIndex = normalized.indexOf('?');
+  const pipeIndex = normalized.indexOf('|');
+  if (qIndex !== -1 && (pipeIndex === -1 || qIndex < pipeIndex)) {
+    normalized = normalized.substring(0, qIndex) + '|' + normalized.substring(qIndex + 1);
+  }
+
+  const parts = normalized.split('|');
   const pathAndKey = parts[0].trim();
   
   const colonIndex = pathAndKey.indexOf(':');

@@ -13,6 +13,7 @@ interface MarkdownPreviewProps {
   hoveredLineIndex: number | null;
   setHoveredLineIndex: React.Dispatch<React.SetStateAction<number | null>>;
   handleLineDrop: (e: React.DragEvent, lineIdx: number) => void;
+  currentFile: string;
 }
 
 export function MarkdownPreview({
@@ -26,6 +27,7 @@ export function MarkdownPreview({
   hoveredLineIndex,
   setHoveredLineIndex,
   handleLineDrop,
+  currentFile,
 }: MarkdownPreviewProps) {
   const getLineDragProps = (lineIdx: number) => {
     if (!isPreviewMode) return {};
@@ -64,9 +66,18 @@ export function MarkdownPreview({
   };
 
   const parseMarkdown = (md: string) => {
+    let frontmatterLinesOffset = 0;
     const body = parseMarkdownBody(md);
+    if (body !== md) {
+      const bodyIndex = md.indexOf(body);
+      const prefix = md.substring(0, bodyIndex);
+      // Split the prefix and count elements to get the correct line breaks offset
+      frontmatterLinesOffset = prefix.split('\n').length - 1;
+    }
+
     const lines = body.split('\n');
     return lines.map((line, idx) => {
+      const fileLineIndex = frontmatterLinesOffset + idx;
       let content = line;
       if (content.startsWith('# ')) {
         return (
@@ -75,7 +86,7 @@ export function MarkdownPreview({
             {...getLineDragProps(idx)}
             style={getLineStyle(idx, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700' })}
           >
-            {renderInline(content.substring(2))}
+            {renderInline(content.substring(2), fileLineIndex)}
           </h1>
         );
       }
@@ -86,7 +97,7 @@ export function MarkdownPreview({
             {...getLineDragProps(idx)}
             style={getLineStyle(idx, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600' })}
           >
-            {renderInline(content.substring(3))}
+            {renderInline(content.substring(3), fileLineIndex)}
           </h2>
         );
       }
@@ -97,7 +108,7 @@ export function MarkdownPreview({
             {...getLineDragProps(idx)}
             style={getLineStyle(idx, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600' })}
           >
-            {renderInline(content.substring(4))}
+            {renderInline(content.substring(4), fileLineIndex)}
           </h3>
         );
       }
@@ -109,7 +120,7 @@ export function MarkdownPreview({
             style={getLineStyle(idx, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0' })}
           >
             <input type="checkbox" disabled checked={false} />
-            <span>{renderInline(content.substring(6))}</span>
+            <span>{renderInline(content.substring(6), fileLineIndex)}</span>
           </div>
         );
       }
@@ -121,7 +132,7 @@ export function MarkdownPreview({
             style={getLineStyle(idx, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55 })}
           >
             <input type="checkbox" disabled checked={true} />
-            <span style={{ textDecoration: 'line-through' }}>{renderInline(content.substring(6))}</span>
+            <span style={{ textDecoration: 'line-through' }}>{renderInline(content.substring(6), fileLineIndex)}</span>
           </div>
         );
       }
@@ -132,7 +143,7 @@ export function MarkdownPreview({
             {...getLineDragProps(idx)}
             style={getLineStyle(idx, { marginLeft: '16px', margin: '4px 0', fontSize: '13px' })}
           >
-            {renderInline(content.substring(2))}
+            {renderInline(content.substring(2), fileLineIndex)}
           </li>
         );
       }
@@ -143,7 +154,7 @@ export function MarkdownPreview({
             {...getLineDragProps(idx)}
             style={getLineStyle(idx, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0' })}
           >
-            {renderInline(content.substring(2))}
+            {renderInline(content.substring(2), fileLineIndex)}
           </blockquote>
         );
       }
@@ -162,13 +173,13 @@ export function MarkdownPreview({
           {...getLineDragProps(idx)}
           style={getLineStyle(idx, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px' })}
         >
-          {renderInline(content)}
+          {renderInline(content, fileLineIndex)}
         </p>
       );
     });
   };
 
-  const renderInline = (text: string) => {
+  const renderInline = (text: string, lineIndex: number) => {
     let parts: React.ReactNode[] = [text];
 
     // 0. Reactive template bindings {{ ... }}
@@ -183,7 +194,35 @@ export function MarkdownPreview({
           projectPath={projectPath}
           state={state}
           updateBloodKey={updateBloodKey}
+          currentFile={currentFile}
+          lineIndex={lineIndex}
         />
+      );
+    });
+
+    // 0.5 HTML Spans with inline styles (e.g. for rainbow colors)
+    parts = splitByRegex(parts, /<span\s+[^>]*?style=["']([^"']*)["'][^>]*?>([\s\S]*?)<\/span>/gi, (match, idx) => {
+      const styleStr = match[1];
+      const innerText = match[2];
+      
+      const styleObj: React.CSSProperties = {};
+      const stylePairs = styleStr.split(';');
+      for (const pair of stylePairs) {
+        const colonIdx = pair.indexOf(':');
+        if (colonIdx !== -1) {
+          const key = pair.substring(0, colonIdx).trim().replace(/-([a-z])/g, (g) => g[1].toUpperCase());
+          const val = pair.substring(colonIdx + 1).trim();
+          if (key && val) {
+            (styleObj as any)[key] = val;
+          }
+        }
+      }
+      
+      const stableKey = `html_span_${idx}`;
+      return (
+        <span key={stableKey} style={styleObj}>
+          {renderInline(innerText, lineIndex)}
+        </span>
       );
     });
 
@@ -320,6 +359,10 @@ export function MarkdownPreview({
     regex: RegExp,
     renderMatch: (match: RegExpExecArray, matchIndex: number) => React.ReactNode
   ): React.ReactNode[] => {
+    const activeRegex = regex.global
+      ? regex
+      : new RegExp(regex.source, regex.flags + 'g');
+
     const result: React.ReactNode[] = [];
     parts.forEach((part) => {
       if (typeof part !== 'string') {
@@ -329,13 +372,13 @@ export function MarkdownPreview({
       let lastIndex = 0;
       let match;
       let count = 0;
-      regex.lastIndex = 0;
-      while ((match = regex.exec(part)) !== null) {
+      activeRegex.lastIndex = 0;
+      while ((match = activeRegex.exec(part)) !== null) {
         if (match.index > lastIndex) {
           result.push(part.substring(lastIndex, match.index));
         }
         result.push(renderMatch(match, count++));
-        lastIndex = regex.lastIndex;
+        lastIndex = activeRegex.lastIndex;
       }
       if (lastIndex < part.length) {
         result.push(part.substring(lastIndex));

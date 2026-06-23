@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { parseExpression, getNestedValue } from './editorUtils';
+import { BC } from '../../CORE/BloodChannels';
 
 interface ReactiveExpressionProps {
   rawExpression: string;
@@ -7,6 +8,8 @@ interface ReactiveExpressionProps {
   projectPath: string;
   state: Record<string, any>;
   updateBloodKey: (key: string, value: any) => void;
+  currentFile: string;
+  lineIndex: number;
 }
 
 export function ReactiveExpression({
@@ -15,6 +18,8 @@ export function ReactiveExpression({
   projectPath,
   state,
   updateBloodKey,
+  currentFile,
+  lineIndex,
 }: ReactiveExpressionProps) {
   const parsed = parseExpression(rawExpression);
   if (!parsed) {
@@ -26,6 +31,14 @@ export function ReactiveExpression({
   }
 
   const { jsonPath, keyPath, run, interval, isolate } = parsed;
+
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // 1. Generate unique execution scope ID on mount
   const [uniqueId] = useState(() => 'exec_' + Math.random().toString(36).substring(2, 9));
@@ -84,8 +97,10 @@ export function ReactiveExpression({
   // 5. Script execution runner
   const runScript = async () => {
     if (!projectPath || !run) return;
-    setStatus('running');
-    setErrorMsg(null);
+    if (isMountedRef.current) {
+      setStatus('running');
+      setErrorMsg(null);
+    }
 
     try {
       // Pre-write empty JSON if not exists
@@ -96,7 +111,7 @@ export function ReactiveExpression({
       }
 
       const workingDir = `${projectPath}/script`;
-      const cmd = `DNOTE_THREAD_ID="${threadId}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" uv run "${run}"`;
+      const cmd = `DNOTE_THREAD_ID="${threadId}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_NOTE_PATH="${currentFile}" DNOTE_NOTE_LINE="${lineIndex}" uv run "${run}"`;
 
       await (window as any).electronAPI.execCommand(cmd, workingDir);
 
@@ -106,20 +121,26 @@ export function ReactiveExpression({
         const parsedData = JSON.parse(updatedContent);
         updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
       }
-      setStatus('success');
+      if (isMountedRef.current) {
+        setStatus('success');
+      }
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
     } catch (err: any) {
       console.error('[ReactiveExpression] Execution error:', err);
-      setStatus('error');
-      setErrorMsg(err.message || 'Execution failed');
+      if (isMountedRef.current) {
+        setStatus('error');
+        setErrorMsg(err.message || 'Execution failed');
+      }
     }
   };
 
   // 6. Trigger run on mount
   useEffect(() => {
-    if (run) {
+    // Only run automatically on mount if an interval (time-based scheduling) is set
+    if (run && interval && interval > 0) {
       runScript();
     }
-  }, [run]);
+  }, [run, interval]);
 
   // 7. Interval scheduler
   useEffect(() => {
@@ -254,7 +275,7 @@ export function ReactiveExpression({
             textAlign: 'left',
           }}
         >
-          <div style={{ fontWeight: 700, borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '3px', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '3px', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>⚡ DNOTE RUNNER</span>
             <span style={{
               fontSize: '8px',
@@ -265,17 +286,17 @@ export function ReactiveExpression({
             }}>
               {status.toUpperCase()}
             </span>
-          </div>
-          <div><strong>JSON Path:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>script/{resolvedRelativeJsonPath}</code></div>
-          <div><strong>Key Path:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>{keyPath}</code></div>
-          {run && <div><strong>Script:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>script/{run}</code></div>}
-          <div><strong>Isolation:</strong> {isolate || 'project'}</div>
-          <div><strong>Thread ID:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>{threadId}</code></div>
-          {interval && <div><strong>Interval:</strong> {interval} seconds</div>}
+          </span>
+          <span style={{ display: 'block' }}><strong>JSON Path:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>script/{resolvedRelativeJsonPath}</code></span>
+          <span style={{ display: 'block' }}><strong>Key Path:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>{keyPath}</code></span>
+          {run && <span style={{ display: 'block' }}><strong>Script:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>script/{run}</code></span>}
+          <span style={{ display: 'block' }}><strong>Isolation:</strong> {isolate || 'project'}</span>
+          <span style={{ display: 'block' }}><strong>Thread ID:</strong> <code style={{ backgroundColor: 'rgba(0,0,0,0.04)', padding: '1px 3px', borderRadius: '3px' }}>{threadId}</code></span>
+          {interval && <span style={{ display: 'block' }}><strong>Interval:</strong> {interval} seconds</span>}
           {isError && errorMsg && (
-            <div style={{ marginTop: '4px', padding: '4px', backgroundColor: 'rgba(255, 59, 48, 0.05)', borderRadius: '4px', borderLeft: '2px solid var(--error-color)', color: 'var(--error-color)', maxHeight: '60px', overflowY: 'auto', wordBreak: 'break-all' }}>
+            <span style={{ display: 'block', marginTop: '4px', padding: '4px', backgroundColor: 'rgba(255, 59, 48, 0.05)', borderRadius: '4px', borderLeft: '2px solid var(--error-color)', color: 'var(--error-color)', maxHeight: '60px', overflowY: 'auto', wordBreak: 'break-all' }}>
               {errorMsg}
-            </div>
+            </span>
           )}
         </span>
       )}

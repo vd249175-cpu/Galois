@@ -1,19 +1,19 @@
 {
   "stats": {
-    "total_notes": 15,
+    "total_notes": 17,
     "total_tags": 18,
-    "total_size_kb": "8.49 KB",
-    "last_run_time": "13:11:39",
+    "total_size_kb": "11.09 KB",
+    "last_run_time": "15:57:44",
     "thread_id": "project",
     "top_tag": "狗",
-    "top_tag_count": 5,
+    "top_tag_count": 6,
     "most_recent_note": "拉布拉多.md",
-    "most_recent_time": "2026-06-23 12:45:22"
+    "most_recent_time": "2026-06-23 15:54:56"
   },
   "recent_0_name": "拉布拉多.md",
-  "recent_0_time": "2026-06-23 12:45:22",
-  "recent_1_name": "猫.md",
-  "recent_1_time": "2026-06-23 12:45:18",
-  "recent_2_name": "哈士奇.md",
-  "recent_2_time": "2026-06-23 12:37:13"
+  "recent_0_time": "2026-06-23 15:54:56",
+  "recent_1_name": "聪明的狗.md",
+  "recent_1_time": "2026-06-23 15:53:22",
+  "recent_2_name": "猫.md",
+  "recent_2_time": "2026-06-23 15:46:50"
 }
