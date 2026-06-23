@@ -14,7 +14,13 @@ export const TerminalComponent = {
   iconName: 'terminal',
   component: TerminalView,
   actions: terminalActions,
-  bloodChannels: []
+  bloodChannels: [],
+  manifest: {
+    description: '终端模拟器，支持执行本地 shell 命令',
+    reads: [],
+    writes: [],
+    dependsOn: [],
+  },
 };
 
 function TerminalView({
