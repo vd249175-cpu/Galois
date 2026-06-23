@@ -60,6 +60,18 @@ export const GraphViewComponent = {
   },
 };
 
+function getLabelWidth(label: string): number {
+  let len = 0;
+  for (let i = 0; i < label.length; i++) {
+    if (label.charCodeAt(i) > 127) {
+      len += 1.8;
+    } else {
+      len += 1.0;
+    }
+  }
+  return Math.max(36, len * 5.2 + 10);
+}
+
 function GraphView({
   areaId: _areaId,
   state,
@@ -94,8 +106,8 @@ function GraphView({
   const arrowSizeRef = useRef(arrowSize);
   const spacingRef = useRef(spacing);
 
-  // Toggle mode for hierarchical tag decomposition (級數拆解 / 隐式关联模式)
-  const [isHierarchicalMode, setIsHierarchicalMode] = useState(false);
+  // Toggle mode for hierarchical tag decomposition (级数拆解 / 隐式关联模式)
+  const [isHierarchicalMode, setIsHierarchicalMode] = useState(true);
 
   useEffect(() => {
     repulsionRef.current = repulsion;
@@ -180,9 +192,13 @@ function GraphView({
         const currentResolvedTags = state[BC.system.resolvedTags] || {};
         const rawNodes: { id: string; tags: string[]; label: string; isVirtual?: boolean }[] = [];
         const allUniqueDecomposedTags = new Set<string>();
+        const originalTagsSet = new Set<string>();
 
         for (const file of mdFiles) {
           let tags = currentResolvedTags[file.path] || [];
+          // Keep track of original tags before decomposition
+          tags.forEach((t: string) => originalTagsSet.add(t));
+
           if (isHierarchicalMode) {
             const decomposed = new Set<string>();
             tags.forEach((tag: string) => {
@@ -205,7 +221,7 @@ function GraphView({
         // Add virtual nodes for tags that are not represented by explicit notes
         if (isHierarchicalMode) {
           allUniqueDecomposedTags.forEach((tag) => {
-            const isRepresented = rawNodes.some(rn => rn.label === tag || rn.id.endsWith(`/${tag}.md`) || rn.id.endsWith(`\\${tag}.md`));
+            const isRepresented = originalTagsSet.has(tag) || rawNodes.some(rn => rn.label === tag || rn.id.endsWith(`/${tag}.md`) || rn.id.endsWith(`\\${tag}.md`));
             if (!isRepresented) {
               const decomposed = new Set<string>();
               const parts = tag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
@@ -629,18 +645,23 @@ function GraphView({
                 />
                 {/* Node Center Dot or Tag Pill */}
                 {node.isVirtual ? (
-                  <rect
-                    x={-Math.max(36, node.label.length * 5.2 + 8) / 2}
-                    y={-7}
-                    width={Math.max(36, node.label.length * 5.2 + 8)}
-                    height={14}
-                    rx={4}
-                    fill={isHovered ? 'var(--accent-color)' : 'rgba(124, 124, 133, 0.08)'}
-                    stroke={isHovered ? 'var(--accent-color)' : 'var(--text-muted)'}
-                    strokeWidth="1.1"
-                    strokeDasharray="3,2"
-                    style={{ transition: 'fill 0.15s, stroke 0.15s' }}
-                  />
+                  (() => {
+                    const width = getLabelWidth(node.label);
+                    return (
+                      <rect
+                        x={-width / 2}
+                        y={-7}
+                        width={width}
+                        height={14}
+                        rx={4}
+                        fill={isHovered ? 'var(--accent-color)' : 'rgba(124, 124, 133, 0.08)'}
+                        stroke={isHovered ? 'var(--accent-color)' : 'var(--text-muted)'}
+                        strokeWidth="1.1"
+                        strokeDasharray="3,2"
+                        style={{ transition: 'fill 0.15s, stroke 0.15s' }}
+                      />
+                    );
+                  })()
                 ) : (
                   <circle
                     r={isHovered ? 7 : 5.5}
