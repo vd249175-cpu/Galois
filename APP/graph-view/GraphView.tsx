@@ -111,10 +111,19 @@ function GraphView({
   const [isHierarchicalMode, setIsHierarchicalMode] = useState(true);
 
   // Color Palette state
-  const [activePaletteName, setActivePaletteName] = useState<keyof typeof PALETTE_PRESETS>('Tahoe');
+  const [palettes, setPalettes] = useState<Record<string, string[]>>({
+    Tahoe: ['#4F46E5', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#8B5CF6'],
+    Sunset: ['#EA580C', '#E11D48', '#D97706', '#BE185D', '#9F1239'],
+    Nordic: ['#059669', '#0891B2', '#0F766E', '#1E3A8A', '#0D9488'],
+    Mono: ['#374151', '#4B5563', '#6B7280', '#9CA3AF', '#D1D5DB'],
+  });
+  const [activePaletteName, setActivePaletteName] = useState<string>('Tahoe');
+  const [isPaletteEditorOpen, setIsPaletteEditorOpen] = useState(false);
+  const [editingPaletteName, setEditingPaletteName] = useState<string | null>(null);
+  const [newPaletteName, setNewPaletteName] = useState('');
 
   const getLevelColor = (level: number) => {
-    const colors = PALETTE_PRESETS[activePaletteName] || PALETTE_PRESETS.Tahoe;
+    const colors = palettes[activePaletteName] || palettes.Tahoe || ['#4F46E5'];
     return colors[level % colors.length];
   };
 
@@ -577,8 +586,6 @@ function GraphView({
         setSpacing={setSpacing}
         isHierarchicalMode={isHierarchicalMode}
         setIsHierarchicalMode={setIsHierarchicalMode}
-        activePaletteName={activePaletteName}
-        setActivePaletteName={setActivePaletteName}
       />
 
 
@@ -604,7 +611,7 @@ function GraphView({
             <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--text-muted)" fillOpacity={0.35} />
           </marker>
           {/* Dynamic hover arrowheads for each color in the active palette */}
-          {(PALETTE_PRESETS[activePaletteName] || PALETTE_PRESETS.Tahoe).map((color, pIdx) => (
+          {(palettes[activePaletteName] || palettes.Tahoe || ['#4F46E5']).map((color, pIdx) => (
             <marker
               key={`arrow-${pIdx}`}
               id={`arrowhead-hover-${pIdx}`}
@@ -652,7 +659,7 @@ function GraphView({
 
             const sourceColor = getLevelColor(source.level || 0);
             const linkColor = isRelated ? sourceColor : 'var(--text-muted)';
-            const paletteLength = (PALETTE_PRESETS[activePaletteName] || PALETTE_PRESETS.Tahoe).length;
+            const paletteLength = (palettes[activePaletteName] || palettes.Tahoe || ['#4F46E5']).length;
             const markerId = isRelated 
               ? `arrowhead-hover-${(source.level || 0) % paletteLength}`
               : 'arrowhead-default';
@@ -792,6 +799,311 @@ function GraphView({
           })}
         </g>
       </svg>
+
+      {/* Frosted Glass Overlay for Color Palette Manager */}
+      {isPaletteEditorOpen && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+        }}>
+          <div style={{
+            width: '320px',
+            maxHeight: '400px',
+            backgroundColor: 'var(--bg-panel)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
+            color: 'var(--text-main)',
+            fontSize: '12px',
+            fontFamily: 'var(--font-sans)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderBottom: '1px solid var(--border-color)',
+              backgroundColor: 'rgba(0,0,0,0.02)'
+            }}>
+              <span style={{ fontWeight: 600 }}>
+                {editingPaletteName ? `Edit Palette: ${editingPaletteName}` : 'Theme Palettes (色组管理)'}
+              </span>
+              <button
+                onClick={() => {
+                  setIsPaletteEditorOpen(false);
+                  setEditingPaletteName(null);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 600
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '14px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {editingPaletteName ? (
+                /* Editing a Specific Palette */
+                (() => {
+                  const paletteColors = palettes[editingPaletteName] || [];
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                        {paletteColors.map((color, idx) => (
+                          <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              {/* Swatch wrapper */}
+                              <div style={{
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '4px',
+                                border: '1.2px solid var(--border-color)',
+                                backgroundColor: color,
+                                position: 'relative',
+                                overflow: 'hidden',
+                                cursor: 'pointer'
+                              }}>
+                                <input
+                                  type="color"
+                                  value={color}
+                                  onChange={(e) => {
+                                    const updated = [...paletteColors];
+                                    updated[idx] = e.target.value;
+                                    setPalettes({
+                                      ...palettes,
+                                      [editingPaletteName]: updated
+                                    });
+                                  }}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '-4px',
+                                    left: '-4px',
+                                    width: '28px',
+                                    height: '28px',
+                                    border: 'none',
+                                    padding: 0,
+                                    cursor: 'pointer',
+                                    opacity: 0
+                                  }}
+                                />
+                              </div>
+                              <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-muted)' }}>
+                                {color.toUpperCase()}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const updated = paletteColors.filter((_, cIdx) => cIdx !== idx);
+                                setPalettes({
+                                  ...palettes,
+                                  [editingPaletteName]: updated
+                                });
+                              }}
+                              disabled={paletteColors.length <= 1}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: paletteColors.length <= 1 ? 'var(--border-color)' : '#ef4444',
+                                cursor: paletteColors.length <= 1 ? 'not-allowed' : 'pointer',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px', marginTop: '6px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+                        <button
+                          onClick={() => {
+                            setPalettes({
+                              ...palettes,
+                              [editingPaletteName]: [...paletteColors, '#7C7C82']
+                            });
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '5px 8px',
+                            backgroundColor: 'rgba(0,0,0,0.03)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '4px',
+                            color: 'var(--text-main)',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: '11px'
+                          }}
+                        >
+                          + Add Color
+                        </button>
+                        <button
+                          onClick={() => setEditingPaletteName(null)}
+                          style={{
+                            padding: '5px 12px',
+                            backgroundColor: 'var(--accent-color)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: '#ffffff',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            fontSize: '11px'
+                          }}
+                        >
+                          Back
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                /* Palette List View */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {Object.keys(palettes).map((pName) => {
+                      const isActive = activePaletteName === pName;
+                      const colors = palettes[pName];
+                      return (
+                        <div
+                          key={pName}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 8px',
+                            backgroundColor: isActive ? 'rgba(255, 59, 48, 0.06)' : 'rgba(0,0,0,0.015)',
+                            border: isActive ? '1.2px solid var(--accent-color)' : '1.2px solid var(--border-color)',
+                            borderRadius: '5px',
+                            transition: 'border-color 0.15s, background-color 0.15s'
+                          }}
+                        >
+                          {/* Left: select palette click target */}
+                          <div
+                            onClick={() => setActivePaletteName(pName)}
+                            style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', cursor: 'pointer' }}
+                          >
+                            <span style={{ fontWeight: 600, fontSize: '11px', color: isActive ? 'var(--accent-color)' : 'var(--text-main)' }}>
+                              {pName}
+                            </span>
+                            <div style={{ display: 'flex', gap: '3px' }}>
+                              {colors.map((color, cIdx) => (
+                                <div key={cIdx} style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: color }} />
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Right: action buttons */}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              onClick={() => setEditingPaletteName(pName)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text-muted)',
+                                cursor: 'pointer',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => {
+                                const remaining = { ...palettes };
+                                delete remaining[pName];
+                                setPalettes(remaining);
+                                if (activePaletteName === pName) {
+                                  setActivePaletteName(Object.keys(remaining)[0]);
+                                }
+                              }}
+                              disabled={Object.keys(palettes).length <= 1}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: Object.keys(palettes).length <= 1 ? 'var(--border-color)' : '#ef4444',
+                                cursor: Object.keys(palettes).length <= 1 ? 'not-allowed' : 'pointer',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add New Palette form */}
+                  <div style={{ display: 'flex', gap: '4px', borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '4px' }}>
+                    <input
+                      type="text"
+                      placeholder="New palette name..."
+                      value={newPaletteName}
+                      onChange={(e) => setNewPaletteName(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        fontSize: '11px',
+                        border: '1.2px solid var(--border-color)',
+                        borderRadius: '4px',
+                        backgroundColor: 'var(--bg-main)',
+                        color: 'var(--text-main)',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const name = newPaletteName.trim();
+                        if (name && !palettes[name]) {
+                          setPalettes({
+                            ...palettes,
+                            [name]: ['#4F46E5', '#06B6D4', '#10B981']
+                          });
+                          setActivePaletteName(name);
+                          setNewPaletteName('');
+                        }
+                      }}
+                      disabled={!newPaletteName.trim()}
+                      style={{
+                        padding: '4px 8px',
+                        backgroundColor: newPaletteName.trim() ? 'var(--accent-color)' : 'rgba(0,0,0,0.05)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        color: newPaletteName.trim() ? '#ffffff' : 'var(--text-muted)',
+                        fontWeight: 600,
+                        cursor: newPaletteName.trim() ? 'pointer' : 'not-allowed',
+                        fontSize: '11px'
+                      }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
