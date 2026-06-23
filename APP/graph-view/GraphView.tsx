@@ -528,7 +528,7 @@ function GraphView({
     setZoom((prev) => Math.max(0.2, Math.min(3.0, prev * factor)));
   };
 
-  // Listen for dynamic zoom/recenter actions triggered from sidebar
+  // Listen for dynamic zoom/recenter/color actions triggered from sidebar
   useEffect(() => {
     if (lastAction) {
       if (lastAction.id === 'graphView.zoomIn') {
@@ -538,6 +538,14 @@ function GraphView({
       } else if (lastAction.id === 'graphView.recenter') {
         setPan({ x: 300, y: 250 });
         setZoom(1.0);
+      } else if (lastAction.id === 'graphView.colorTahoe') {
+        setActivePaletteName('Tahoe');
+      } else if (lastAction.id === 'graphView.colorSunset') {
+        setActivePaletteName('Sunset');
+      } else if (lastAction.id === 'graphView.colorNordic') {
+        setActivePaletteName('Nordic');
+      } else if (lastAction.id === 'graphView.colorMono') {
+        setActivePaletteName('Mono');
       }
     }
   }, [lastAction]);

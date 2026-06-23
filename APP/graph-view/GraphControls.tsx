@@ -16,8 +16,6 @@ interface GraphControlsProps {
   setSpacing: (val: number) => void;
   isHierarchicalMode: boolean;
   setIsHierarchicalMode: (val: boolean) => void;
-  activePaletteName: string;
-  setActivePaletteName: (val: any) => void;
 }
 
 export function GraphControls({
@@ -29,8 +27,6 @@ export function GraphControls({
   setSpacing,
   isHierarchicalMode,
   setIsHierarchicalMode,
-  activePaletteName,
-  setActivePaletteName,
 }: GraphControlsProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
 
@@ -194,53 +190,6 @@ export function GraphControls({
                 boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
               }} />
             </button>
-          </div>
-
-          {/* Color Palette Presets */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
-            <div style={{ color: 'var(--text-main)', fontWeight: 500, marginBottom: '2px' }}>Color Theme</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
-              {Object.keys(PALETTE_PRESETS).map((presetName) => {
-                const isActive = activePaletteName === presetName;
-                const colors = PALETTE_PRESETS[presetName as keyof typeof PALETTE_PRESETS];
-                const previewColors = colors.slice(0, 3);
-                return (
-                  <button
-                    key={presetName}
-                    onClick={() => setActivePaletteName(presetName as any)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '4px 6px',
-                      backgroundColor: isActive ? 'rgba(255, 59, 48, 0.08)' : 'rgba(0,0,0,0.02)',
-                      border: isActive ? '1.2px solid var(--accent-color)' : '1.2px solid var(--border-color)',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      color: isActive ? 'var(--accent-color)' : 'var(--text-main)',
-                      fontSize: '9px',
-                      fontWeight: 600,
-                      transition: 'background-color 0.15s, border-color 0.15s, color 0.15s',
-                    }}
-                  >
-                    <span>{presetName}</span>
-                    <div style={{ display: 'flex', gap: '2px' }}>
-                      {previewColors.map((color, cIdx) => (
-                        <div 
-                          key={cIdx} 
-                          style={{ 
-                            width: '5px', 
-                            height: '5px', 
-                            borderRadius: '50%', 
-                            backgroundColor: color 
-                          }} 
-                        />
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </div>
       )}
