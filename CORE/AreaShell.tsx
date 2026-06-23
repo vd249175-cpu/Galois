@@ -140,6 +140,24 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     };
   }, [areaId, componentType]);
 
+  // Robust focus listener mapping (focusin bubbles up, mousedown captures clicks)
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const handleFocusTrigger = () => {
+      focusMe();
+    };
+
+    el.addEventListener('focusin', handleFocusTrigger);
+    el.addEventListener('mousedown', handleFocusTrigger);
+    return () => {
+      el.removeEventListener('focusin', handleFocusTrigger);
+      el.removeEventListener('mousedown', handleFocusTrigger);
+    };
+  }, [areaId, componentType]);
+
+
   // Determine split edge based on mouse position relative to bounds
   const calculateSplitRegion = (x: number, y: number, w: number, h: number) => {
     const dLeft = x;

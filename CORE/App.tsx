@@ -5,6 +5,7 @@ import { AreaShell } from './AreaShell';
 import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
 import { RightSidebar } from './RightSidebar';
+import { SettingsModal } from './SettingsModal';
 import { Blood } from './Blood';
 import './index.css';
 // Auto-Register Plugins from the APP/ directory using Vite's static glob importer
@@ -129,6 +130,8 @@ export function App() {
 
 
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   // Initial layout tree
   const [layout, setLayout] = useState<AreaLayout>({
     type: 'split',
@@ -165,13 +168,7 @@ export function App() {
   }
 
   const handleToggleSettings = () => {
-    const focusedAreaId = Blood.getValue<string | null>('system.focusedAreaId', null);
-    if (focusedAreaId) {
-      Blood.updateKey(`layout.changeAreaType.${focusedAreaId}`, 'settings');
-    } else {
-      Blood.updateKey('layout.changeAreaType.editor-root', 'settings');
-      Blood.updateKey('system.focusedAreaId', 'editor-root');
-    }
+    setIsSettingsOpen(true);
   };
 
   return (
@@ -192,6 +189,8 @@ export function App() {
         </div>
         <RightSidebar onToggleSettings={handleToggleSettings} />
       </div>
+
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
     </>
   );
 }
