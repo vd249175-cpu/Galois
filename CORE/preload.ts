@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Filesystem access
@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
   archiveMedia: (srcPath: string, projectPath: string) => ipcRenderer.invoke('fs:archiveMedia', { srcPath, projectPath }),
   calculateLattice: (nodes: any[], projectPath: string) => ipcRenderer.invoke('shell:calculateLattice', { nodes, projectPath }),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   
   // Terminal commands execution
   execCommand: (command: string, cwd: string) => ipcRenderer.invoke('shell:exec', command, cwd),

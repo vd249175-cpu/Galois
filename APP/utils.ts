@@ -1,5 +1,15 @@
 // APP/utils.ts
 
+// Helper to separate frontmatter block from body content
+export function parseMarkdownBody(content: string): string {
+  const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+  const match = content.match(yamlRegex);
+  if (match) {
+    return match[2];
+  }
+  return content;
+}
+
 // Helper to parse YAML frontmatter tags from markdown content
 export function parseFrontmatterTags(content: string): string[] {
   const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
@@ -41,4 +51,41 @@ export function parseFrontmatterTags(content: string): string[] {
     }
   }
   return tags;
+}
+
+// Helper to resolve regex tags dynamically from the document body content
+export function resolveTagsSync(rawTags: string[], content: string): string[] {
+  const resolved = new Set<string>();
+  const bodyText = parseMarkdownBody(content);
+
+  for (const tag of rawTags) {
+    if (tag.startsWith('re:')) {
+      const patternStr = tag.substring(3).trim();
+      try {
+        let regex: RegExp;
+        const slashMatch = patternStr.match(/^\/(.+)\/([a-z]*)$/);
+        if (slashMatch) {
+          regex = new RegExp(slashMatch[1], slashMatch[2].includes('g') ? slashMatch[2] : slashMatch[2] + 'g');
+        } else {
+          regex = new RegExp(patternStr, 'g');
+        }
+        
+        const matches = bodyText.matchAll(regex);
+        for (const m of matches) {
+          const val = m[1] !== undefined ? m[1].trim() : m[0].trim();
+          if (val && isNaN(Number(val))) {
+            resolved.add(val);
+          }
+        }
+      } catch (e) {
+        console.error('[resolveTagsSync] Invalid regex:', patternStr, e);
+      }
+    } else if (tag.startsWith('run:')) {
+      // Skip async script execution in sync resolver
+    } else {
+      resolved.add(tag);
+    }
+  }
+
+  return Array.from(resolved);
 }

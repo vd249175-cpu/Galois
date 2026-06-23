@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 type Listener = (changedKeys: Set<string>) => void;
 
@@ -93,23 +93,29 @@ export const Blood = new BloodClass();
 export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
   const [value, setValue] = useState<T>(getValueFn);
 
-  const checkUpdates = useCallback((changedChannels: Set<string>) => {
-    const matches = channels.some((ch) => {
-      // Support exact matches or prefix matches (e.g., layout.removeArea.)
-      return (
-        changedChannels.has(ch) ||
-        Array.from(changedChannels).some((cc) => cc.startsWith(ch))
-      );
-    });
-    if (matches) {
-      setValue(getValueFn());
-    }
-  }, [channels, getValueFn]);
+  const channelsRef = useRef(channels);
+  const getValueFnRef = useRef(getValueFn);
+
+  // Update refs synchronously during render!
+  channelsRef.current = channels;
+  getValueFnRef.current = getValueFn;
 
   useEffect(() => {
+    const checkUpdates = (changedChannels: Set<string>) => {
+      const matches = channelsRef.current.some((ch) => {
+        return (
+          changedChannels.has(ch) ||
+          Array.from(changedChannels).some((cc) => cc.startsWith(ch))
+        );
+      });
+      if (matches) {
+        setValue(getValueFnRef.current());
+      }
+    };
+
     const unsubscribe = Blood.subscribe(checkUpdates);
     return unsubscribe;
-  }, [checkUpdates]);
+  }, []);
 
   return value;
 }

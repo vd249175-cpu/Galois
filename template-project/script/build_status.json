@@ -1,0 +1,10 @@
+{
+  "build": {
+    "progress": 0,
+    "progress_bar": "|░░░░░░░░░░░░░░░| 0%",
+    "status": "Initializing",
+    "log": "Clearing build cache, launching bundler...",
+    "last_updated": "09:46:18",
+    "thread_id": "project"
+  }
+}

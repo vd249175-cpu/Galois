@@ -30,6 +30,7 @@ function ComponentWrapper({
         Object.keys(allState).forEach(key => {
           if (key.startsWith(ch)) {
             subMap[key] = allState[key];
+            val[key] = allState[key]; // Flatten key to top-level state for direct lookup
           }
         });
         val[ch] = subMap;

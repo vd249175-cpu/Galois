@@ -83,9 +83,19 @@ export function App() {
       if (actionId) {
         e.preventDefault();
         const focusedAreaId = Blood.getValue<string | null>('system.focusedAreaId', null);
-        if (focusedAreaId) {
+        
+        let targetAreaId = focusedAreaId;
+        const actionPrefix = actionId.split('.')[0];
+        
+        if (actionPrefix === 'editor') {
+          targetAreaId = Blood.getValue<string | null>('system.lastFocusedEditorId', null)
+            || (Blood.getValue<string[]>('system.activeEditors', []) || [])[0]
+            || focusedAreaId;
+        }
+
+        if (targetAreaId) {
           ActionRegistry.runAction(actionId, {
-            areaId: focusedAreaId,
+            areaId: targetAreaId,
             focusedAreaId,
           });
         }

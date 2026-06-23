@@ -1,7 +1,24 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { exec } from 'child_process';
+import { pathToFileURL } from 'url';
+import { Readable } from 'stream';
+
+// Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'dnote-file',
+    privileges: {
+      standard: true,
+      bypassCSP: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true
+    }
+  }
+]);
 
 let mainWindow: BrowserWindow | null = null;
 const secondaryWindows = new Map<string, BrowserWindow>();
@@ -37,6 +54,83 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+  // Handle local protocol dnote-file:/// requests securely using pathToFileURL
+  protocol.handle('dnote-file', (request) => {
+    try {
+      const urlStr = request.url;
+      const decodedUrl = decodeURIComponent(urlStr);
+      // Replace protocol prefix with a single slash to ensure absolute path on macOS/Linux
+      let filePath = decodedUrl.replace(/^dnote-file:\/\/\/?/, '/');
+      if (process.platform === 'win32' && /^\/[a-zA-Z]:/.test(filePath)) {
+        filePath = filePath.substring(1);
+      }
+
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        console.error('[dnote-file] File not found:', filePath);
+        return new Response('File Not Found', { status: 404 });
+      }
+
+      const stat = fs.statSync(filePath);
+      const totalSize = stat.size;
+      const rangeHeader = request.headers.get('range');
+
+      // Guess Content-Type based on extension
+      const ext = path.extname(filePath).toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === '.mp4') contentType = 'video/mp4';
+      else if (ext === '.webm') contentType = 'video/webm';
+      else if (ext === '.ogg') contentType = 'video/ogg';
+      else if (ext === '.mp3') contentType = 'audio/mpeg';
+      else if (ext === '.wav') contentType = 'audio/wav';
+      else if (ext === '.m4a') contentType = 'audio/mp4';
+      else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+      else if (ext === '.png') contentType = 'image/png';
+      else if (ext === '.gif') contentType = 'image/gif';
+      else if (ext === '.svg') contentType = 'image/svg+xml';
+      else if (ext === '.webp') contentType = 'image/webp';
+
+      if (rangeHeader) {
+        // Parse Range Header: "bytes=start-end"
+        const parts = rangeHeader.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+        const chunkStart = Math.max(0, isNaN(start) ? 0 : start);
+        const chunkEnd = Math.min(totalSize - 1, isNaN(end) ? totalSize - 1 : end);
+        const chunkSize = chunkEnd - chunkStart + 1;
+
+        console.log('[dnote-file Range Read]', { filePath, chunkStart, chunkEnd, chunkSize });
+
+        // Synchronously read the chunk buffer to ensure Electron's Chromium network layer 
+        // doesn't close or fail on asynchronous stream lifecycle events.
+        const fd = fs.openSync(filePath, 'r');
+        const buffer = Buffer.alloc(chunkSize);
+        fs.readSync(fd, buffer, 0, chunkSize, chunkStart);
+        fs.closeSync(fd);
+
+        return new Response(buffer, {
+          status: 206,
+          statusText: 'Partial Content',
+          headers: {
+            'Content-Type': contentType,
+            'Content-Range': `bytes ${chunkStart}-${chunkEnd}/${totalSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(chunkSize)
+          }
+        });
+      } else {
+        // Serve full file using electron's native C++ net.fetch (zero-copy and highly optimized)
+        console.log('[dnote-file Full Read]', { filePath, totalSize });
+        const fileUrl = pathToFileURL(filePath).toString();
+        return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true });
+      }
+    } catch (err: any) {
+      console.error('[dnote-file handler error]', err);
+      return new Response('Internal Server Error', { status: 500 });
+    }
+  });
+
   createMainWindow();
 
   app.on('activate', () => {
@@ -63,10 +157,12 @@ ipcMain.handle('fs:readFile', async (_, filePath: string) => {
 
 ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string) => {
   try {
+    console.log('[fs:writeFile] Writing file:', filePath, 'content length:', content.length);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content, 'utf-8');
     return true;
   } catch (err: any) {
+    console.error('[fs:writeFile] Error writing file:', filePath, err);
     throw new Error(`Failed to write file: ${err.message}`);
   }
 });
@@ -141,9 +237,32 @@ ipcMain.handle('fs:archiveMedia', async (_, { srcPath, projectPath }: { srcPath:
 });
 
 // IPC Exec/Shell API
+// IPC Exec/Shell API helper to run with extended PATH
+function getSecureEnv() {
+  const userEnv = { ...process.env };
+  const homeDir = os.homedir();
+  const commonPaths = [
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    `${homeDir}/.local/bin`,
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin'
+  ];
+  const existingPath = userEnv.PATH || '';
+  const allPaths = Array.from(new Set([
+    ...existingPath.split(':'),
+    ...commonPaths
+  ])).filter(Boolean);
+  
+  userEnv.PATH = allPaths.join(':');
+  return userEnv;
+}
+
 ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
   return new Promise((resolve, reject) => {
-    exec(command, { cwd }, (error, stdout, stderr) => {
+    exec(command, { cwd, env: getSecureEnv() }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr || error.message));
       } else {
@@ -157,7 +276,7 @@ ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
 ipcMain.handle('shell:calculateLattice', async (_, { nodes, projectPath }: { nodes: any[]; projectPath: string }) => {
   return new Promise((resolve) => {
     const scriptPath = path.join(app.getAppPath(), 'CORE', 'lattice.py');
-    const child = exec(`uv run "${scriptPath}"`, { cwd: projectPath }, (error, stdout, stderr) => {
+    const child = exec(`uv run "${scriptPath}"`, { cwd: projectPath, env: getSecureEnv() }, (error, stdout, stderr) => {
       if (error) {
         console.error('[Lattice Python Error]', stderr || error.message);
         resolve([]);
@@ -229,6 +348,7 @@ ipcMain.handle('blood:getInitialState', () => {
 
 ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
   sharedState = { ...sharedState, ...values };
+  console.log('[Blood Main Sync] State updated:', JSON.stringify(values));
   
   // Broadcast updates to all other open windows
   const senderWebContents = event.sender;

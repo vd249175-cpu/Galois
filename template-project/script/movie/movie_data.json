@@ -1,0 +1,8 @@
+{
+  "movie": {
+    "name": "Interstellar",
+    "rating": 9.8,
+    "director": "Christopher Nolan",
+    "thread": "project"
+  }
+}

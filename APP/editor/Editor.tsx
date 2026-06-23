@@ -22,6 +22,7 @@ export const EditorComponent = {
   ],
   bloodChannels: (areaId: string) => [
     'project.path',
+    'project.resolvedTags',
     `events.openFile.${areaId}`,
     'system.focusedAreaId',
     'system.activeEditors',
@@ -49,6 +50,85 @@ function parseMarkdownBody(content: string): string {
     return match[2];
   }
   return content;
+}
+
+// Helper to count the number of lines taken by the YAML frontmatter block
+function getFrontmatterLineCount(content: string): number {
+  const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+  const match = content.match(yamlRegex);
+  if (match) {
+    const lines = content.split('\n');
+    if (lines[0].trim() === '---') {
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim() === '---') {
+          return i + 1; // Number of lines including the second ---
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+// Helper to replace or insert tags list in the YAML frontmatter of full content
+function updateYamlFrontmatterTags(content: string, newTags: string[]): string {
+  const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+  const match = content.match(yamlRegex);
+  
+  const cleanTags = Array.from(new Set(newTags.map((t) => t.trim()).filter(Boolean))).sort();
+  const tagsYamlLines = ['tags:'];
+  cleanTags.forEach((t) => {
+    tagsYamlLines.push(`  - ${t}`);
+  });
+
+  if (match) {
+    const yamlText = match[1];
+    const bodyText = match[2];
+    
+    const lines = yamlText.split('\n');
+    let tagsStartIndex = -1;
+    let tagsEndIndex = -1;
+    let inTagsList = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const trimLine = lines[i].trim();
+      if (trimLine.startsWith('tags:')) {
+        tagsStartIndex = i;
+        const inlineValue = trimLine.substring(5).trim();
+        if (inlineValue && inlineValue !== '-') {
+          tagsEndIndex = i;
+        } else {
+          inTagsList = true;
+        }
+      } else if (inTagsList) {
+        if (trimLine.startsWith('-')) {
+          tagsEndIndex = i;
+        } else if (trimLine === '') {
+          // ignore
+        } else if (lines[i].includes(':')) {
+          inTagsList = false;
+        }
+      }
+    }
+    
+    let newYamlText = '';
+    if (tagsStartIndex !== -1) {
+      const beforeTags = lines.slice(0, tagsStartIndex);
+      const afterTags = lines.slice(tagsEndIndex + 1);
+      newYamlText = [...beforeTags, ...tagsYamlLines, ...afterTags].join('\n');
+    } else {
+      newYamlText = yamlText + '\n' + tagsYamlLines.join('\n');
+    }
+    
+    return `---\n${newYamlText.trim()}\n---\n${bodyText}`;
+  } else {
+    let yaml = '---\n';
+    yaml += 'tags:\n';
+    cleanTags.forEach((t) => {
+      yaml += `  - ${t}\n`;
+    });
+    yaml += '---\n';
+    return yaml + content;
+  }
 }
 
 // Helper to parse key-value expression options
@@ -392,18 +472,146 @@ function EditorView({
   updateBloodKey: (key: string, value: any) => void;
   lastAction: { id: string; timestamp: number } | null;
 }) {
-  const [tags, setTags] = useState<string[]>([]);
-  const [content, setContent] = useState<string>(''); // Body content only
+  const [tags, setTags] = useState<string[]>([]); // Raw tags list (as in YAML, e.g. run:x.py)
+  const [activeTags, setActiveTags] = useState<string[]>([]); // Resolved tags (fully evaluated)
+  const [derivedTags, setDerivedTags] = useState<string[]>([]); // Evaluated regex/script tags
+  const [content, setContent] = useState<string>(''); // Full Markdown content including YAML header
   const [currentFile, setCurrentFile] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string>('No file open');
-  const [isPreviewMode, setIsPreviewMode] = useState<boolean>(false);
+  const [isPreviewMode, setIsPreviewMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('dnote_editor_preview_mode');
+    return saved !== null ? saved === 'true' : true;
+  });
   const [newTagInput, setNewTagInput] = useState<string>('');
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const dragCounter = useRef(0);
+  const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
+  const [ruleMatches, setRuleMatches] = useState<Record<string, string[]>>({});
+  const [expandedRule, setExpandedRule] = useState<string | null>(null);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current++;
+    if (e.dataTransfer.types.includes('Files')) {
+      // Show full-editor overlay only when in Edit Mode
+      if (!isPreviewMode) {
+        setIsDraggingFile(true);
+      }
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const getLineDragProps = (lineIdx: number) => {
+    if (!isPreviewMode) return {};
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer.types.includes('Files')) {
+          setHoveredLineIndex(lineIdx);
+        }
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setHoveredLineIndex((prev) => (prev === lineIdx ? null : prev));
+      },
+      onDrop: (e: React.DragEvent) => {
+        handleLineDrop(e, lineIdx);
+      }
+    };
+  };
+
+  const getLineStyle = (lineIdx: number, baseStyle: React.CSSProperties = {}): React.CSSProperties => {
+    if (isPreviewMode && hoveredLineIndex === lineIdx) {
+      return {
+        ...baseStyle,
+        backgroundColor: 'var(--highlight-color)',
+        boxShadow: '0 0 0 2px var(--accent-color)',
+        borderRadius: '6px',
+        transition: 'all 0.15s ease',
+        padding: '4px 8px',
+        margin: '6px 0',
+      };
+    }
+    return baseStyle;
+  };
+
+  const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHoveredLineIndex(null);
+
+    if (!projectPath || !currentFile) {
+      setStatusMessage('Open a notebook directory and select a note first.');
+      return;
+    }
+
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+
+    setStatusMessage('Archiving media drop to target line...');
+    let fileAdded = false;
+
+    // Use the first file dropped for precise inline insertion
+    const file = files[0];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isMedia = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'mp4', 'webm'].includes(ext);
+
+    if (isMedia) {
+      try {
+        const sysPath = (window as any).electronAPI.getPathForFile(file);
+        if (!sysPath) {
+          throw new Error('Could not retrieve file path.');
+        }
+        const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
+        
+        let linkMarkup = `![media](${relativePath})`;
+        if (['mp4', 'webm'].includes(ext)) {
+          linkMarkup = `![video](${relativePath})`;
+        } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
+          linkMarkup = `![audio](${relativePath})`;
+        }
+
+        const yamlLinesCount = getFrontmatterLineCount(contentRef.current);
+        const lines = contentRef.current.split('\n');
+        // Insert below the targeted paragraph line (accounting for yaml block offset)
+        lines.splice(yamlLinesCount + lineIdx + 1, 0, linkMarkup);
+        const nextContent = lines.join('\n');
+        
+        setContent(nextContent);
+        saveNodeFile(nextContent);
+        fileAdded = true;
+      } catch (err: any) {
+        console.error(err);
+        setStatusMessage(`Failed to archive ${file.name}: ${err.message}`);
+      }
+    }
+
+    if (fileAdded) {
+      setStatusMessage('Media successfully inserted into targeted line.');
+    } else {
+      setStatusMessage('Only image, audio, and video files are supported.');
+    }
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef(content);
   contentRef.current = content;
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
+  const lastSavedContentRef = useRef<string>('');
 
   const projectPath = state['project.path'] || '';
 
@@ -444,15 +652,14 @@ function EditorView({
       try {
         const rawContent = await (window as any).electronAPI.readFile(openedFile);
         const parsedTags = parseFrontmatterTags(rawContent);
-        const parsedBody = parseMarkdownBody(rawContent);
 
+        lastSavedContentRef.current = rawContent;
         setTags(parsedTags);
-        setContent(parsedBody);
+        setContent(rawContent);
         setCurrentFile(openedFile);
         
         const noteName = openedFile.split('/').pop()?.replace('.md', '') || '';
         setStatusMessage(`Editing Note: ${noteName}`);
-        setIsPreviewMode(false);
       } catch (err: any) {
         console.error('Failed to load note:', openedFile, err);
         setStatusMessage(`Error loading note file.`);
@@ -462,42 +669,132 @@ function EditorView({
     loadMarkdownFile();
   }, [openedFile]);
 
+  // 4. Resolve raw tags to active tags (handles regex and reads script-calculated tags from Blood state)
+  useEffect(() => {
+    if (!currentFile || !projectPath) return;
+
+    const staticTags = tags.filter((t) => !t.startsWith('re:') && !t.startsWith('run:'));
+    const bodyText = parseMarkdownBody(content);
+    const matchesMap: Record<string, string[]> = {};
+    const allRegexMatches: string[] = [];
+
+    // Resolve regex matches locally in real-time for each regex rule
+    for (const tag of tags) {
+      if (tag.startsWith('re:')) {
+        const patternStr = tag.substring(3).trim();
+        const ruleMatchesList: string[] = [];
+        try {
+          let regex: RegExp;
+          const slashMatch = patternStr.match(/^\/(.+)\/([a-z]*)$/);
+          if (slashMatch) {
+            regex = new RegExp(slashMatch[1], slashMatch[2].includes('g') ? slashMatch[2] : slashMatch[2] + 'g');
+          } else {
+            regex = new RegExp(patternStr, 'g');
+          }
+          
+          const matches = bodyText.matchAll(regex);
+          for (const m of matches) {
+            const val = m[1] !== undefined ? m[1].trim() : m[0].trim();
+            if (val && isNaN(Number(val)) && !ruleMatchesList.includes(val)) {
+              ruleMatchesList.push(val);
+              allRegexMatches.push(val);
+            }
+          }
+        } catch (e) {
+          console.error('[Tags Resolver] Invalid regex:', patternStr, e);
+        }
+        matchesMap[tag] = ruleMatchesList.sort();
+      }
+    }
+
+    // Retrieve globally resolved tags for this file (computed iteratively on project open/save)
+    const globalResolved = state['project.resolvedTags']?.[currentFile] || [];
+    
+    // Script-calculated tags are those in globalResolved that are not static tags
+    const scriptDerived = globalResolved.filter((t: string) => !staticTags.includes(t));
+
+    // Distribute script-calculated tags to the run: scripts
+    const runScripts = tags.filter(t => t.startsWith('run:'));
+    if (runScripts.length > 0) {
+      const pureScriptTags = scriptDerived.filter(t => !allRegexMatches.includes(t));
+      runScripts.forEach((scriptTag) => {
+        matchesMap[scriptTag] = pureScriptTags.sort();
+      });
+    }
+
+    // Combine local regex matches and script-derived tags
+    const combinedDerived = Array.from(new Set([...allRegexMatches, ...scriptDerived])).sort();
+    const combinedActive = Array.from(new Set([...staticTags, ...combinedDerived])).sort();
+
+    setRuleMatches(matchesMap);
+    setDerivedTags(combinedDerived);
+    setActiveTags(combinedActive);
+  }, [tags, content, currentFile, projectPath, state['project.resolvedTags']]);
+
   // Handle saving content (merges YAML frontmatter + body)
   const saveNodeFile = async (customContent?: string) => {
     if (!currentFile) {
+      updateBloodKey('debug.editorSaveError', 'No file open to save');
       setStatusMessage('No file open to save');
       return;
     }
-    const bodyToSave = customContent !== undefined ? customContent : contentRef.current;
-    const fullContent = serializeFrontmatter(tagsRef.current, bodyToSave);
+    const fullContent = customContent !== undefined ? customContent : contentRef.current;
+    if (fullContent === lastSavedContentRef.current) {
+      return; // skip saving identical content
+    }
+    updateBloodKey('debug.editorSaveAttempt', { file: currentFile, contentLen: fullContent.length });
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
+      lastSavedContentRef.current = fullContent;
       setStatusMessage(`Saved at ${new Date().toLocaleTimeString()}`);
       // Notify sidebar & graph view
       updateBloodKey(`events.fileSaved.${currentFile}`, Date.now());
     } catch (err: any) {
+      updateBloodKey('debug.editorSaveError', err.message);
       setStatusMessage(`Error saving: ${err.message}`);
     }
   };
 
   // Modify tags list in YAML and write back to the same file
   const handleUpdateTags = async (nextTags: string[]) => {
-    if (!currentFile) return;
+    if (!currentFile) {
+      updateBloodKey('debug.editorTagsError', 'No file open to update tags');
+      return;
+    }
 
     const cleanTags = Array.from(new Set(nextTags.map((t) => t.trim()).filter(Boolean))).sort();
     setTags(cleanTags);
 
-    const fullContent = serializeFrontmatter(cleanTags, contentRef.current);
+    const fullContent = updateYamlFrontmatterTags(contentRef.current, cleanTags);
+    if (fullContent === lastSavedContentRef.current) {
+      return; // skip saving identical content
+    }
+    updateBloodKey('debug.editorTagsAttempt', { file: currentFile, cleanTags, contentLen: fullContent.length });
+    setContent(fullContent);
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
+      lastSavedContentRef.current = fullContent;
       setStatusMessage(`Tags updated inline.`);
       
       // Notify HMR / redraw
       updateBloodKey(`events.fileSaved.${currentFile}`, Date.now());
     } catch (err: any) {
+      updateBloodKey('debug.editorTagsError', err.message);
       alert(`Failed to save tag updates: ${err.message}`);
     }
   };
+
+  // Debounced Auto-Save effect when content is edited
+  useEffect(() => {
+    if (!currentFile || isPreviewMode) return;
+    if (content === '') return;
+
+    const timer = setTimeout(() => {
+      saveNodeFile(content);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [content, currentFile, isPreviewMode]);
 
   const handleAddTag = (e: React.FormEvent) => {
     e.preventDefault();
@@ -517,6 +814,9 @@ function EditorView({
   // Drag and drop media auto-archiver
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
+    dragCounter.current = 0;
+    setIsDraggingFile(false);
+
     if (!projectPath || !currentFile) {
       setStatusMessage('Open a notebook directory and select a note first.');
       return;
@@ -527,22 +827,46 @@ function EditorView({
 
     setStatusMessage('Archiving media drop...');
     let fileAdded = false;
+    let errorOccurred = false;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      const isMedia = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'mp4', 'webm'].includes(ext);
+    // Process the first dropped file (most typical case)
+    const file = files[0];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const isMedia = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'mp4', 'webm'].includes(ext);
 
-      if (isMedia) {
-        try {
-          const relativePath = await (window as any).electronAPI.archiveMedia((file as any).path, projectPath);
-          insertMediaLink(relativePath);
-          fileAdded = true;
-        } catch (err: any) {
-          console.error(err);
-          setStatusMessage(`Failed to archive: ${err.message}`);
+    if (isMedia) {
+      try {
+        const sysPath = (window as any).electronAPI.getPathForFile(file);
+        if (!sysPath) {
+          throw new Error('Could not retrieve file path. Empty drop target.');
         }
+        const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
+        
+        if (isPreviewMode) {
+          // Dropped in the blank workspace background: append to note tail
+          let linkMarkup = `![media](${relativePath})`;
+          if (['mp4', 'webm'].includes(ext)) {
+            linkMarkup = `![video](${relativePath})`;
+          } else if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) {
+            linkMarkup = `![audio](${relativePath})`;
+          }
+          const nextContent = contentRef.current + '\n' + linkMarkup + '\n';
+          setContent(nextContent);
+          saveNodeFile(nextContent);
+        } else {
+          // Edit mode text insertion
+          insertMediaLink(relativePath);
+        }
+        fileAdded = true;
+      } catch (err: any) {
+        console.error(err);
+        setStatusMessage(`Failed to archive ${file.name}: ${err.message}`);
+        errorOccurred = true;
       }
+    }
+
+    if (errorOccurred) {
+      return;
     }
 
     if (fileAdded) {
@@ -607,13 +931,23 @@ function EditorView({
     }
   };
 
+  const togglePreviewMode = () => {
+    setIsPreviewMode((prev) => {
+      const next = !prev;
+      localStorage.setItem('dnote_editor_preview_mode', String(next));
+      return next;
+    });
+  };
+
+
+
   // Listen for action triggers carried by lastAction prop
   useEffect(() => {
     if (lastAction) {
       if (lastAction.id === 'editor.save') {
         saveNodeFile();
       } else if (lastAction.id === 'editor.toggleMode') {
-        setIsPreviewMode((prev) => !prev);
+        togglePreviewMode();
       }
     }
   }, [lastAction]);
@@ -624,21 +958,50 @@ function EditorView({
 
   // Custom Markdown Parser
   const parseMarkdown = (md: string) => {
-    const lines = md.split('\n');
+    const body = parseMarkdownBody(md);
+    const lines = body.split('\n');
     return lines.map((line, idx) => {
       let content = line;
       if (content.startsWith('# ')) {
-        return <h1 key={idx} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700' }}>{renderInline(content.substring(2))}</h1>;
+        return (
+          <h1
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700' })}
+          >
+            {renderInline(content.substring(2))}
+          </h1>
+        );
       }
       if (content.startsWith('## ')) {
-        return <h2 key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600' }}>{renderInline(content.substring(3))}</h2>;
+        return (
+          <h2
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600' })}
+          >
+            {renderInline(content.substring(3))}
+          </h2>
+        );
       }
       if (content.startsWith('### ')) {
-        return <h3 key={idx} style={{ margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600' }}>{renderInline(content.substring(4))}</h3>;
+        return (
+          <h3
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600' })}
+          >
+            {renderInline(content.substring(4))}
+          </h3>
+        );
       }
       if (content.startsWith('- [ ] ')) {
         return (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0' }}>
+          <div
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0' })}
+          >
             <input type="checkbox" disabled checked={false} />
             <span>{renderInline(content.substring(6))}</span>
           </div>
@@ -646,7 +1009,11 @@ function EditorView({
       }
       if (content.startsWith('- [x] ')) {
         return (
-          <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55 }}>
+          <div
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55 })}
+          >
             <input type="checkbox" disabled checked={true} />
             <span style={{ textDecoration: 'line-through' }}>{renderInline(content.substring(6))}</span>
           </div>
@@ -654,22 +1021,44 @@ function EditorView({
       }
       if (content.startsWith('- ')) {
         return (
-          <li key={idx} style={{ marginLeft: '16px', margin: '4px 0', fontSize: '13px' }}>
+          <li
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { marginLeft: '16px', margin: '4px 0', fontSize: '13px' })}
+          >
             {renderInline(content.substring(2))}
           </li>
         );
       }
       if (content.startsWith('> ')) {
         return (
-          <blockquote key={idx} style={{ borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0' }}>
+          <blockquote
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0' })}
+          >
             {renderInline(content.substring(2))}
           </blockquote>
         );
       }
       if (content.trim() === '') {
-        return <div key={idx} style={{ height: '10px' }} />;
+        return (
+          <div
+            key={idx}
+            {...getLineDragProps(idx)}
+            style={getLineStyle(idx, { height: '14px', margin: '4px 0' })}
+          />
+        );
       }
-      return <p key={idx} style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '13px' }}>{renderInline(content)}</p>;
+      return (
+        <p
+          key={idx}
+          {...getLineDragProps(idx)}
+          style={getLineStyle(idx, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px' })}
+        >
+          {renderInline(content)}
+        </p>
+      );
     });
   };
 
@@ -677,11 +1066,12 @@ function EditorView({
     let parts: React.ReactNode[] = [text];
 
     // 0. Reactive template bindings {{ ... }}
-    parts = splitByRegex(parts, /\{\{([\s\S]+?)\}\}/g, (match) => {
+    parts = splitByRegex(parts, /\{\{([\s\S]+?)\}\}/g, (match, idx) => {
       const rawExpression = match[1];
+      const stableKey = `reactive_${rawExpression.replace(/\s+/g, '_')}_${idx}`;
       return (
         <ReactiveExpression
-          key={Math.random()}
+          key={stableKey}
           rawExpression={rawExpression}
           areaId={areaId}
           projectPath={projectPath}
@@ -692,12 +1082,13 @@ function EditorView({
     });
 
     // 1. WikiLinks [[Note Name]]
-    parts = splitByRegex(parts, /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match) => {
+    parts = splitByRegex(parts, /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (match, idx) => {
       const target = match[1].trim();
       const label = match[2] ? match[2].trim() : target;
+      const stableKey = `wiki_${target}_${idx}`;
       return (
         <span
-          key={Math.random()}
+          key={stableKey}
           onClick={() => handleLinkClick(target)}
           className="wiki-link"
           style={{
@@ -713,12 +1104,23 @@ function EditorView({
     });
 
     // 2. Standard Markdown Images / Media tags
-    parts = splitByRegex(parts, /!\[([^\]]*)\]\(([^)]+)\)/g, (match) => {
+    parts = splitByRegex(parts, /!\[([^\]]*)\]\(([^)]+)\)/g, (match, idx) => {
       const alt = match[1];
       const url = match[2];
       
-      const isRelative = !url.startsWith('http') && !url.startsWith('file://') && !url.startsWith('/');
-      const absoluteSrc = isRelative ? `file://${projectPath}/${url}` : url;
+      let finalSrc = url;
+      const isWeb = url.startsWith('http://') || url.startsWith('https://');
+      
+      if (!isWeb) {
+        let cleanPath = url;
+        if (url.startsWith('file://')) {
+          cleanPath = url.replace('file://', '');
+        }
+        const isRelative = !cleanPath.startsWith('/');
+        const absolutePath = isRelative ? `${projectPath}/${cleanPath}` : cleanPath;
+        // Map to our privileged protocol dnote-file://
+        finalSrc = `dnote-file://${absolutePath}`;
+      }
 
       const ext = url.split('.').pop()?.toLowerCase() || '';
       const isVideo = ['mp4', 'webm', 'ogg'].includes(ext);
@@ -727,8 +1129,8 @@ function EditorView({
       if (isVideo) {
         return (
           <video
-            key={Math.random()}
-            src={absoluteSrc}
+            key={`video_${url}_${idx}`}
+            src={finalSrc}
             controls
             style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid var(--border-color)', margin: '8px 0', display: 'block' }}
           />
@@ -737,8 +1139,8 @@ function EditorView({
       if (isAudio) {
         return (
           <audio
-            key={Math.random()}
-            src={absoluteSrc}
+            key={`audio_${url}_${idx}`}
+            src={finalSrc}
             controls
             style={{ width: '100%', margin: '8px 0', display: 'block' }}
           />
@@ -747,8 +1149,8 @@ function EditorView({
 
       return (
         <img
-          key={Math.random()}
-          src={absoluteSrc}
+          key={`img_${url}_${idx}`}
+          src={finalSrc}
           alt={alt}
           style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'block', margin: '10px 0' }}
         />
@@ -756,13 +1158,14 @@ function EditorView({
     });
 
     // 3. Document links
-    parts = splitByRegex(parts, /\[([^\]]+)\]\(([^)]+)\)/g, (match) => {
+    parts = splitByRegex(parts, /\[([^\]]+)\]\(([^)]+)\)/g, (match, idx) => {
       const label = match[1];
       const url = match[2];
       const isMd = url.endsWith('.md');
+      const stableKey = `link_${url}_${idx}`;
       return (
         <span
-          key={Math.random()}
+          key={stableKey}
           onClick={() => {
             if (isMd) {
               handleLinkClick(url.replace('.md', ''));
@@ -778,19 +1181,19 @@ function EditorView({
     });
 
     // 4. Bold
-    parts = splitByRegex(parts, /\*\*([^*]+)\*\*/g, (match) => (
-      <strong key={Math.random()}>{match[1]}</strong>
+    parts = splitByRegex(parts, /\*\*([^*]+)\*\*/g, (match, idx) => (
+      <strong key={`bold_${match[1]}_${idx}`}>{match[1]}</strong>
     ));
 
     // 5. Italic
-    parts = splitByRegex(parts, /\*([^*]+)\*/g, (match) => (
-      <em key={Math.random()}>{match[1]}</em>
+    parts = splitByRegex(parts, /\*([^*]+)\*/g, (match, idx) => (
+      <em key={`italic_${match[1]}_${idx}`}>{match[1]}</em>
     ));
 
     // 6. Code
-    parts = splitByRegex(parts, /`([^`]+)`/g, (match) => (
+    parts = splitByRegex(parts, /`([^`]+)`/g, (match, idx) => (
       <code
-        key={Math.random()}
+        key={`code_${match[1]}_${idx}`}
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: '11px',
@@ -810,7 +1213,7 @@ function EditorView({
   const splitByRegex = (
     parts: React.ReactNode[],
     regex: RegExp,
-    renderMatch: (match: RegExpExecArray) => React.ReactNode
+    renderMatch: (match: RegExpExecArray, matchIndex: number) => React.ReactNode
   ): React.ReactNode[] => {
     const result: React.ReactNode[] = [];
     parts.forEach((part) => {
@@ -820,12 +1223,13 @@ function EditorView({
       }
       let lastIndex = 0;
       let match;
+      let count = 0;
       regex.lastIndex = 0;
       while ((match = regex.exec(part)) !== null) {
         if (match.index > lastIndex) {
           result.push(part.substring(lastIndex, match.index));
         }
-        result.push(renderMatch(match));
+        result.push(renderMatch(match, count++));
         lastIndex = regex.lastIndex;
       }
       if (lastIndex < part.length) {
@@ -838,8 +1242,11 @@ function EditorView({
   return (
     <div
       className="code-editor"
-      onDragOver={(e) => e.preventDefault()}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      style={{ position: 'relative' }}
     >
       {/* Editor Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px' }}>
@@ -849,7 +1256,7 @@ function EditorView({
         <button
           className="area-btn"
           title="Toggle mode (meta+e)"
-          onClick={() => setIsPreviewMode((prev) => !prev)}
+          onClick={togglePreviewMode}
           style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px' }}
         >
           {isPreviewMode ? 'Edit Note' : 'Preview'}
@@ -863,7 +1270,8 @@ function EditorView({
             Note Tags (YAML):
           </span>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
-            {tags.map((t) => (
+            {/* Static Tags (Deletable) */}
+            {tags.filter(t => !t.startsWith('re:') && !t.startsWith('run:')).map((t) => (
               <span
                 key={t}
                 style={{
@@ -901,6 +1309,50 @@ function EditorView({
                 </button>
               </span>
             ))}
+
+            {/* Dynamic Rules Pills (Click to expand matched tags) */}
+            {tags.filter(t => t.startsWith('re:') || t.startsWith('run:')).map((rule) => {
+              const matches = ruleMatches[rule] || [];
+              const count = matches.length;
+              const isExpanded = expandedRule === rule;
+
+              return (
+                <span
+                  key={`rule_pill_${rule}`}
+                  onClick={() => setExpandedRule(isExpanded ? null : rule)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4.5px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    backgroundColor: isExpanded ? 'var(--highlight-color)' : 'rgba(255, 255, 255, 0.04)',
+                    color: 'var(--accent-color)',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    border: `1.2px ${isExpanded ? 'solid' : 'dashed'} var(--accent-color)`,
+                    opacity: 0.9,
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                  title={`Click to ${isExpanded ? 'collapse' : 'expand'} matched tags for this rule`}
+                >
+                  ⚡️ {rule}
+                  <span style={{
+                    fontSize: '9.5px',
+                    backgroundColor: isExpanded ? 'var(--accent-color)' : 'rgba(255, 59, 48, 0.15)',
+                    color: isExpanded ? '#fff' : 'var(--accent-color)',
+                    padding: '1px 5px',
+                    borderRadius: '8px',
+                    fontWeight: 700,
+                    marginLeft: '2px'
+                  }}>
+                    {count}
+                  </span>
+                </span>
+              );
+            })}
             
             {/* Add Tag Form */}
             <form onSubmit={handleAddTag} style={{ display: 'inline-block' }}>
@@ -924,7 +1376,80 @@ function EditorView({
                 onBlur={(e) => (e.target.style.borderColor = 'var(--border-color)')}
               />
             </form>
+
           </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)' }}>
+            <span>Iteration Limit:</span>
+            <select
+              value={state['project.maxIterations'] || 3}
+              onChange={(e) => updateBloodKey('project.maxIterations', Number(e.target.value))}
+              style={{
+                backgroundColor: 'var(--bg-input)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-main)',
+                borderRadius: '4px',
+                padding: '1px 4px',
+                fontSize: '10px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+              title="Set max iteration depth for dynamic tag propagation"
+            >
+              <option value={1}>1 (No Propagation)</option>
+              <option value={2}>2</option>
+              <option value={3}>3 (Default)</option>
+              <option value={4}>4</option>
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+            </select>
+          </div>
+
+          {expandedRule && ruleMatches[expandedRule] && (
+            <div style={{
+              width: '100%',
+              marginTop: '8px',
+              padding: '10px 12px',
+              backgroundColor: 'var(--bg-input)',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px',
+              maxHeight: '110px',
+              overflowY: 'auto',
+              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)',
+            }}>
+              <div style={{ width: '100%', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                <span>⚡️ TAGS MATCHED BY "{expandedRule}" ({ruleMatches[expandedRule].length})</span>
+                <span onClick={() => setExpandedRule(null)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Collapse ×</span>
+              </div>
+              {ruleMatches[expandedRule].length === 0 ? (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
+                  No matches found for this rule in the current document.
+                </div>
+              ) : (
+                ruleMatches[expandedRule].map((t) => (
+                  <span
+                    key={`expanded_match_${t}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      fontSize: '10.5px',
+                      fontWeight: 600,
+                      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                      color: 'var(--accent-color)',
+                      padding: '1.5px 6px',
+                      borderRadius: '10px',
+                      border: '1px dashed var(--accent-color)',
+                    }}
+                  >
+                    ⚡️ #{t}
+                  </span>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -938,7 +1463,21 @@ function EditorView({
           ref={textareaRef}
           className="code-textarea"
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => {
+            const nextVal = e.target.value;
+            setContent(nextVal);
+            // Parse tags in real-time as the user types
+            try {
+              const parsed = parseFrontmatterTags(nextVal);
+              setTags((prev) => {
+                const prevClean = prev.slice().sort().join(',');
+                const nextClean = parsed.slice().sort().join(',');
+                return prevClean === nextClean ? prev : parsed;
+              });
+            } catch (e) {
+              // ignore syntax errors during typing
+            }
+          }}
           onFocus={handleFocus}
           placeholder="Start writing note..."
           spellCheck={false}
@@ -949,8 +1488,55 @@ function EditorView({
       {/* Status Bar */}
       <div className="editor-statusbar">
         <span style={{ flexGrow: 1 }}>{statusMessage}</span>
-        <span>{tags.length} tags</span>
+        <span>{activeTags.length} tags</span>
       </div>
+
+      {isDraggingFile && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.88)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            border: '2.5px dashed var(--accent-color)',
+            margin: '8px',
+            borderRadius: '10px',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              padding: '20px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--highlight-color)',
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
+            Drop media to import
+          </span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+            Supports Image, Audio, and Video files
+          </span>
+        </div>
+      )}
     </div>
   );
 }

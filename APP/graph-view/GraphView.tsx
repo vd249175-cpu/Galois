@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { parseFrontmatterTags } from '../utils';
+import { parseFrontmatterTags, resolveTagsSync } from '../utils';
 
 interface Node {
   id: string;
@@ -23,6 +23,7 @@ export const GraphViewComponent = {
   component: GraphView,
   bloodChannels: [
     'project.path',
+    'project.resolvedTags',
     'events.fileSaved.',
     'system.lastFocusedEditorId',
     'system.activeEditors'
@@ -37,7 +38,9 @@ function GraphView({
   updateBloodKey: (key: string, value: any) => void;
 }) {
   const projectPath = state['project.path'] || '';
-  const fileSavedEvent = state['events.fileSaved.'] || {};
+  const fileSavedMap = state['events.fileSaved.'] || {};
+  const fileSavedEvent = Object.values(fileSavedMap).reduce((max: number, val: any) => Math.max(max, Number(val) || 0), 0);
+  const resolvedTags = state['project.resolvedTags'] || {};
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -61,14 +64,17 @@ function GraphView({
 
   useEffect(() => {
     repulsionRef.current = repulsion;
+    wakeSimulation();
   }, [repulsion]);
 
   useEffect(() => {
     arrowSizeRef.current = arrowSize;
+    wakeSimulation();
   }, [arrowSize]);
 
   useEffect(() => {
     spacingRef.current = spacing;
+    wakeSimulation();
   }, [spacing]);
 
   // Mouse Wheel Zoom-to-Cursor Effect
@@ -103,12 +109,25 @@ function GraphView({
     return () => {
       svg.removeEventListener('wheel', handleWheel);
     };
-  }, [projectPath, nodes]);
+  }, []);
 
   // Physics Simulation
   const simRef = useRef<{ nodes: Node[]; links: Link[] }>({ nodes: [], links: [] });
   const dragNodeId = useRef<string | null>(null);
   const requestRef = useRef<number | null>(null);
+  const isSimulationRunning = useRef(true);
+  const tickRef = useRef<() => void>(undefined);
+  const alpha = useRef(1.0); // D3-like simulation temperature for cooling
+
+  const wakeSimulation = () => {
+    alpha.current = 1.0; // Reset heat/energy
+    if (isSimulationRunning.current) return;
+    isSimulationRunning.current = true;
+    if (tickRef.current) {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      requestRef.current = requestAnimationFrame(tickRef.current);
+    }
+  };
 
   // 1. Fetch file list, parse YAML tags, and invoke Python lattice edge calculator
   useEffect(() => {
@@ -119,25 +138,23 @@ function GraphView({
     }
 
     const buildLatticeGraph = async () => {
+      console.log('[GraphView] buildLatticeGraph called. project.resolvedTags:', state['project.resolvedTags']);
       try {
         const files = await (window as any).electronAPI.listDir(projectPath);
         const mdFiles = files.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
 
+        const currentResolvedTags = state['project.resolvedTags'] || {};
         const rawNodes: { id: string; tags: string[]; label: string }[] = [];
         for (const file of mdFiles) {
-          try {
-            const rawContent = await (window as any).electronAPI.readFile(file.path);
-            const tags = parseFrontmatterTags(rawContent);
-            const noteTitle = file.name.substring(0, file.name.lastIndexOf('.md'));
-            rawNodes.push({
-              id: file.path,
-              tags,
-              label: noteTitle,
-            });
-          } catch (e) {
-            console.error('Lattice parser file error:', file.path, e);
-          }
+          const tags = currentResolvedTags[file.path] || [];
+          const noteTitle = file.name.substring(0, file.name.lastIndexOf('.md'));
+          rawNodes.push({
+            id: file.path,
+            tags,
+            label: noteTitle,
+          });
         }
+        console.log('[GraphView] rawNodes for lattice:', rawNodes);
 
         if (rawNodes.length === 0) {
           simRef.current = { nodes: [], links: [] };
@@ -148,6 +165,7 @@ function GraphView({
 
         // Call the Python backend matrix inclusion algorithm via IPC
         const calculatedEdges: Link[] = await (window as any).electronAPI.calculateLattice(rawNodes, projectPath);
+        console.log('[GraphView] calculatedEdges:', calculatedEdges);
 
         // Convert raw nodes to physics-enabled nodes
         const physicsNodes: Node[] = rawNodes.map((rn, i) => {
@@ -173,26 +191,28 @@ function GraphView({
         simRef.current = { nodes: physicsNodes, links: calculatedEdges };
         setNodes(physicsNodes);
         setLinks(calculatedEdges);
+        wakeSimulation();
       } catch (err) {
         console.error('Lattice builder error:', err);
       }
     };
 
     buildLatticeGraph();
-  }, [projectPath, fileSavedEvent]);
+  }, [projectPath, state['project.resolvedTags'], fileSavedEvent]);
 
   // 2. Physics Simulation Loop - Free 2D Force-Directed Layout
   useEffect(() => {
     const tick = () => {
       const { nodes: simNodes, links: simLinks } = simRef.current;
       if (simNodes.length === 0) {
-        requestRef.current = requestAnimationFrame(tick);
+        isSimulationRunning.current = false;
         return;
       }
 
       const repulsionStrength = repulsionRef.current;
       const attractionStrength = 0.05;
       const damping = 0.85;
+      const currentAlpha = alpha.current;
 
       // 2a. Repulsion (Push nodes apart)
       for (let i = 0; i < simNodes.length; i++) {
@@ -206,8 +226,8 @@ function GraphView({
 
           if (dist < spacingRef.current * 3.0) {
             const force = repulsionStrength / distSq;
-            const fx = (dx / dist) * force;
-            const fy = (dy / dist) * force;
+            const fx = (dx / dist) * force * currentAlpha;
+            const fy = (dy / dist) * force * currentAlpha;
 
             if (n1.id !== dragNodeId.current) {
               n1.vx -= fx;
@@ -231,7 +251,7 @@ function GraphView({
           const dy = targetNode.y - sourceNode.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
           const desiredDist = spacingRef.current;
-          const k = attractionStrength * (dist - desiredDist);
+          const k = attractionStrength * (dist - desiredDist) * currentAlpha;
           const fx = (dx / dist) * k;
           const fy = (dy / dist) * k;
 
@@ -258,14 +278,14 @@ function GraphView({
         
         // Radial constraint force pulling/pushing the node towards targetR
         const radialStrength = 0.055;
-        const radialForce = (targetR - d) * radialStrength;
+        const radialForce = (targetR - d) * radialStrength * currentAlpha;
         n.vx += (n.x / d) * radialForce;
         n.vy += (n.y / d) * radialForce;
 
         // Centering weak gravity to keep layout centered
         const centeringGravity = 0.005;
-        n.vx -= n.x * centeringGravity;
-        n.vy -= n.y * centeringGravity;
+        n.vx -= n.x * centeringGravity * currentAlpha;
+        n.vy -= n.y * centeringGravity * currentAlpha;
 
         n.vx *= damping;
         n.vy *= damping;
@@ -275,10 +295,26 @@ function GraphView({
       });
 
       setNodes([...simNodes]);
-      requestRef.current = requestAnimationFrame(tick);
+
+      // Decay simulation temperature (alpha) to guarantee layout converges and sleeps
+      const isDragging = dragNodeId.current !== null;
+      if (isDragging) {
+        alpha.current = Math.max(alpha.current, 0.2); // Keep warm during active drags
+      } else {
+        alpha.current *= 0.97; // Decay temperature
+      }
+
+      if (alpha.current < 0.015 && !isDragging) {
+        isSimulationRunning.current = false;
+      } else {
+        requestRef.current = requestAnimationFrame(tick);
+      }
     };
 
+    tickRef.current = tick;
+    isSimulationRunning.current = true;
     requestRef.current = requestAnimationFrame(tick);
+    
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
@@ -308,6 +344,7 @@ function GraphView({
         node.vx = 0;
         node.vy = 0;
         setNodes([...simRef.current.nodes]);
+        wakeSimulation();
       }
     }
   };
@@ -325,6 +362,7 @@ function GraphView({
       node.vx = 0;
       node.vy = 0;
     }
+    wakeSimulation();
   };
 
   const handleNodeDoubleClick = (nodeId: string) => {
