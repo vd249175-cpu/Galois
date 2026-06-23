@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { GraphControls } from './GraphControls';
+import { GraphControls, PALETTE_PRESETS } from './GraphControls';
 import { graphViewActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 
@@ -13,6 +13,7 @@ interface Node {
   vy: number;
   level?: number;
   isVirtual?: boolean;
+  degree?: number;
 }
 
 interface Link {
@@ -60,7 +61,7 @@ export const GraphViewComponent = {
   },
 };
 
-function getLabelWidth(label: string): number {
+function getPillWidth(label: string, fs: number): number {
   let len = 0;
   for (let i = 0; i < label.length; i++) {
     if (label.charCodeAt(i) > 127) {
@@ -69,7 +70,7 @@ function getLabelWidth(label: string): number {
       len += 1.0;
     }
   }
-  return Math.max(36, len * 5.2 + 10);
+  return Math.max(36, len * (fs * 0.58) + 12);
 }
 
 function GraphView({
@@ -108,6 +109,14 @@ function GraphView({
 
   // Toggle mode for hierarchical tag decomposition (级数拆解 / 隐式关联模式)
   const [isHierarchicalMode, setIsHierarchicalMode] = useState(true);
+
+  // Color Palette state
+  const [activePaletteName, setActivePaletteName] = useState<keyof typeof PALETTE_PRESETS>('Tahoe');
+
+  const getLevelColor = (level: number) => {
+    const colors = PALETTE_PRESETS[activePaletteName] || PALETTE_PRESETS.Tahoe;
+    return colors[level % colors.length];
+  };
 
   useEffect(() => {
     repulsionRef.current = repulsion;
@@ -288,6 +297,16 @@ function GraphView({
           });
         }
 
+        // Calculate degrees from calculatedEdges (displayed connections only)
+        const degrees: Record<string, number> = {};
+        rawNodes.forEach((rn) => {
+          degrees[rn.id] = 0;
+        });
+        calculatedEdges.forEach((edge) => {
+          if (degrees[edge.source] !== undefined) degrees[edge.source]++;
+          if (degrees[edge.target] !== undefined) degrees[edge.target]++;
+        });
+
         const physicsNodes: Node[] = rawNodes.map((rn, i) => {
           const existing = simRef.current.nodes.find((n) => n.id === rn.id);
           
@@ -307,6 +326,7 @@ function GraphView({
             vy: existing ? existing.vy : 0,
             level: levels[rn.id] || 0,
             isVirtual: rn.isVirtual,
+            degree: degrees[rn.id] || 0,
           };
         });
 
@@ -539,7 +559,7 @@ function GraphView({
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
 
 
-      {/* Floating Parameters Adjustment Panel (斥力和箭头可调 UI) */}
+      {/* Floating Parameters Adjustment Panel (斥力和颜色预设可调 UI) */}
       <GraphControls
         repulsion={repulsion}
         setRepulsion={setRepulsion}
@@ -549,6 +569,8 @@ function GraphView({
         setSpacing={setSpacing}
         isHierarchicalMode={isHierarchicalMode}
         setIsHierarchicalMode={setIsHierarchicalMode}
+        activePaletteName={activePaletteName}
+        setActivePaletteName={setActivePaletteName}
       />
 
 
@@ -571,19 +593,23 @@ function GraphView({
             markerHeight={arrowSize}
             orient="auto"
           >
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--text-muted)" fillOpacity={0.45} />
+            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--text-muted)" fillOpacity={0.35} />
           </marker>
-          <marker
-            id="arrowhead-hovered"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth={arrowSize}
-            markerHeight={arrowSize}
-            orient="auto"
-          >
-            <path d="M 0 2 L 8 5 L 0 8 z" fill="var(--accent-color)" />
-          </marker>
+          {/* Dynamic hover arrowheads for each color in the active palette */}
+          {(PALETTE_PRESETS[activePaletteName] || PALETTE_PRESETS.Tahoe).map((color, pIdx) => (
+            <marker
+              key={`arrow-${pIdx}`}
+              id={`arrowhead-hover-${pIdx}`}
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth={arrowSize}
+              markerHeight={arrowSize}
+              orient="auto"
+            >
+              <path d="M 0 2 L 8 5 L 0 8 z" fill={color} />
+            </marker>
+          ))}
         </defs>
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {/* Render Lattice links */}
@@ -598,11 +624,30 @@ function GraphView({
             const dx = target.x - source.x;
             const dy = target.y - source.y;
             const len = Math.sqrt(dx * dx + dy * dy) || 1;
-            // Anchor arrow tip exactly to target node boundary (independent of arrow size)
+            
+            // Anchor arrow tip exactly to target node boundary based on target node type and size
             const isTargetHovered = hoveredNode === link.target;
-            const targetRadius = isTargetHovered ? 8.8 : 7.2; 
+            let targetRadius = 6;
+            if (target.isVirtual) {
+              const dTarget = target.degree || 0;
+              const fsTarget = 8 + 3 * (dTarget / (dTarget + 3.0));
+              const wTarget = getPillWidth(target.label, fsTarget);
+              targetRadius = isTargetHovered ? (wTarget / 2) + 2.5 : (wTarget / 2);
+            } else {
+              const dTarget = target.degree || 0;
+              const rTarget = 6 + 10 * (dTarget / (dTarget + 3.0));
+              targetRadius = isTargetHovered ? rTarget + 3.5 : rTarget + 1.8;
+            }
+
             const x2 = target.x - (dx / len) * targetRadius;
             const y2 = target.y - (dy / len) * targetRadius;
+
+            const sourceColor = getLevelColor(source.level || 0);
+            const linkColor = isRelated ? sourceColor : 'var(--text-muted)';
+            const paletteLength = (PALETTE_PRESETS[activePaletteName] || PALETTE_PRESETS.Tahoe).length;
+            const markerId = isRelated 
+              ? `arrowhead-hover-${(source.level || 0) % paletteLength}`
+              : 'arrowhead-default';
 
             return (
               <line
@@ -611,11 +656,11 @@ function GraphView({
                 y1={source.y}
                 x2={x2}
                 y2={y2}
-                stroke={isRelated ? 'var(--accent-color)' : 'var(--text-muted)'}
+                stroke={linkColor}
                 strokeWidth={isRelated ? 1.8 : 1.1}
-                strokeOpacity={hoveredNode && !isRelated ? 0.15 : 0.45}
-                markerEnd={isRelated ? 'url(#arrowhead-hovered)' : 'url(#arrowhead-default)'}
-                style={{ transition: 'stroke 0.15s, stroke-width 0.15s' }}
+                strokeOpacity={isRelated ? 0.8 : (hoveredNode ? 0.12 : 0.35)}
+                markerEnd={`url(#${markerId})`}
+                style={{ transition: 'stroke 0.15s, stroke-width 0.15s, stroke-opacity 0.15s' }}
               />
             );
           })}
@@ -636,59 +681,104 @@ function GraphView({
                 onMouseLeave={() => setHoveredNode(null)}
                 style={{ cursor: 'pointer', opacity: isDimmed ? 0.35 : 1.0, transition: 'opacity 0.25s' }}
               >
-                {/* Glow ring */}
-                <circle
-                  r={isHovered ? 14 : 9}
-                  fill="var(--accent-color)"
-                  opacity={isHovered ? 0.18 : 0.05}
-                  style={{ transition: 'r 0.15s, opacity 0.15s' }}
-                />
-                {/* Node Center Dot or Tag Pill */}
-                {node.isVirtual ? (
-                  (() => {
-                    const width = getLabelWidth(node.label);
+                {(() => {
+                  const d = node.degree || 0;
+                  const nodeColor = getLevelColor(node.level || 0);
+
+                  if (node.isVirtual) {
+                    const height = 14 + 8 * (d / (d + 3.0));
+                    const fontSize = 8 + 3 * (d / (d + 3.0));
+                    const width = getPillWidth(node.label, fontSize);
+
                     return (
-                      <rect
-                        x={-width / 2}
-                        y={-7}
-                        width={width}
-                        height={14}
-                        rx={4}
-                        fill={isHovered ? 'var(--accent-color)' : 'rgba(124, 124, 133, 0.08)'}
-                        stroke={isHovered ? 'var(--accent-color)' : 'var(--text-muted)'}
-                        strokeWidth="1.1"
-                        strokeDasharray="3,2"
-                        style={{ transition: 'fill 0.15s, stroke 0.15s' }}
-                      />
+                      <>
+                        {/* Glow ring */}
+                        <rect
+                          x={-width / 2 - 4}
+                          y={-height / 2 - 4}
+                          width={width + 8}
+                          height={height + 8}
+                          rx={6}
+                          fill={nodeColor}
+                          opacity={isHovered ? 0.22 : 0.04}
+                          style={{ transition: 'opacity 0.15s' }}
+                        />
+                        {/* Tag Pill */}
+                        <rect
+                          x={-width / 2}
+                          y={-height / 2}
+                          width={width}
+                          height={height}
+                          rx={5}
+                          fill={nodeColor}
+                          fillOpacity={isHovered ? 0.22 : 0.08}
+                          stroke={nodeColor}
+                          strokeWidth={isHovered ? 1.6 : 1.1}
+                          strokeDasharray={isHovered ? "none" : "3,2"}
+                          style={{ transition: 'fill-opacity 0.15s, stroke-width 0.15s' }}
+                        />
+                        {/* Node Label (Inside) */}
+                        <g transform={`translate(0, ${fontSize * 0.35})`} style={{ pointerEvents: 'none' }}>
+                          <text
+                            textAnchor="middle"
+                            fill={nodeColor}
+                            style={{
+                              fontSize: `${fontSize}px`,
+                              fontWeight: 700,
+                              fontFamily: 'var(--font-sans)',
+                              userSelect: 'none',
+                              transition: 'fill 0.15s, font-size 0.15s',
+                            }}
+                          >
+                            {node.label}
+                          </text>
+                        </g>
+                      </>
                     );
-                  })()
-                ) : (
-                  <circle
-                    r={isHovered ? 7 : 5.5}
-                    fill={isHovered ? 'var(--accent-color)' : 'var(--text-main)'}
-                    stroke="var(--bg-main)"
-                    strokeWidth="1.5"
-                    style={{ transition: 'fill 0.15s, r 0.15s' }}
-                  />
-                )}
-                
-                {/* Node Title Box Label */}
-                <g transform={node.isVirtual ? "translate(0, 3)" : "translate(0, 18)"} style={{ pointerEvents: 'none' }}>
-                  <text
-                    textAnchor="middle"
-                    fill={isHovered ? (node.isVirtual ? '#ffffff' : 'var(--accent-color)') : 'var(--text-main)'}
-                    style={{
-                      fontSize: node.isVirtual ? '8px' : '8.5px',
-                      fontWeight: 600,
-                      fontFamily: 'var(--font-sans)',
-                      userSelect: 'none',
-                      textShadow: node.isVirtual ? 'none' : '0px 1px 2px var(--bg-main), 0px 1px 2px var(--bg-main)',
-                      transition: 'fill 0.15s',
-                    }}
-                  >
-                    {node.label}
-                  </text>
-                </g>
+                  } else {
+                    const radius = 6 + 10 * (d / (d + 3.0));
+                    const rCurrent = isHovered ? radius + 2.5 : radius;
+                    const textY = rCurrent + 11;
+                    const textFS = isHovered ? 9.5 : 8.5;
+
+                    return (
+                      <>
+                        {/* Glow ring */}
+                        <circle
+                          r={rCurrent + 7}
+                          fill={nodeColor}
+                          opacity={isHovered ? 0.25 : 0.06}
+                          style={{ transition: 'r 0.15s, opacity 0.15s' }}
+                        />
+                        {/* Node Center Dot */}
+                        <circle
+                          r={rCurrent}
+                          fill={isHovered ? nodeColor : 'var(--bg-main)'}
+                          stroke={nodeColor}
+                          strokeWidth={isHovered ? 2.5 : 1.8}
+                          style={{ transition: 'fill 0.15s, stroke 0.15s, r 0.15s' }}
+                        />
+                        {/* Node Title Label (Below) */}
+                        <g transform={`translate(0, ${textY})`} style={{ pointerEvents: 'none' }}>
+                          <text
+                            textAnchor="middle"
+                            fill={isHovered ? nodeColor : 'var(--text-main)'}
+                            style={{
+                              fontSize: `${textFS}px`,
+                              fontWeight: 600,
+                              fontFamily: 'var(--font-sans)',
+                              userSelect: 'none',
+                              textShadow: '0px 1px 2px var(--bg-main), 0px 1px 2px var(--bg-main)',
+                              transition: 'fill 0.15s, font-size 0.15s',
+                            }}
+                          >
+                            {node.label}
+                          </text>
+                        </g>
+                      </>
+                    );
+                  }
+                })()}
               </g>
             );
           })}
