@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 type Listener = (changedKeys: Set<string>) => void;
 
@@ -89,39 +89,40 @@ export const Blood = new BloodClass();
 /**
  * **useBloodChannel** (器官抗体): React hook that observes specific state channels
  * and triggers a re-render of the host component only if observed channels are mutated.
+ *
+ * Safety guarantees:
+ * - No setState during render phase (React 19 compliant)
+ * - All mutable references via useRef to avoid stale closures
+ * - isMounted guard prevents updates on unmounted components
  */
 export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
-  const [value, setValue] = useState<T>(getValueFn);
-
-  const prevChannelsKeyRef = useRef<string>('');
-  const channelsKey = channels.join(',');
-
+  // Always keep refs up to date during render (safe; refs are NOT state)
   const channelsRef = useRef(channels);
   const getValueFnRef = useRef(getValueFn);
-
-  // Update refs synchronously during render!
   channelsRef.current = channels;
   getValueFnRef.current = getValueFn;
 
-  // Synchronize state value during render if target observed channels change dynamically
-  if (prevChannelsKeyRef.current !== channelsKey) {
-    prevChannelsKeyRef.current = channelsKey;
-    const newValue = getValueFn();
-    setValue(newValue);
-    return newValue;
-  }
+  const channelsKey = channels.join(',');
+  const [value, setValue] = useState<T>(() => getValueFn());
 
+  // Re-read value when channel list itself changes
+  useEffect(() => {
+    setValue(getValueFnRef.current());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelsKey]);
+
+  // Subscribe to Blood broadcast for channel-specific updates
   useEffect(() => {
     let isMounted = true;
+
     const checkUpdates = (changedChannels: Set<string>) => {
       if (!isMounted) return;
-      const matches = channelsRef.current.some((ch) => {
-        return (
+      const relevant = channelsRef.current.some(
+        (ch) =>
           changedChannels.has(ch) ||
           Array.from(changedChannels).some((cc) => cc.startsWith(ch))
-        );
-      });
-      if (matches) {
+      );
+      if (relevant) {
         setValue(getValueFnRef.current());
       }
     };
@@ -131,7 +132,7 @@ export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, []); // intentionally stable — all dynamic access via refs
 
   return value;
 }

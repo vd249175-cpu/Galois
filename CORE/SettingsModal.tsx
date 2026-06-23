@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ActionRegistry } from './ActionRegistry';
+import { Blood, useBloodChannel } from './Blood';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -8,6 +9,13 @@ interface SettingsModalProps {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [, setUpdateTrigger] = useState<number>(0);
+  const focusedAreaId = useBloodChannel(['system.focusedAreaId'], () =>
+    Blood.getValue<string | null>('system.focusedAreaId', null)
+  );
+  const focusedComponentType = useBloodChannel(
+    focusedAreaId ? [`system.areaComponentTypes.${focusedAreaId}`] : [],
+    () => focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null
+  );
 
   // Global keydown recording handler when editing an action's keybinding
   useEffect(() => {
@@ -98,7 +106,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       .join(' + ');
   };
 
-  const actions = ActionRegistry.getAllActions();
+  const actions = ActionRegistry.getActionsForScope(focusedComponentType);
 
   return (
     <div className="settings-modal-overlay" onClick={onClose}>
@@ -112,7 +120,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         <div className="settings-modal-body">
           <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-            Configure custom keyboard shortcuts for all workspace and plugin actions.
+            Configure shortcuts for global actions and the focused page.
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

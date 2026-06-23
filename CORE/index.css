@@ -538,6 +538,42 @@ body {
   transform: none !important;
 }
 
+.right-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.right-sidebar-context-section {
+  animation: sidebar-tools-enter 0.16s ease-out;
+}
+
+.right-sidebar-divider {
+  width: 20px;
+  height: 1px;
+  background-color: var(--border-color);
+  opacity: 0.65;
+  margin: 2px 0;
+}
+
+.right-sidebar-fold {
+  height: 18px;
+  opacity: 0.72;
+}
+
+@keyframes sidebar-tools-enter {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Settings Page Layout */
 .settings-page {
   display: flex;
@@ -885,4 +921,3 @@ body {
 .shortcut-reset-btn:hover {
   color: var(--error-color);
 }
-

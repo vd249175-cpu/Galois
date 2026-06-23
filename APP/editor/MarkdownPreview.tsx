@@ -11,7 +11,7 @@ interface MarkdownPreviewProps {
   handleLinkClick: (targetNodeText: string) => void;
   isPreviewMode: boolean;
   hoveredLineIndex: number | null;
-  setHoveredLineIndex: (idx: number | null) => void;
+  setHoveredLineIndex: React.Dispatch<React.SetStateAction<number | null>>;
   handleLineDrop: (e: React.DragEvent, lineIdx: number) => void;
 }
 

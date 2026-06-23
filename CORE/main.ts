@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { pathToFileURL } from 'url';
-import { Readable } from 'stream';
 
 // Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
 protocol.registerSchemesAsPrivileged([

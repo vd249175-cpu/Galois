@@ -2,12 +2,20 @@ import React from 'react';
 import { Blood } from './Blood';
 import { ActionRegistry } from './ActionRegistry';
 
+/**
+ * OrganAction — unified declaration interface for all plugin toolbar buttons and shortcuts.
+ * Follows the "仿生双向反射链路" protocol in AGENTS.md.
+ *
+ *   id format:  "[plugin-name].[actionName]"   e.g. "editor.save"
+ *   icon:        14×14 px thin-stroke SVG (currentColor, strokeWidth=1.5)
+ *   signal:      actions.[id].[areaId] = Date.now()   (timestamp, not boolean)
+ */
 export interface OrganAction {
-  id: string;
-  label: string;
-  icon?: React.ReactNode;
-  defaultShortcut?: string;
-  isToolbar?: boolean;
+  id: string;               // global unique: "[plugin-name].[actionName]"
+  label: string;            // tooltip / display name
+  defaultShortcut?: string; // lowercase "+" separated, e.g. "meta+s"
+  isToolbar?: boolean;      // mount to right sidebar when focused
+  icon?: React.ReactNode;   // 14×14 SVG, currentColor, strokeWidth=1.5
 }
 
 export interface AreaComponent {
@@ -34,16 +42,13 @@ class ComponentRegistryClass {
           id: act.id,
           label: act.label,
           icon: act.icon,
+          defaultShortcut: act.defaultShortcut,
+          sourceType: comp.typeId,
           run: (context) => {
             // Modify Blood state to trigger action on targeted area
-            Blood.updateKey(`actions.${act.id}.${context.areaId}`, true);
+            Blood.updateKey(`actions.${act.id}.${context.areaId}`, Date.now());
           },
         });
-
-        // Register shortcut
-        if (act.defaultShortcut) {
-          ActionRegistry.registerShortcut(act.defaultShortcut, act.id);
-        }
 
         // Add to toolbar if flag is set
         if (act.isToolbar) {
@@ -68,4 +73,3 @@ class ComponentRegistryClass {
 }
 
 export const ComponentRegistry = new ComponentRegistryClass();
-

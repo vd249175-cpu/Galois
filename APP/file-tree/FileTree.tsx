@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { parseFrontmatterTags, resolveTagsSync } from '../utils';
 import { calculateAllResolvedTags } from './tagResolver';
 import { useProjectLifecycle } from './useProjectLifecycle';
+import { fileTreeActions } from './actions';
 
 
 interface FileInfo {
@@ -17,29 +17,7 @@ export const FileTreeComponent = {
   displayName: 'Lattice Explorer',
   iconName: 'folder',
   component: FileTreeView,
-  actions: [
-    {
-      id: 'fileTree.createFile',
-      label: 'New Note',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M8 3v10M3 8h10" />
-        </svg>
-      )
-    },
-    {
-      id: 'fileTree.openFolder',
-      label: 'Open Folder',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
-          <path d="M4 10.5h8" />
-        </svg>
-      )
-    }
-  ],
+  actions: fileTreeActions,
   bloodChannels: [
     'project.path',
     'project.resolvedTags',

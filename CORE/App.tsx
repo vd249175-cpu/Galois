@@ -6,10 +6,11 @@ import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
 import { RightSidebar } from './RightSidebar';
 import { SettingsModal } from './SettingsModal';
+import { BloodDebugPanel } from './BloodDebugPanel';
 import { Blood } from './Blood';
 import './index.css';
-// Auto-Register Plugins from the APP/ directory using Vite's static glob importer
-const modules = import.meta.glob(['../APP/*/*.tsx', '!../APP/demo——plugging/*.tsx'], { eager: true });
+// Auto-register plugins through the normalized APP/[plugin]/index.ts entrypoint.
+const modules = import.meta.glob('../APP/*/index.ts', { eager: true });
 for (const path in modules) {
   const mod = modules[path] as any;
   for (const key in mod) {
@@ -55,6 +56,7 @@ export function App() {
   // Listen for popped-out secondary windows closing to restore them in the main window layout grid
   useEffect(() => {
     if (isPopped) return;
+    if (!(window as any).electronAPI?.onSecondaryClosed) return;
     
     const unsubscribe = (window as any).electronAPI.onSecondaryClosed((id: string) => {
       // Set removeArea to false to restore the panel in the workspace grid
@@ -79,39 +81,14 @@ export function App() {
       }
 
       const combo = keys.join('+');
-      const actionId = ActionRegistry.getActionIdByShortcut(combo);
+      const focusedAreaId = Blood.getValue<string | null>('system.focusedAreaId', null);
+      const focusedAreaType = focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null;
+      const actionId = ActionRegistry.getActionIdByShortcut(combo, focusedAreaType);
 
       if (actionId) {
         e.preventDefault();
-        const focusedAreaId = Blood.getValue<string | null>('system.focusedAreaId', null);
-        
-        const actionPrefix = actionId.split('.')[0];
-        const focusedAreaType = focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null;
-        
-        let targetAreaId = focusedAreaId;
-        
-        // If the action is panel-specific, find the best matching panel
-        if (actionPrefix !== 'panel') {
-          if (focusedAreaType === actionPrefix) {
-            targetAreaId = focusedAreaId;
-          } else {
-            // Find last focused area of this type, or first available active area of this type
-            const lastFocusedId = Blood.getValue<string | null>(`system.lastFocused.${actionPrefix}Id`, null);
-            if (lastFocusedId) {
-              targetAreaId = lastFocusedId;
-            } else {
-              // Traverse all active area component types to find a match
-              const areaTypes = Blood.getRawState() || {};
-              const prefixKey = `system.areaComponentTypes.`;
-              const foundPair = Object.entries(areaTypes).find(([key, val]) => 
-                key.startsWith(prefixKey) && val === actionPrefix
-              );
-              if (foundPair) {
-                targetAreaId = foundPair[0].substring(prefixKey.length);
-              }
-            }
-          }
-        }
+        const action = ActionRegistry.getAction(actionId);
+        const targetAreaId = action?.isGlobal ? focusedAreaId : (focusedAreaType === action?.sourceType ? focusedAreaId : null);
 
         if (targetAreaId) {
           ActionRegistry.runAction(actionId, {
@@ -191,6 +168,7 @@ export function App() {
       </div>
 
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
+      <BloodDebugPanel />
     </>
   );
 }

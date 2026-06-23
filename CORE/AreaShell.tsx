@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { Blood, useBloodChannel } from './Blood';
 import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
@@ -11,26 +11,26 @@ function ComponentWrapper({
   areaId: string;
   currentComponent: any;
 }) {
-  // 1. Resolve state keys to listen to
-  const channels = typeof currentComponent.bloodChannels === 'function'
-    ? currentComponent.bloodChannels(areaId)
-    : (currentComponent.bloodChannels || []);
+  // 1. Resolve data-only state channels (exclude action channels from stateValues)
+  const dataChannels: string[] = useMemo(() => {
+    const channels = typeof currentComponent.bloodChannels === 'function'
+      ? currentComponent.bloodChannels(areaId)
+      : (currentComponent.bloodChannels || []);
+    return channels;
+  }, [currentComponent.bloodChannels, areaId]);
 
-  const actionChannels = (currentComponent.actions || []).map((act: any) => `actions.${act.id}.${areaId}`);
-  const allChannels = [...channels, ...actionChannels];
-
-  // 2. Subscribe using useBloodChannel
-  const stateValues = useBloodChannel(allChannels, () => {
+  // 2. Subscribe data channels via useBloodChannel (React-safe, no action channels here)
+  const stateValues = useBloodChannel(dataChannels, () => {
     const val: Record<string, any> = {};
     const allState = Blood.getRawState() || {};
-    
-    allChannels.forEach(ch => {
+
+    dataChannels.forEach(ch => {
       if (ch.endsWith('.') || ch.endsWith(':')) {
         const subMap: Record<string, any> = {};
         Object.keys(allState).forEach(key => {
           if (key.startsWith(ch)) {
             subMap[key] = allState[key];
-            val[key] = allState[key]; // Flatten key to top-level state for direct lookup
+            val[key] = allState[key];
           }
         });
         val[ch] = subMap;
@@ -41,19 +41,40 @@ function ComponentWrapper({
     return val;
   });
 
-  // 3. Track lastAction triggered
-  const [lastAction, setLastAction] = React.useState<any>(null);
-  
+  // 3. Track lastAction via direct Blood.subscribe (avoids stateValues polling race condition)
+  //    Action signal format: actions.[pluginName].[actionName].[areaId] = timestamp
+  const [lastAction, setLastAction] = React.useState<{ id: string; timestamp: number } | null>(null);
+  const actionChannelPrefix = `actions.`;
+  const areaIdRef = useRef(areaId);
+  areaIdRef.current = areaId;
+
+  const componentActionsRef = useRef(currentComponent.actions);
+  componentActionsRef.current = currentComponent.actions;
+
   useEffect(() => {
-    actionChannels.forEach((ch: string) => {
-      if (Blood.getValue(ch, false)) {
-        // Reset the value in Blood so it doesn't fire repeatedly
-        Blood.updateKey(ch, false);
-        const actionId = ch.split('.')[1];
-        setLastAction({ id: actionId, timestamp: Date.now() });
-      }
+    const unsubscribe = Blood.subscribe((changedKeys) => {
+      const myActions: string[] = (componentActionsRef.current || []).map(
+        (act: any) => `actions.${act.id}.${areaIdRef.current}`
+      );
+
+      changedKeys.forEach(key => {
+        if (!key.startsWith(actionChannelPrefix)) return;
+        if (!myActions.includes(key)) return;
+
+        const ts = Blood.getValue<number | undefined>(key, undefined);
+        if (ts === undefined || ts === null) return; // ignore the clear-signal
+
+        // Consume the signal immediately
+        Blood.updateKey(key, undefined);
+
+        // Extract actionId: strip "actions." prefix and ".{areaId}" suffix
+        const withoutPrefix = key.slice(actionChannelPrefix.length);
+        const actionId = withoutPrefix.slice(0, -(`.${areaIdRef.current}`.length));
+        setLastAction({ id: actionId, timestamp: ts as number });
+      });
     });
-  }, [stateValues, actionChannels]);
+    return unsubscribe;
+  }, []); // stable subscription, uses refs for dynamic values
 
   // 4. Expose update actions
   const updateBloodState = (values: Record<string, any>) => {
@@ -156,6 +177,24 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
       el.removeEventListener('mousedown', handleFocusTrigger);
     };
   }, [areaId, componentType]);
+
+  // Listen for panel.popOut action via Blood (layout.popArea.{areaId} = timestamp)
+  // popOutRef avoids forward-reference issue since popOut const is declared later
+  const popOutRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (isPopped) return;
+    const unsubscribe = Blood.subscribe((changedKeys) => {
+      if (changedKeys.has(`layout.popArea.${areaId}`)) {
+        const ts = Blood.getValue<number | undefined>(`layout.popArea.${areaId}`, undefined);
+        if (ts !== undefined) {
+          Blood.updateKey(`layout.popArea.${areaId}`, undefined);
+          popOutRef.current();
+        }
+      }
+    });
+    return unsubscribe;
+  }, [areaId, isPopped]);
 
 
   // Determine split edge based on mouse position relative to bounds
@@ -269,6 +308,8 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     const title = ComponentRegistry.getComponent(componentType)?.displayName || 'Workspace Pane';
     (window as any).electronAPI.openSecondaryWindow(areaId, componentType, title);
   };
+  // Keep ref in sync so the stable Blood subscriber above can call the latest popOut
+  popOutRef.current = popOut;
 
   const mergeBack = () => {
     Blood.updateKey(`layout.mergeBackArea.${areaId}`, true);

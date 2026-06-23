@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { parseFrontmatterTags, resolveTagsSync } from '../utils';
 import { GraphControls } from './GraphControls';
+import { graphViewActions } from './actions';
 
 
 interface Node {
@@ -25,39 +25,7 @@ export const GraphViewComponent = {
   displayName: 'Lattice Graph',
   iconName: 'git-branch',
   component: GraphView,
-  actions: [
-    {
-      id: 'graphView.zoomIn',
-      label: 'Zoom In',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M8 3v10M3 8h10" />
-        </svg>
-      )
-    },
-    {
-      id: 'graphView.zoomOut',
-      label: 'Zoom Out',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M3 8h10" />
-        </svg>
-      )
-    },
-    {
-      id: 'graphView.recenter',
-      label: 'Recenter Graph',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <circle cx="8" cy="8" r="4" />
-          <path d="M8 1v2M8 13v2M1 8h2M13 8h2" />
-        </svg>
-      )
-    }
-  ],
+  actions: graphViewActions,
   bloodChannels: [
     'project.path',
     'project.resolvedTags',
@@ -79,8 +47,6 @@ function GraphView({
   const projectPath = state['project.path'] || '';
   const fileSavedMap = state['events.fileSaved.'] || {};
   const fileSavedEvent = Object.values(fileSavedMap).reduce((max: number, val: any) => Math.max(max, Number(val) || 0), 0);
-  const resolvedTags = state['project.resolvedTags'] || {};
-
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);

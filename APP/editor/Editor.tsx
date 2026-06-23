@@ -3,39 +3,14 @@ import { parseFrontmatterTags, parseMarkdownBody } from '../utils';
 import { getFrontmatterLineCount, updateYamlFrontmatterTags } from './editorUtils';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TagToolbar } from './TagToolbar';
+import { editorActions } from './actions';
 
 export const EditorComponent = {
   typeId: 'editor',
   displayName: 'Lattice Editor',
   iconName: 'document',
   component: EditorView,
-  actions: [
-    {
-      id: 'editor.save',
-      label: 'Save Note',
-      defaultShortcut: 'meta+s',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M3 2.5h7.5L13 5v8.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-11z" />
-          <rect x="5.5" y="9.5" width="5" height="5" />
-          <rect x="5.5" y="2.5" width="4" height="3" />
-        </svg>
-      )
-    },
-    {
-      id: 'editor.toggleMode',
-      label: 'Toggle Markdown Mode (Edit/Preview)',
-      defaultShortcut: 'meta+e',
-      isToolbar: true,
-      icon: (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <rect x="2" y="2" width="12" height="12" rx="1.5" />
-          <path d="M6 2v12M2 6h8M2 10h8" />
-        </svg>
-      )
-    },
-  ],
+  actions: editorActions,
   bloodChannels: (areaId: string) => [
     'project.path',
     'project.resolvedTags',
@@ -60,7 +35,6 @@ function EditorView({
 }) {
   const [tags, setTags] = useState<string[]>([]); // Raw tags list (as in YAML, e.g. run:x.py)
   const [activeTags, setActiveTags] = useState<string[]>([]); // Resolved tags (fully evaluated)
-  const [derivedTags, setDerivedTags] = useState<string[]>([]); // Evaluated regex/script tags
   const [content, setContent] = useState<string>(''); // Full Markdown content including YAML header
   const [currentFile, setCurrentFile] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string>('No file open');
@@ -96,42 +70,6 @@ function EditorView({
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-  };
-
-  const getLineDragProps = (lineIdx: number) => {
-    if (!isPreviewMode) return {};
-    return {
-      onDragOver: (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.dataTransfer.types.includes('Files')) {
-          setHoveredLineIndex(lineIdx);
-        }
-      },
-      onDragLeave: (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setHoveredLineIndex((prev) => (prev === lineIdx ? null : prev));
-      },
-      onDrop: (e: React.DragEvent) => {
-        handleLineDrop(e, lineIdx);
-      }
-    };
-  };
-
-  const getLineStyle = (lineIdx: number, baseStyle: React.CSSProperties = {}): React.CSSProperties => {
-    if (isPreviewMode && hoveredLineIndex === lineIdx) {
-      return {
-        ...baseStyle,
-        backgroundColor: 'var(--highlight-color)',
-        boxShadow: '0 0 0 2px var(--accent-color)',
-        borderRadius: '6px',
-        transition: 'all 0.15s ease',
-        padding: '4px 8px',
-        margin: '6px 0',
-      };
-    }
-    return baseStyle;
   };
 
   const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {
@@ -300,9 +238,9 @@ function EditorView({
     const scriptDerived = globalResolved.filter((t: string) => !staticTags.includes(t));
 
     // Distribute script-calculated tags to the run: scripts
-    const runScripts = tags.filter(t => t.startsWith('run:'));
+    const runScripts = tags.filter((t: string) => t.startsWith('run:'));
     if (runScripts.length > 0) {
-      const pureScriptTags = scriptDerived.filter(t => !allRegexMatches.includes(t));
+      const pureScriptTags = scriptDerived.filter((t: string) => !allRegexMatches.includes(t));
       runScripts.forEach((scriptTag) => {
         matchesMap[scriptTag] = pureScriptTags.sort();
       });
@@ -313,7 +251,6 @@ function EditorView({
     const combinedActive = Array.from(new Set([...staticTags, ...combinedDerived])).sort();
 
     setRuleMatches(matchesMap);
-    setDerivedTags(combinedDerived);
     setActiveTags(combinedActive);
   }, [tags, content, currentFile, projectPath, state['project.resolvedTags']]);
 
