@@ -93,6 +93,9 @@ export const Blood = new BloodClass();
 export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
   const [value, setValue] = useState<T>(getValueFn);
 
+  const prevChannelsKeyRef = useRef<string>('');
+  const channelsKey = channels.join(',');
+
   const channelsRef = useRef(channels);
   const getValueFnRef = useRef(getValueFn);
 
@@ -100,11 +103,13 @@ export function useBloodChannel<T>(channels: string[], getValueFn: () => T): T {
   channelsRef.current = channels;
   getValueFnRef.current = getValueFn;
 
-  // Synchronize state value if target observed channels change dynamically
-  const channelsKey = channels.join(',');
-  useEffect(() => {
-    setValue(getValueFnRef.current());
-  }, [channelsKey]);
+  // Synchronize state value during render if target observed channels change dynamically
+  if (prevChannelsKeyRef.current !== channelsKey) {
+    prevChannelsKeyRef.current = channelsKey;
+    const newValue = getValueFn();
+    setValue(newValue);
+    return newValue;
+  }
 
   useEffect(() => {
     const checkUpdates = (changedChannels: Set<string>) => {
