@@ -10,6 +10,16 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
     Blood.getValue<string | null>('system.focusedAreaId', null)
   );
 
+  const focusedComponentType = useBloodChannel(
+    focusedAreaId ? [`system.areaComponentTypes.${focusedAreaId}`] : [],
+    () => focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null
+  );
+
+  const injectedButtons = useBloodChannel(
+    focusedComponentType ? [`injections.${focusedComponentType}.toolbar`] : [],
+    () => focusedComponentType ? Blood.getValue<string[]>(`injections.${focusedComponentType}.toolbar`, []) : []
+  );
+
   const runLayoutAction = (actionId: string) => {
     if (!focusedAreaId) {
       console.warn('[RightSidebar] No focused panel area to apply layout action.');
@@ -116,6 +126,56 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
               <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" />
             </svg>
           </button>
+
+          {/* Divider */}
+          {injectedButtons.length > 0 && (
+            <div style={{
+              width: '20px',
+              height: '1px',
+              backgroundColor: 'var(--border-color)',
+              margin: '6px 0',
+              opacity: 0.6
+            }} />
+          )}
+
+          {/* Render Dynamic Contextual Buttons */}
+          {injectedButtons.map((actionId) => {
+            const action = ActionRegistry.getAction(actionId);
+            if (!action) return null;
+
+            const handleBtnClick = () => {
+              ActionRegistry.runAction(actionId, {
+                areaId: focusedAreaId || '',
+                focusedAreaId,
+              });
+            };
+
+            return (
+              <button
+                key={actionId}
+                className="right-sidebar-btn"
+                title={action.label}
+                onClick={handleBtnClick}
+                style={{ position: 'relative' }}
+              >
+                {action.icon ? (
+                  action.icon
+                ) : actionId === 'editor.save' ? (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 2.5h7.5L13 5v8.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-11z" />
+                    <rect x="5.5" y="9.5" width="5" height="5" />
+                    <rect x="5.5" y="2.5" width="4" height="3" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="8" cy="8" r="6" />
+                    <line x1="8" y1="5" x2="8" y2="11" />
+                    <line x1="5" y1="8" x2="11" y2="8" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
 
           {/* Spacer to push settings button to the bottom */}
           <div style={{ flexGrow: 1 }} />

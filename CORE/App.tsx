@@ -84,13 +84,32 @@ export function App() {
         e.preventDefault();
         const focusedAreaId = Blood.getValue<string | null>('system.focusedAreaId', null);
         
-        let targetAreaId = focusedAreaId;
         const actionPrefix = actionId.split('.')[0];
+        const focusedAreaType = focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null;
         
-        if (actionPrefix === 'editor') {
-          targetAreaId = Blood.getValue<string | null>('system.lastFocusedEditorId', null)
-            || (Blood.getValue<string[]>('system.activeEditors', []) || [])[0]
-            || focusedAreaId;
+        let targetAreaId = focusedAreaId;
+        
+        // If the action is panel-specific, find the best matching panel
+        if (actionPrefix !== 'panel') {
+          if (focusedAreaType === actionPrefix) {
+            targetAreaId = focusedAreaId;
+          } else {
+            // Find last focused area of this type, or first available active area of this type
+            const lastFocusedId = Blood.getValue<string | null>(`system.lastFocused.${actionPrefix}Id`, null);
+            if (lastFocusedId) {
+              targetAreaId = lastFocusedId;
+            } else {
+              // Traverse all active area component types to find a match
+              const areaTypes = Blood.getRawState() || {};
+              const prefixKey = `system.areaComponentTypes.`;
+              const foundPair = Object.entries(areaTypes).find(([key, val]) => 
+                key.startsWith(prefixKey) && val === actionPrefix
+              );
+              if (foundPair) {
+                targetAreaId = foundPair[0].substring(prefixKey.length);
+              }
+            }
+          }
         }
 
         if (targetAreaId) {

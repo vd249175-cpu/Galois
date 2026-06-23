@@ -17,6 +17,29 @@ export const FileTreeComponent = {
   displayName: 'Lattice Explorer',
   iconName: 'folder',
   component: FileTreeView,
+  actions: [
+    {
+      id: 'fileTree.createFile',
+      label: 'New Note',
+      isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M8 3v10M3 8h10" />
+        </svg>
+      )
+    },
+    {
+      id: 'fileTree.openFolder',
+      label: 'Open Folder',
+      isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
+          <path d="M4 10.5h8" />
+        </svg>
+      )
+    }
+  ],
   bloodChannels: [
     'project.path',
     'project.resolvedTags',
@@ -30,9 +53,11 @@ export const FileTreeComponent = {
 function FileTreeView({
   state,
   updateBloodKey,
+  lastAction,
 }: {
   state: Record<string, any>;
   updateBloodKey: (key: string, value: any) => void;
+  lastAction: { id: string; timestamp: number } | null;
 }) {
   const projectPath = state['project.path'] || '';
   const fileSavedMap = state['events.fileSaved.'] || {};
@@ -44,6 +69,17 @@ function FileTreeView({
 
   // Project-level lifecycle scripts coordinator (open, close, background daemon)
   useProjectLifecycle(projectPath);
+
+  // Listen for action triggers from unified sidebar
+  useEffect(() => {
+    if (lastAction) {
+      if (lastAction.id === 'fileTree.createFile') {
+        handleCreateFile();
+      } else if (lastAction.id === 'fileTree.openFolder') {
+        handleOpenFolder();
+      }
+    }
+  }, [lastAction]);
 
   // Load project markdown files and parse their YAML frontmatter tags
   useEffect(() => {

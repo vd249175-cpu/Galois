@@ -15,12 +15,25 @@ export const EditorComponent = {
       label: 'Save Note',
       defaultShortcut: 'meta+s',
       isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M3 2.5h7.5L13 5v8.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-11z" />
+          <rect x="5.5" y="9.5" width="5" height="5" />
+          <rect x="5.5" y="2.5" width="4" height="3" />
+        </svg>
+      )
     },
     {
       id: 'editor.toggleMode',
       label: 'Toggle Markdown Mode (Edit/Preview)',
       defaultShortcut: 'meta+e',
       isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="2" y="2" width="12" height="12" rx="1.5" />
+          <path d="M6 2v12M2 6h8M2 10h8" />
+        </svg>
+      )
     },
   ],
   bloodChannels: (areaId: string) => [

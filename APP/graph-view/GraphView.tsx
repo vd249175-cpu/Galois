@@ -25,6 +25,39 @@ export const GraphViewComponent = {
   displayName: 'Lattice Graph',
   iconName: 'git-branch',
   component: GraphView,
+  actions: [
+    {
+      id: 'graphView.zoomIn',
+      label: 'Zoom In',
+      isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M8 3v10M3 8h10" />
+        </svg>
+      )
+    },
+    {
+      id: 'graphView.zoomOut',
+      label: 'Zoom Out',
+      isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path d="M3 8h10" />
+        </svg>
+      )
+    },
+    {
+      id: 'graphView.recenter',
+      label: 'Recenter Graph',
+      isToolbar: true,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <circle cx="8" cy="8" r="4" />
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2" />
+        </svg>
+      )
+    }
+  ],
   bloodChannels: [
     'project.path',
     'project.resolvedTags',
@@ -37,9 +70,11 @@ export const GraphViewComponent = {
 function GraphView({
   state,
   updateBloodKey,
+  lastAction,
 }: {
   state: Record<string, any>;
   updateBloodKey: (key: string, value: any) => void;
+  lastAction: { id: string; timestamp: number } | null;
 }) {
   const projectPath = state['project.path'] || '';
   const fileSavedMap = state['events.fileSaved.'] || {};
@@ -408,6 +443,20 @@ function GraphView({
     setZoom((prev) => Math.max(0.2, Math.min(3.0, prev * factor)));
   };
 
+  // Listen for dynamic zoom/recenter actions triggered from sidebar
+  useEffect(() => {
+    if (lastAction) {
+      if (lastAction.id === 'graphView.zoomIn') {
+        handleZoom(1.15);
+      } else if (lastAction.id === 'graphView.zoomOut') {
+        handleZoom(0.85);
+      } else if (lastAction.id === 'graphView.recenter') {
+        setPan({ x: 300, y: 250 });
+        setZoom(1.0);
+      }
+    }
+  }, [lastAction]);
+
   if (!projectPath) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '20px', color: 'var(--text-muted)' }}>
@@ -423,12 +472,7 @@ function GraphView({
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
-      {/* Zoom HUD */}
-      <div style={{ position: 'absolute', top: '12px', right: '12px', display: 'flex', gap: '6px', zIndex: 10 }}>
-        <button className="area-btn" onClick={() => handleZoom(1.15)} title="Zoom In">＋</button>
-        <button className="area-btn" onClick={() => handleZoom(0.85)} title="Zoom Out">－</button>
-        <button className="area-btn" onClick={() => { setPan({ x: 300, y: 250 }); setZoom(1.0); }} title="Recenter">⟲</button>
-      </div>
+
 
       {/* Floating Parameters Adjustment Panel (斥力和箭头可调 UI) */}
       <GraphControls

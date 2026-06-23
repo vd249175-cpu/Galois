@@ -94,11 +94,6 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
   const ref = useRef<HTMLDivElement>(null);
 
 
-  // Subscribe to dynamic toolbar button injections in Blood state (抗体通道)
-  const injectedButtons = useBloodChannel([`injections.${componentType}.toolbar`], () =>
-    Blood.getValue<string[]>(`injections.${componentType}.toolbar`, [])
-  );
-
   // Read if this area is focused
   const isFocused = useBloodChannel(['system.focusedAreaId'], () =>
     Blood.getValue<string | null>('system.focusedAreaId', null) === areaId
@@ -136,6 +131,14 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
       Blood.updateKey(`system.areaFrames.${areaId}`, undefined);
     };
   }, [areaId, isPopped]);
+
+  // Register componentType in Blood state dynamically
+  useEffect(() => {
+    Blood.updateKey(`system.areaComponentTypes.${areaId}`, componentType);
+    return () => {
+      Blood.updateKey(`system.areaComponentTypes.${areaId}`, undefined);
+    };
+  }, [areaId, componentType]);
 
   // Determine split edge based on mouse position relative to bounds
   const calculateSplitRegion = (x: number, y: number, w: number, h: number) => {
@@ -260,6 +263,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
 
   const focusMe = () => {
     Blood.updateKey('system.focusedAreaId', areaId);
+    Blood.updateKey(`system.lastFocused.${componentType}Id`, areaId);
   };
 
   // Dynamically calculate drag overlay region from Blood state
@@ -334,34 +338,6 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
 
         <div style={{ flexGrow: 1 }} />
 
-        {injectedButtons.map((actionId) => {
-          const action = ActionRegistry.getAction(actionId);
-          if (!action) return null;
-          return (
-            <button
-              key={actionId}
-              className="area-btn"
-              title={action.label}
-              onClick={() => ActionRegistry.runAction(actionId, { areaId, focusedAreaId: Blood.getValue('system.focusedAreaId', null) })}
-            >
-              {action.icon ? (
-                action.icon
-              ) : actionId === 'editor.save' ? (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M3 2.5h7.5L13 5v8.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-11z" />
-                  <rect x="5.5" y="9.5" width="5" height="5" />
-                  <rect x="5.5" y="2.5" width="4" height="3" />
-                </svg>
-              ) : (
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M2.5 4h11M4.5 4v9.5a1 1 0 001 1h5a1 1 0 001-1V4M5.5 2.5h5" />
-                  <line x1="6.5" y1="7" x2="6.5" y2="11" />
-                  <line x1="9.5" y1="7" x2="9.5" y2="11" />
-                </svg>
-              )}
-            </button>
-          );
-        })}
 
         {!isPopped && (
           <>
