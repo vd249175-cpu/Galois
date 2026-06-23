@@ -11,7 +11,9 @@ interface Node {
   y: number;
   vx: number;
   vy: number;
+  level?: number;
 }
+
 
 interface Link {
   source: string;
@@ -170,6 +172,27 @@ function GraphView({
         console.log('[GraphView] calculatedEdges:', calculatedEdges);
 
         // Convert raw nodes to physics-enabled nodes
+        const levels: Record<string, number> = {};
+        rawNodes.forEach((rn) => {
+          levels[rn.id] = 0;
+        });
+
+        let changed = true;
+        let iterations = 0;
+        const maxLevelIterations = rawNodes.length * 2;
+        while (changed && iterations < maxLevelIterations) {
+          changed = false;
+          iterations++;
+          calculatedEdges.forEach((edge) => {
+            const srcLevel = levels[edge.source] || 0;
+            const tgtLevel = levels[edge.target] || 0;
+            if (tgtLevel < srcLevel + 1) {
+              levels[edge.target] = srcLevel + 1;
+              changed = true;
+            }
+          });
+        }
+
         const physicsNodes: Node[] = rawNodes.map((rn, i) => {
           const existing = simRef.current.nodes.find((n) => n.id === rn.id);
           
@@ -187,8 +210,10 @@ function GraphView({
             y: existing ? existing.y : defaultY,
             vx: existing ? existing.vx : 0,
             vy: existing ? existing.vy : 0,
+            level: levels[rn.id] || 0,
           };
         });
+
 
         simRef.current = { nodes: physicsNodes, links: calculatedEdges };
         setNodes(physicsNodes);
@@ -274,9 +299,10 @@ function GraphView({
 
         const d = Math.sqrt(n.x * n.x + n.y * n.y) || 1;
         
-        // General concepts (fewer tags) go to the center, specific concepts (more tags) go to the edge
-        const tagCount = n.tags ? n.tags.length : 1;
-        const targetR = Math.max(0, tagCount - 1) * spacingRef.current; // Dynamic spacing per level
+        // General concepts (closer to source nodes in DAG level) go to the center, specific concepts go to the edge
+        const level = n.level !== undefined ? n.level : 0;
+        const targetR = level * spacingRef.current; // Dynamic spacing per DAG level
+
         
         // Radial constraint force pulling/pushing the node towards targetR
         const radialStrength = 0.055;
