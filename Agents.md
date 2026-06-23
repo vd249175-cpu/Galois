@@ -61,8 +61,19 @@ export interface OrganAction {
 
 #### C. 仿生双向反射链路
 - **输入感觉**：用户在右侧栏点击按钮或按下快捷键时，`ActionRegistry.runAction` 被调用。
-- **血液流通**：CORE 拦截输入，并将其转化为血液信号：`Blood.updateKey('actions.[id].[areaId]', true)`。
-- **抗体捕获**：在 `[PluginView].tsx` 中，通过监听 React 传入的 `lastAction` 属性来捕获动作。如果 `lastAction.id === '[plugin-name].[actionName]'`，则执行具体的内部器官函数。
+- **血液流通**：CORE 拦截输入，并将其转化为血液信号：`Blood.updateKey('actions.[id].[areaId]', Date.now())`。  
+  ⚠️ 动作信号**必须使用 timestamp**（`Date.now()`），不要用 `true`。理由：同一个按钮连续点击也要触发，boolean 无法区分。
+- **抗体捕获**：`ComponentWrapper` 通过 `Blood.subscribe` 直接监听 `actions.*` 频道变化，提取 `lastAction` 并注入到插件组件的 prop 里。在 `[PluginView].tsx` 中，通过 `useEffect(() => { if (lastAction?.id === 'xxx') ... }, [lastAction])` 捕获并执行。
 
+#### D. 血液频道命名规范（Blood Channel Namespace）
+所有 Blood key 必须属于以下四个命名空间之一：
 
+| 前缀 | 用途 | 示例 |
+|------|------|------|
+| `system.*` | 焦点、窗口、区域、运行时状态 | `system.focusedAreaId`, `system.areaComponentTypes.{id}` |
+| `layout.*` | 面板拆分、关闭、弹出、合并 | `layout.splitArea.{id}`, `layout.removeArea.{id}`, `layout.popArea.{id}` |
+| `actions.*` | 用户输入转译后的动作信号（timestamp） | `actions.editor.save.{areaId}` = `Date.now()` |
+| `events.*` | 文件保存、打开文件、脚本完成等业务事件 | `events.openFile.{areaId}`, `events.fileSaved.{path}` |
+
+**禁止**在 CORE 里使用 `project.*`、`debug.*` 等非规范前缀。这些应迁移到上述四个命名空间中。
 
