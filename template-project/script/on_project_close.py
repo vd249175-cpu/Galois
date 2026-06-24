@@ -2,16 +2,11 @@ import os
 import json
 import time
 
-def main():
-    output_file = os.environ.get('DNOTE_OUTPUT_FILE', 'on_project_close.json')
-    data = {
-        "event": "project_close",
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "status": "success",
-        "message": "Project close hook executed successfully!"
-    }
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2)
+print("[Lifecycle] DNOTE project closed.")
+project_path = os.environ.get('DNOTE_PROJECT_PATH', '.')
+cache_dir = os.path.join(project_path, '.dnote_cache')
+os.makedirs(cache_dir, exist_ok=True)
 
-if __name__ == '__main__':
-    main()
+log_path = os.path.join(cache_dir, 'lifecycle.json')
+with open(log_path, 'w', encoding='utf-8') as f:
+    json.dump({"event": "close", "timestamp": int(time.time())}, f, indent=2)

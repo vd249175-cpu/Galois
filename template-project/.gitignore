@@ -1,0 +1,6 @@
+.venv/
+.dnote_cache/
+.dnote_runtime.json
+__pycache__/
+*.json
+!commands.json

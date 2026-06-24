@@ -137,7 +137,7 @@ function EditorView({
   const openedFile = state[BC.events.openFile(areaId)] || '';
   const isFocused = state[BC.system.focusedAreaId] === areaId;
 
-  const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc: string; content: string; defaultShortcut?: string }>>([]);
+  const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc?: string; content?: string; defaultShortcut?: string; shortcut?: string; script?: string }>>([]);
 
   useEffect(() => {
     if (!projectPath) {
@@ -152,6 +152,8 @@ function EditorView({
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             setProjectCommands(parsed);
+          } else if (parsed && Array.isArray(parsed.commands)) {
+            setProjectCommands(parsed.commands);
           }
         }
       } catch (e) {
@@ -281,11 +283,12 @@ function EditorView({
         
         // Inherit default shortcut if the global command doesn't have one
         const globalCmd = customCommands.find(c => c.id === cmd.id);
-        if (globalCmd && !(globalCmd as any).defaultShortcut && cmd.defaultShortcut) {
-          (globalCmd as any).defaultShortcut = cmd.defaultShortcut;
+        const cmdShortcut = cmd.defaultShortcut || cmd.shortcut;
+        if (globalCmd && !(globalCmd as any).defaultShortcut && cmdShortcut) {
+          (globalCmd as any).defaultShortcut = cmdShortcut;
           
           const userCombo = editorShortcuts[cmd.id];
-          const activeCombo = userCombo !== undefined ? userCombo : cmd.defaultShortcut.toLowerCase().trim();
+          const activeCombo = userCombo !== undefined ? userCombo : cmdShortcut.toLowerCase().trim();
           if (activeCombo) {
             const occupant = occupied.get(activeCombo);
             if (!occupant || occupant === `editor.${cmd.id}`) {
@@ -307,7 +310,8 @@ function EditorView({
       });
 
       const userCombo = editorShortcuts[cmd.id];
-      const defaultShortcut = cmd.defaultShortcut?.toLowerCase().trim();
+      const cmdShortcut = cmd.defaultShortcut || cmd.shortcut;
+      const defaultShortcut = cmdShortcut?.toLowerCase().trim();
       const activeCombo = userCombo !== undefined ? userCombo : defaultShortcut;
 
       if (activeCombo) {
@@ -764,6 +768,69 @@ function EditorView({
         textareaRef.current.setSelectionRange(res.newStart, res.newEnd);
       }
     }, 0);
+  };
+
+  const handleExecuteProjectCommand = async (cmd: { id: string; label: string; script: string }) => {
+    if (!projectPath) return;
+    setStatusMessage(`正在运行项目指令: ${cmd.label}...`);
+
+    let cursorLine = 0;
+    let cursorCol = 0;
+    let selectedText = '';
+    if (textareaRef.current) {
+      const { selectionStart, selectionEnd } = textareaRef.current;
+      const subStr = content.substring(0, selectionStart);
+      const lines = subStr.split('\n');
+      cursorLine = lines.length - 1;
+      cursorCol = lines[lines.length - 1].length;
+      selectedText = content.substring(selectionStart, selectionEnd);
+    }
+
+    const cacheDir = `${projectPath}/.dnote_cache`;
+    const absoluteOutputPath = `${cacheDir}/${cmd.id}.json`;
+
+    try {
+      try {
+        await (window as any).electronAPI.readFile(absoluteOutputPath);
+      } catch (e) {
+        await (window as any).electronAPI.writeFile(absoluteOutputPath, '{}');
+      }
+
+      const workingDir = projectPath;
+      const shellCmd = `DNOTE_PROJECT_PATH="${projectPath}" DNOTE_ACTIVE_FILE="${currentFile}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_CURSOR_LINE="${cursorLine}" DNOTE_CURSOR_COL="${cursorCol}" DNOTE_SELECTED_TEXT="${selectedText.replace(/"/g, '\\"')}" ${cmd.script}`;
+
+      console.log(`[Editor] Executing project command: ${shellCmd}`);
+      const result = await (window as any).electronAPI.execCommand(shellCmd, workingDir);
+
+      let parsedData: any = null;
+      try {
+        const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
+        if (updatedContent) {
+          parsedData = JSON.parse(updatedContent);
+          updateBloodKey(`events.commandExecuted.${cmd.id}`, { timestamp: Date.now(), data: parsedData });
+        }
+      } catch (e) {
+        console.error('[Editor] Failed to read output file:', e);
+      }
+
+      if (parsedData && parsedData.status === 'success') {
+        setStatusMessage(`${cmd.label} 执行成功: ${parsedData.message || ''}`);
+        if (parsedData.message) {
+          alert(`${cmd.label} 执行成功！\n\n${parsedData.message}\n${parsedData.data ? JSON.stringify(parsedData.data, null, 2) : ''}`);
+        }
+      } else if (parsedData && parsedData.status === 'error') {
+        setStatusMessage(`${cmd.label} 执行失败: ${parsedData.message || ''}`);
+        alert(`${cmd.label} 执行失败！\n\n${parsedData.message || ''}`);
+      } else {
+        setStatusMessage(`${cmd.label} 执行完成。`);
+      }
+
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+    } catch (err: any) {
+      console.error('[Editor] Project command execution failed:', err);
+      setStatusMessage(`${cmd.label} 执行失败: ${err.message}`);
+      alert(`${cmd.label} 执行失败: ${err.message}`);
+    }
   };
 
   const MARKDOWN_ACTIONS = [
@@ -1371,10 +1438,14 @@ function EditorView({
     else if (lastAction.id === 'editor.delete') handleDeleteCurrentFile();
     else if (lastAction.id === 'editor.setAsTemplate') handleSetAsTemplate();
     else if (lastAction.id === 'editor.editShortcuts') setIsShortcutsModalOpen(true);
-    else if (lastAction.id.startsWith('custom.')) {
+    else if (lastAction.id.startsWith('custom.') || lastAction.id.startsWith('project.')) {
       const cmd = customCommands.find(c => c.id === lastAction.id) || projectCommands.find(c => c.id === lastAction.id);
       if (cmd) {
-        handleExecuteCommand(cmd as any);
+        if (lastAction.id.startsWith('project.')) {
+          handleExecuteProjectCommand(cmd as any);
+        } else {
+          handleExecuteCommand(cmd as any);
+        }
       }
     }
   }, [lastAction, customCommands, projectCommands]);

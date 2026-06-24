@@ -1,6 +1,0 @@
-{
-  "event": "project_close",
-  "timestamp": "2026-06-24 06:47:51",
-  "status": "success",
-  "message": "Project close hook executed successfully!"
-}
