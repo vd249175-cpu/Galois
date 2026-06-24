@@ -1,0 +1,171 @@
+:root {
+  /* Vibrant Bright Metallic Gold and Deep Dark Obsidian Charcoal color tokens */
+  --clr-gold: #ffdf00;
+  --clr-charcoal: #08080a;
+  --clr-soft-gold: #fff5d1;
+
+  --bg-main: var(--clr-charcoal);
+  --bg-panel: rgba(16, 16, 20, 0.45);
+  --bg-header: rgba(12, 12, 15, 0.85);
+  --bg-input: rgba(255, 255, 255, 0.04);
+  --bg-terminal: rgba(8, 8, 10, 0.65);
+  --border-color: rgba(255, 223, 0, 0.2);
+  
+  --text-main: var(--clr-soft-gold);
+  --text-muted: #968e7b;
+  
+  --accent-color: var(--clr-gold);
+  --accent-hover: #ffffff;
+  --highlight-color: rgba(255, 223, 0, 0.18);
+  --error-color: #ff453a;
+  --terminal-green: #30d158;
+  
+  --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Settings & Pane Modals Theme Variables */
+  --bg-modal: rgba(16, 16, 20, 0.98);
+  --border-modal: rgba(255, 223, 0, 0.35);
+  --shadow-modal-inset-top: rgba(255, 255, 255, 0.03);
+  --shadow-modal-inset-bottom: rgba(0, 0, 0, 0.6);
+  --bg-modal-header: rgba(12, 12, 15, 0.4);
+  --bg-shortcut-row: rgba(255, 223, 0, 0.04);
+
+  /* File Card Theme Variables */
+  --bg-file-card: #121215;
+  --border-file-card: rgba(255, 223, 0, 0.15);
+  --text-file-card: var(--clr-soft-gold);
+  --text-file-card-muted: #968e7b;
+  --bg-file-card-tag: rgba(255, 223, 0, 0.1);
+  --shadow-file-card-inset: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.02);
+  --bg-file-card-hover: #1b1b20;
+  --shadow-file-card-inset-hover: inset 0.5px 0.5px 0px rgba(255, 223, 0, 0.2);
+
+  /* Area Buttons Theme Variables */
+  --bg-area-btn: rgba(255, 223, 0, 0.06);
+  --border-area-btn: rgba(255, 223, 0, 0.12);
+  --shadow-area-btn-inset: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.02);
+  --bg-area-btn-hover: rgba(255, 223, 0, 0.15);
+  --border-area-btn-hover: rgba(255, 223, 0, 0.28);
+  --shadow-area-btn-inset-hover: inset 0.5px 0.5px 0px rgba(255, 223, 0, 0.2);
+}
+
+/* --- Premium Metallic Shimmer & Irregular Glitter Overrides --- */
+
+/* 1. Irregularly scattered colorful metallic flecks/powder background pattern */
+[data-theme="black-gold"] body,
+[data-theme="black-gold"] .layout-container {
+  background-color: #060608 !important;
+  background-image: 
+    /* Bright Gold Flakes */
+    radial-gradient(circle at 6% 14%, #ffeb85 3px, transparent 4px),
+    radial-gradient(circle at 45% 24%, #ffd700 2.2px, transparent 3.5px),
+    radial-gradient(circle at 86% 16%, #ffdf00 3.2px, transparent 4.5px),
+    radial-gradient(circle at 24% 67%, #ffd700 2px, transparent 3.2px),
+    radial-gradient(circle at 76% 74%, #ffeb85 2.5px, transparent 3.8px),
+    radial-gradient(circle at 53% 86%, #ffdf00 2.8px, transparent 4.2px),
+    
+    /* Iridescent Copper / Rose Gold Flakes */
+    radial-gradient(circle at 17% 48%, #ff8c00 2.2px, transparent 3.5px),
+    radial-gradient(circle at 63% 40%, #ff6b6b 2.5px, transparent 3.8px),
+    radial-gradient(circle at 37% 80%, #ff7f50 2.8px, transparent 4.2px),
+    radial-gradient(circle at 93% 56%, #ff6b6b 2px, transparent 3.2px),
+    
+    /* Emerald / Lime Gold Flakes */
+    radial-gradient(circle at 34% 17%, #adff2f 1.8px, transparent 3px),
+    radial-gradient(circle at 81% 83%, #00ff7f 2.2px, transparent 3.5px),
+    
+    /* Electric Cyan / Blue Steel Flakes */
+    radial-gradient(circle at 14% 76%, #00ffff 2.2px, transparent 3.5px),
+    radial-gradient(circle at 69% 19%, #00bfff 2.8px, transparent 4.2px),
+    radial-gradient(circle at 51% 54%, #00e5ff 2px, transparent 3.2px),
+    radial-gradient(circle at 87% 49%, #00bfff 2.2px, transparent 3.5px),
+    
+    /* Neon Magenta / Orchid Violet Flakes */
+    radial-gradient(circle at 29% 34%, #ff00ff 2.5px, transparent 3.8px),
+    radial-gradient(circle at 71% 60%, #da70d6 2.2px, transparent 3.5px) !important;
+  background-size: 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* 2. Custom bright gold metallic scrollbars */
+[data-theme="black-gold"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+[data-theme="black-gold"] ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+}
+[data-theme="black-gold"] ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #ffdf00, #b8860b) !important;
+  border-radius: 3px;
+  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.2);
+}
+[data-theme="black-gold"] ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #fff5d1, #ffdf00) !important;
+}
+
+/* 3. Gold foil text rendering for headers and card titles */
+[data-theme="black-gold"] h3,
+[data-theme="black-gold"] .settings-modal h3,
+[data-theme="black-gold"] .file-card-title {
+  background: linear-gradient(135deg, #fff5d1 0%, #ffdf00 45%, #b8860b 90%, #aa771c 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  font-weight: 800 !important;
+  text-shadow: 0px 1px 2px rgba(0,0,0,0.5);
+}
+
+/* 4. Active sidebar button with bright metallic gold gradient */
+[data-theme="black-gold"] .active-area-btn,
+[data-theme="black-gold"] .sidebar-btn.active,
+[data-theme="black-gold"] .right-sidebar-btn.active {
+  background: linear-gradient(135deg, #fff5d1 0%, #ffdf00 50%, #b8860b 100%) !important;
+  color: #060608 !important;
+  border-color: #ffdf00 !important;
+  box-shadow: 0 0 12px rgba(255, 223, 0, 0.5) !important;
+  font-weight: bold;
+}
+
+/* 5. Iridescent glowing metallic tags */
+[data-theme="black-gold"] .file-card-tag {
+  background: linear-gradient(135deg, rgba(255, 223, 0, 0.18) 0%, rgba(255, 140, 0, 0.12) 50%, rgba(0, 255, 255, 0.15) 100%) !important;
+  color: #ffdf00 !important;
+  border: 1px solid rgba(255, 223, 0, 0.35) !important;
+  box-shadow: 0 0 4px rgba(255, 223, 0, 0.15);
+  font-weight: 800 !important;
+}
+
+/* 6. Selected file cards with thick gold border and glowing colorful aura */
+[data-theme="black-gold"] .file-card-item.selected {
+  background-color: rgba(255, 223, 0, 0.15) !important;
+  border: 2px solid #ffdf00 !important;
+  box-shadow: 
+    0 0 12px rgba(255, 223, 0, 0.35), 
+    0 0 20px rgba(255, 140, 0, 0.1),
+    0 0 20px rgba(0, 255, 255, 0.1) !important;
+}
+
+/* 7. Hover file cards with metallic gold pop-out */
+[data-theme="black-gold"] .file-card-item:hover {
+  border-color: #ffdf00 !important;
+  box-shadow: 
+    0 6px 20px rgba(0, 0, 0, 0.5),
+    0 0 12px rgba(255, 223, 0, 0.25),
+    inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 8. Input and select box gold glows */
+[data-theme="black-gold"] input:focus,
+[data-theme="black-gold"] select:focus,
+[data-theme="black-gold"] textarea:focus {
+  border-color: #ffdf00 !important;
+  box-shadow: 0 0 6px rgba(255, 223, 0, 0.45) !important;
+  outline: none;
+}
+
+/* 9. Settings modal metallic dividers */
+[data-theme="black-gold"] .settings-modal-header {
+  border-bottom: 2px solid #ffdf00 !important;
+}
