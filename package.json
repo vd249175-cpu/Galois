@@ -10,24 +10,69 @@
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "dev": "concurrently \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
     "build": "npm run build:vite && npm run build:electron",
-    "start": "NODE_ENV=production electron ."
+    "start": "NODE_ENV=production electron .",
+    "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "liquid-glass-react": "^1.1.1",
+    "node-pty": "^1.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^10.0.3",
     "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "electron-rebuild": "^3.2.9",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"
+  },
+  "build": {
+    "appId": "com.dnote.app",
+    "productName": "DNOTE",
+    "directories": {
+      "output": ".build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/**/*",
+      "index.html"
+    ],
+    "extraResources": [
+      {
+        "from": "template-project",
+        "to": "template-project",
+        "filter": [
+          "**/*",
+          "!**/.DS_Store"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nativeRebuilder": "sequential"
   }
 }

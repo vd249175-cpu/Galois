@@ -74,10 +74,10 @@ function SettingsView({
 
     try {
       const serialized = shortcutAPI.serializeShortcuts();
-      await (window as any).electronAPI.writeFile('dnote_shortcuts.json', serialized);
+      await window.electronAPI.setShortcuts(JSON.parse(serialized));
       console.log(`[Preferences] Shortcut updated: ${actionId} -> ${combo}`);
     } catch (err) {
-      console.error('[Preferences] Failed to save shortcuts to disk:', err);
+      console.error('[Preferences] Failed to save shortcuts:', err);
     }
 
     setEditingActionId(null);
@@ -93,7 +93,7 @@ function SettingsView({
 
     try {
       const serialized = shortcutAPI.serializeShortcuts();
-      await (window as any).electronAPI.writeFile('dnote_shortcuts.json', serialized);
+      await window.electronAPI.setShortcuts(JSON.parse(serialized));
     } catch (err) {
       console.error('[Preferences] Failed to reset shortcut:', err);
     }

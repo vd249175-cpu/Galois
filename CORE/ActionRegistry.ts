@@ -147,29 +147,31 @@ class ActionRegistryClass {
     return actionIds.find((id) => this.registry.get(id)?.isGlobal);
   }
 
-  // Load custom shortcuts from JSON file contents
-  public loadShortcuts(jsonContent: string) {
+  // Load custom shortcuts from JSON file contents or object
+  public loadShortcuts(data: Record<string, any> | string) {
     try {
-      const data = JSON.parse(jsonContent);
-      for (const [actionId, value] of Object.entries(data)) {
-        if (value && typeof value === 'object') {
-          const fs = value as FileShortcut;
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      for (const [actionId, combo] of Object.entries(parsed)) {
+        if (typeof combo === 'string') {
+          this.registerShortcut(combo, actionId);
+        } else if (combo && typeof combo === 'object') {
+          const fs = combo as FileShortcut;
           if (fs.key) {
-            const combo = fileShortcutToCombo(fs);
-            this.registerShortcut(combo, actionId);
+            const comboStr = fileShortcutToCombo(fs);
+            this.registerShortcut(comboStr, actionId);
           }
         }
       }
     } catch (e) {
-      console.error('[ActionRegistry] Failed to parse shortcuts JSON:', e);
+      console.error('[ActionRegistry] Failed to parse/load shortcuts:', e);
     }
   }
 
-  // Save current shortcuts into JSON format
+  // Save current shortcuts into flat JSON format
   public serializeShortcuts(): string {
-    const data: Record<string, FileShortcut> = {};
+    const data: Record<string, string> = {};
     this.actionShortcuts.forEach((combo, actionId) => {
-      data[actionId] = comboToFileShortcut(combo);
+      data[actionId] = combo;
     });
     return JSON.stringify(data, null, 2);
   }

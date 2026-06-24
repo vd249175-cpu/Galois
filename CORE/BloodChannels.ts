@@ -33,6 +33,9 @@ export const BC = {
     /** tag 解析的最大迭代次数（可通过 settings 修改）。Writer: settings → Reader: fileTree */
     maxIterations: 'system.maxIterations' as const,
 
+    /** 全局配置。Writer: App / SettingsModal → Reader: 任意组件 */
+    config: 'system.config' as const,
+
     /** 每个 area 的组件类型映射。Writer: AreaShell(mount) → Reader: RightSidebar, ActionRegistry */
     areaComponentTypes: (areaId: string) => `system.areaComponentTypes.${areaId}` as const,
 
@@ -91,6 +94,9 @@ export const BC = {
 
     /** 文件已保存通知（timestamp）。Writer: editor(save) | fileTree(createFile) → Reader: fileTree, graphView */
     fileSaved: (filePath: string) => `events.fileSaved.${filePath}` as const,
+
+    /** 主题变更事件（timestamp）。Writer: SettingsModal → Reader: App */
+    themeChanged: 'events.themeChanged' as const,
 
     /** 脚本执行错误（包含 message 和 scriptName）。Writer: fileTree(tagResolver) | graphView(lattice) → Reader: 任意订阅者 */
     scriptError: (pluginName: string) => `events.scriptError.${pluginName}` as const,

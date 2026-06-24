@@ -45,6 +45,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getServiceScriptPath: (pluginFolder: string, scriptName: string) =>
     ipcRenderer.invoke('shell:getServiceScriptPath', pluginFolder, scriptName),
 
+  /** 获取 Electron app 根目录（DNOTE 程序目录） */
+  getAppPath: () =>
+    ipcRenderer.invoke('app:getAppPath'),
+
   // ── Window management ─────────────────────────────────────────────────────
   openSecondaryWindow: (id: string, componentType: string, title: string) =>
     ipcRenderer.invoke('window:openSecondary', { id, componentType, title }),
@@ -69,10 +73,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // ── Persistent Terminal Process Management ──────────────────────────────────
-  spawnTerminal: (id: string, cwd: string) =>
-    ipcRenderer.invoke('terminal:spawn', id, cwd),
+  spawnTerminal: (id: string, cwd: string, cols: number, rows: number) =>
+    ipcRenderer.invoke('terminal:spawn', id, cwd, cols, rows),
   writeTerminal: (id: string, data: string) =>
     ipcRenderer.invoke('terminal:write', id, data),
+  resizeTerminal: (id: string, cols: number, rows: number) =>
+    ipcRenderer.invoke('terminal:resize', id, cols, rows),
   killTerminal: (id: string) =>
     ipcRenderer.invoke('terminal:kill', id),
   onTerminalOutput: (id: string, callback: (data: string) => void) => {
@@ -85,4 +91,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(`terminal:exit:${id}`, listener);
     return () => { ipcRenderer.removeListener(`terminal:exit:${id}`, listener); };
   },
+
+  // ── Config, Shortcuts, Layout and Dev Defaults ─────────────────────────────
+  getDevDefaultProject: () =>
+    ipcRenderer.invoke('app:getDevDefault'),
+  getConfig: () =>
+    ipcRenderer.invoke('app:getConfig'),
+  setConfig: (config: any) =>
+    ipcRenderer.invoke('app:setConfig', config),
+  getShortcuts: () =>
+    ipcRenderer.invoke('app:getShortcuts'),
+  setShortcuts: (shortcuts: any) =>
+    ipcRenderer.invoke('app:setShortcuts', shortcuts),
+  getLayout: () =>
+    ipcRenderer.invoke('app:getLayout'),
+  setLayout: (layout: any) =>
+    ipcRenderer.invoke('app:setLayout', layout),
 });
+

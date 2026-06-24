@@ -9,6 +9,8 @@ import { SettingsModal } from './SettingsModal';
 import { BloodDebugPanel } from './BloodDebugPanel';
 import { Blood } from './Blood';
 import { BC } from './BloodChannels';
+import { defaultLayout } from './defaultLayout';
+import { applyTheme } from './themes';
 import './index.css';
 // Auto-register plugins through the normalized APP/[plugin]/index.ts entrypoint.
 const modules = import.meta.glob('../APP/*/index.ts', { eager: true });
@@ -28,24 +30,83 @@ export function App() {
   const poppedAreaId = searchParams.get('areaId') || '';
   const poppedType = searchParams.get('type') || '';
 
+  // Load theme on startup for all windows (including popped-out windows)
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const config = await window.electronAPI.getConfig();
+        if (config && config.theme) {
+          applyTheme(config.theme);
+        } else {
+          applyTheme('default-light');
+        }
+      } catch (_) {
+        applyTheme('default-light');
+      }
+    };
+    loadTheme();
+  }, []);
+
+  // Listen for dynamic theme changes via Blood state sync
+  useEffect(() => {
+    const unsubscribe = Blood.subscribe((changedKeys) => {
+      if (changedKeys.has('events.themeChanged')) {
+        const newTheme = Blood.getValue<string>('events.themeChanged', 'default-light');
+        applyTheme(newTheme);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     if (isPopped) return;
 
     // Focus the default area on startup
     Blood.updateKey(BC.system.focusedAreaId, 'editor-root');
 
-    // Restore last opened project from localStorage (dev fallback to template-project)
-    const lastProject =
-      localStorage.getItem('dnote_last_project') ||
-      (process.env.NODE_ENV === 'development'
-        ? '/Users/apexwave/Desktop/DNOTE/template-project'
-        : '');
+    const initApp = async () => {
+      // 0. Load global config and put it in Blood
+      try {
+        const config = await window.electronAPI.getConfig();
+        if (config) {
+          Blood.updateKey(BC.system.config, config);
+        }
+      } catch (_) {}
 
-    if (lastProject) {
-      Blood.updateKey(BC.system.projectPath, lastProject);
-      // Persist for next launch
-      localStorage.setItem('dnote_last_project', lastProject);
-    }
+      // 1. Restore last opened project from localStorage, fallback to dev default path via IPC
+      const saved = localStorage.getItem('dnote_last_project');
+      if (saved) {
+        Blood.updateKey(BC.system.projectPath, saved);
+      } else {
+        try {
+          const devDefault = await window.electronAPI.getDevDefaultProject();
+          if (devDefault) {
+            Blood.updateKey(BC.system.projectPath, devDefault);
+            localStorage.setItem('dnote_last_project', devDefault);
+          }
+        } catch (_) {}
+      }
+
+      // 2. Load custom shortcuts from userData
+      try {
+        const shortcuts = await window.electronAPI.getShortcuts();
+        if (shortcuts) {
+          ActionRegistry.loadShortcuts(shortcuts);
+          console.log('[App] Custom shortcuts loaded from userData.');
+        }
+      } catch (_) {}
+
+      // 3. Load layout state from layout.json in userData
+      try {
+        const savedLayout = await window.electronAPI.getLayout();
+        if (savedLayout) {
+          setLayout(savedLayout);
+          console.log('[App] Layout loaded from layout.json in userData.');
+        }
+      } catch (_) {}
+    };
+
+    initApp();
 
     // Validate plugin dependency graph on startup (dev only)
     if (process.env.NODE_ENV === 'development') {
@@ -56,19 +117,6 @@ export function App() {
         console.log('[App] All plugin dependencies satisfied.');
       }
     }
-
-    const loadCustomShortcuts = async () => {
-      try {
-        const content = await (window as any).electronAPI.readFile('dnote_shortcuts.json');
-        if (content) {
-          ActionRegistry.loadShortcuts(content);
-          console.log('[App] Custom shortcuts loaded from disk.');
-        }
-      } catch (_) {
-        console.log('[App] No custom shortcuts config found, using defaults.');
-      }
-    };
-    loadCustomShortcuts();
   }, [isPopped]);
 
   // Listen for popped-out secondary windows closing to restore them in the main window layout grid
@@ -179,31 +227,14 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Initial layout tree
-  const [layout, setLayout] = useState<AreaLayout>({
-    type: 'split',
-    direction: 'horizontal',
-    ratio: 0.22,
-    first: {
-      type: 'area',
-      id: 'file-tree-root',
-      componentType: 'fileTree',
-    },
-    second: {
-      type: 'split',
-      direction: 'horizontal',
-      ratio: 0.55,
-      first: {
-        type: 'area',
-        id: 'editor-root',
-        componentType: 'editor',
-      },
-      second: {
-        type: 'area',
-        id: 'graph-root',
-        componentType: 'graphView',
-      },
-    },
-  });
+  const [layout, setLayout] = useState<AreaLayout>(defaultLayout);
+
+  const handleLayoutChange = (newLayout: AreaLayout) => {
+    setLayout(newLayout);
+    window.electronAPI.setLayout(newLayout).catch((err) => {
+      console.error('[App] Failed to save layout:', err);
+    });
+  };
 
   if (isPopped) {
     return (
@@ -231,13 +262,13 @@ export function App() {
 
       <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', height: '100vh', overflow: 'hidden' }}>
         <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
-          <LayoutEngine layout={layout} onLayoutChange={setLayout} />
+          <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
         </div>
         <RightSidebar onToggleSettings={handleToggleSettings} />
       </div>
 
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
-      <BloodDebugPanel />
+      {process.env.NODE_ENV === 'development' && <BloodDebugPanel />}
     </>
   );
 }

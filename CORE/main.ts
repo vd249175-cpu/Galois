@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { exec, spawn, ChildProcess } from 'child_process';
+import { exec } from 'child_process';
+import * as pty from 'node-pty';
 import { pathToFileURL } from 'url';
 
 // Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
@@ -23,9 +24,19 @@ let mainWindow: BrowserWindow | null = null;
 const secondaryWindows = new Map<string, BrowserWindow>();
 
 function createMainWindow() {
+  const statePath = path.join(app.getPath('userData'), 'window-state.json');
+  let bounds: any = { width: 1200, height: 800 };
+  if (fs.existsSync(statePath)) {
+    try {
+      bounds = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+    } catch (_) {}
+  }
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width || 1200,
+    height: bounds.height || 800,
     title: 'DNOTE Workspace',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -33,6 +44,17 @@ function createMainWindow() {
       nodeIntegration: false,
     },
   });
+
+  const saveBounds = () => {
+    try {
+      if (!mainWindow) return;
+      const currentBounds = mainWindow.getBounds();
+      fs.writeFileSync(statePath, JSON.stringify(currentBounds, null, 2), 'utf-8');
+    } catch (_) {}
+  };
+
+  mainWindow.on('resize', saveBounds);
+  mainWindow.on('move', saveBounds);
 
   // Load Vite dev server in development, built index.html in production
   if (process.env.NODE_ENV === 'development') {
@@ -52,7 +74,8 @@ function createMainWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await initUserData();
   // Handle local protocol dnote-file:/// requests securely using pathToFileURL
   protocol.handle('dnote-file', (request) => {
     try {
@@ -243,7 +266,8 @@ function getSecureEnv() {
   const commonPaths = [
     '/usr/local/bin',
     '/opt/homebrew/bin',
-    `${homeDir}/.local/bin`,
+    path.join(homeDir, '.cargo/bin'),
+    path.join(homeDir, '.local/bin'),
     '/usr/bin',
     '/bin',
     '/usr/sbin',
@@ -401,67 +425,242 @@ ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
   }
 });
 
-const terminalProcesses = new Map<string, ChildProcess>();
+ipcMain.handle('app:getAppPath', () => app.getAppPath());
 
-ipcMain.handle('terminal:spawn', (event, id: string, cwd: string) => {
-  if (terminalProcesses.has(id)) {
+ipcMain.handle('app:getDevDefault', () => {
+  const docsDir = app.getPath('documents');
+  const userProject = path.join(docsDir, 'DNOTE Projects', 'Getting Started');
+  if (fs.existsSync(userProject)) {
+    return userProject;
+  }
+  return path.join(app.getAppPath(), 'template-project');
+});
+
+ipcMain.handle('app:getConfig', () => {
+  const configPath = path.join(app.getPath('userData'), 'dnote.config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (_) {}
+  }
+  return {
+    theme: "default-light",
+    editor: {
+      fontSize: 14,
+      fontFamily: "Fira Code",
+      lineHeight: 1.6,
+      autosaveDelay: 500
+    },
+    graph: {
+      showOrphans: true,
+      maxNodes: 500
+    },
+    terminal: {
+      shell: "",
+      fontSize: 13,
+      autoStartAgy: true
+    }
+  };
+});
+
+ipcMain.handle('app:setConfig', (_, config: any) => {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'dnote.config.json');
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
     return true;
+  } catch (err: any) {
+    console.error('Failed to set config:', err);
+    return false;
+  }
+});
+
+ipcMain.handle('app:getShortcuts', () => {
+  const shortcutsPath = path.join(app.getPath('userData'), 'shortcuts.json');
+  if (fs.existsSync(shortcutsPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(shortcutsPath, 'utf-8'));
+    } catch (_) {}
+  }
+  return {
+    "editor.save": "meta+s",
+    "terminal.clear": "meta+k",
+    "sidebar.toggle": "meta+b"
+  };
+});
+
+ipcMain.handle('app:setShortcuts', (_, shortcuts: any) => {
+  try {
+    const shortcutsPath = path.join(app.getPath('userData'), 'shortcuts.json');
+    fs.mkdirSync(path.dirname(shortcutsPath), { recursive: true });
+    fs.writeFileSync(shortcutsPath, JSON.stringify(shortcuts, null, 2), 'utf-8');
+    return true;
+  } catch (err: any) {
+    console.error('Failed to set shortcuts:', err);
+    return false;
+  }
+});
+
+ipcMain.handle('app:getLayout', () => {
+  const layoutPath = path.join(app.getPath('userData'), 'layout.json');
+  if (fs.existsSync(layoutPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(layoutPath, 'utf-8'));
+    } catch (_) {}
+  }
+  return null;
+});
+
+ipcMain.handle('app:setLayout', (_, layout: any) => {
+  try {
+    const layoutPath = path.join(app.getPath('userData'), 'layout.json');
+    fs.mkdirSync(path.dirname(layoutPath), { recursive: true });
+    fs.writeFileSync(layoutPath, JSON.stringify(layout, null, 2), 'utf-8');
+    return true;
+  } catch (err: any) {
+    console.error('Failed to set layout:', err);
+    return false;
+  }
+});
+
+function copyFolderRecursiveSync(src: string, dest: string) {
+  if (!fs.existsSync(src)) return;
+  const stats = fs.statSync(src);
+  if (stats.isDirectory()) {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    fs.readdirSync(src).forEach((childItemName) => {
+      copyFolderRecursiveSync(path.join(src, childItemName), path.join(dest, childItemName));
+    });
+  } else {
+    fs.copyFileSync(src, dest);
+  }
+}
+
+async function initUserData() {
+  const configDir = app.getPath('userData');
+  
+  // 1. Initial settings config file
+  const configPath = path.join(configDir, 'dnote.config.json');
+  if (!fs.existsSync(configPath)) {
+    const defaultConfig = {
+      theme: "default-light",
+      editor: {
+        fontSize: 14,
+        fontFamily: "Fira Code",
+        lineHeight: 1.6,
+        autosaveDelay: 500
+      },
+      graph: {
+        showOrphans: true,
+        maxNodes: 500
+      },
+      terminal: {
+        shell: "",
+        fontSize: 13,
+        autoStartAgy: true
+      }
+    };
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
   }
 
-  const shell = process.platform === 'win32' ? 'cmd.exe' : 'zsh';
-  const shellArgs = process.platform === 'darwin' ? ['-l', '-i'] : (process.platform === 'linux' ? ['-i'] : []);
+  // 2. Initial shortcuts config file
+  const shortcutsPath = path.join(configDir, 'shortcuts.json');
+  if (!fs.existsSync(shortcutsPath)) {
+    const defaultShortcuts = {
+      "editor.save": "meta+s",
+      "terminal.clear": "meta+k",
+      "sidebar.toggle": "meta+b"
+    };
+    fs.writeFileSync(shortcutsPath, JSON.stringify(defaultShortcuts, null, 2), 'utf-8');
+  }
+
+  // 3. Initial project template copy
+  const docsDir = app.getPath('documents');
+  const dest = path.join(docsDir, 'DNOTE Projects', 'Getting Started');
+  if (!fs.existsSync(dest)) {
+    const src = app.isPackaged 
+      ? path.join(process.resourcesPath, 'template-project')
+      : path.join(app.getAppPath(), 'template-project');
+    if (fs.existsSync(src)) {
+      try {
+        copyFolderRecursiveSync(src, dest);
+        console.log('[initUserData] Copied template project to documents folder.');
+      } catch (err) {
+        console.error('[initUserData] Failed to copy template project:', err);
+      }
+    }
+  }
+}
+
+// ── PTY Terminal Manager (node-pty) ──────────────────────────────────────────
+// Uses a real PTY — same as VS Code, Hyper, Warp. Supports TUI apps (agy, vim, etc.)
+const ptyProcesses = new Map<string, pty.IPty>();
+
+ipcMain.handle('terminal:spawn', (event, id: string, cwd: string, cols: number, rows: number) => {
+  if (ptyProcesses.has(id)) return true;
+
+  const shell = process.platform === 'win32' ? 'cmd.exe' : (process.env.SHELL || 'zsh');
 
   try {
-    const child = spawn(shell, shellArgs, {
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: cols || 80,
+      rows: rows || 24,
       cwd: cwd || os.homedir(),
-      env: getSecureEnv(),
-      shell: false
+      env: getSecureEnv() as Record<string, string>,
     });
 
-    child.stdout?.on('data', (data) => {
-      event.sender.send(`terminal:output:${id}`, data.toString());
+    ptyProcess.onData((data) => {
+      event.sender.send(`terminal:output:${id}`, data);
     });
 
-    child.stderr?.on('data', (data) => {
-      event.sender.send(`terminal:output:${id}`, data.toString());
-    });
-
-    child.on('close', () => {
-      terminalProcesses.delete(id);
+    ptyProcess.onExit(() => {
+      ptyProcesses.delete(id);
       event.sender.send(`terminal:exit:${id}`);
     });
 
-    terminalProcesses.set(id, child);
+    ptyProcesses.set(id, ptyProcess);
     return true;
   } catch (err: any) {
-    console.error('[terminal:spawn error]', err);
+    console.error('[terminal:spawn pty error]', err);
     throw err;
   }
 });
 
 ipcMain.handle('terminal:write', (_, id: string, data: string) => {
-  const child = terminalProcesses.get(id);
-  if (child && child.stdin && !child.stdin.destroyed) {
-    child.stdin.write(data);
+  const ptyProcess = ptyProcesses.get(id);
+  if (ptyProcess) {
+    ptyProcess.write(data);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('terminal:resize', (_, id: string, cols: number, rows: number) => {
+  const ptyProcess = ptyProcesses.get(id);
+  if (ptyProcess) {
+    ptyProcess.resize(cols, rows);
     return true;
   }
   return false;
 });
 
 ipcMain.handle('terminal:kill', (_, id: string) => {
-  const child = terminalProcesses.get(id);
-  if (child) {
-    child.kill();
-    terminalProcesses.delete(id);
+  const ptyProcess = ptyProcesses.get(id);
+  if (ptyProcess) {
+    ptyProcess.kill();
+    ptyProcesses.delete(id);
     return true;
   }
   return false;
 });
 
 app.on('will-quit', () => {
-  for (const [_, child] of terminalProcesses) {
-    child.kill();
+  for (const [_, ptyProcess] of ptyProcesses) {
+    ptyProcess.kill();
   }
-  terminalProcesses.clear();
+  ptyProcesses.clear();
 });
-

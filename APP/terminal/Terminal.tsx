@@ -1,13 +1,53 @@
-import React, { useEffect, useRef, useState } from 'react';
+/**
+ * APP/terminal/Terminal.tsx
+ *
+ * 真正的原生 PTY 终端组件（xterm.js + node-pty）
+ *
+ * 生命周期设计：
+ * - tabs / activeTabId 存在 Blood 全局状态（跨卸载/挂载持久）
+ * - xtermInstances / startedTabIds 是模块级常量（跨 React 生命周期持久）
+ * - 组件卸载后 xterm 容器孤立，重新挂载时 re-attach 到新 wrapper DOM
+ * - startedTabIds 防止重挂时重复发送 agy 启动命令
+ */
+
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { terminalActions } from './actions';
 import { Blood, useBloodChannel } from '../../CORE/Blood';
+import '@xterm/xterm/css/xterm.css';
 
-export interface TerminalTab {
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TerminalTab {
   id: string;
   name: string;
-  cwd: string;
-  autoStarted: boolean;
+  projectPath: string;
 }
+
+interface XTermInstance {
+  term: XTerm;
+  fit: FitAddon;
+  container: HTMLDivElement;
+  // IPC unsubscribe functions — persist so we don't double-register
+  unsubOutput: () => void;
+  unsubExit: () => void;
+}
+
+// ─── Module-level state (survives React component mount/unmount) ──────────────
+
+/** All active xterm + PTY instances. Key = tabId */
+const xtermInstances = new Map<string, XTermInstance>();
+
+/** Tab IDs that have already had their auto-start commands sent */
+const startedTabIds = new Set<string>();
+
+/** Blood keys for terminal state */
+const BLOOD_TABS       = 'system.terminalTabs';
+const BLOOD_ACTIVE_TAB = 'system.terminalActiveTabId';
+
+// ─── Plugin manifest ──────────────────────────────────────────────────────────
 
 export const TerminalComponent = {
   typeId: 'terminal',
@@ -17,14 +57,17 @@ export const TerminalComponent = {
   actions: terminalActions,
   bloodChannels: ['system.projectPath'],
   manifest: {
-    description: '终端模拟器，后台持久化运行，进入时自动启动 agy 助手',
+    description: '原生 PTY 终端（xterm.js + node-pty），自动启动 agy 并同步笔记项目',
     reads: ['system.projectPath'],
     writes: [],
     dependsOn: [],
   },
 };
 
+// ─── Main Component ───────────────────────────────────────────────────────────
+
 function TerminalView({
+  areaId,
   lastAction,
 }: {
   areaId: string;
@@ -34,182 +77,270 @@ function TerminalView({
     Blood.getValue<string>('system.projectPath', '')
   );
 
-  const tabs = useBloodChannel(['system.terminalTabs'], () =>
-    Blood.getValue<TerminalTab[]>('system.terminalTabs', [])
-  );
+  // Mirror Blood tabs into local state for rendering
+  const [tabs, setTabs] = useState<TerminalTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string>('');
+  const [appDir, setAppDir] = useState<string>('');
 
-  const activeTabId = useBloodChannel(['system.terminalActiveTabId'], () =>
-    Blood.getValue<string>('system.terminalActiveTabId', 'tab-default')
-  );
+  const xtermWrapperRef = useRef<HTMLDivElement>(null);
+  const appDirRef = useRef<string>('');
+  const activeTabIdRef = useRef<string>('');
+  activeTabIdRef.current = activeTabId;
+  appDirRef.current = appDir;
 
-  const history = useBloodChannel(
-    activeTabId ? [`system.terminalHistory.${activeTabId}`] : [],
-    () => activeTabId ? Blood.getValue<string>(`system.terminalHistory.${activeTabId}`, '') : ''
-  );
+  const prevProjectPathRef = useRef<string>('');
 
-  const [inputVal, setInputVal] = useState('');
-  const terminalEndRef = useRef<HTMLDivElement>(null);
-  const listenersRef = useRef<Map<string, () => void>>(new Map());
+  // ─── Helpers to write to Blood + local state atomically ────────────────────
 
-  // Initialize tabs if none exist
-  useEffect(() => {
-    if (tabs.length === 0) {
-      const defaultTab: TerminalTab = {
-        id: 'tab-default',
-        name: '终端 1',
-        cwd: projectPath || '.',
-        autoStarted: false,
-      };
-      Blood.update({
-        'system.terminalTabs': [defaultTab],
-        'system.terminalActiveTabId': 'tab-default',
-        'system.terminalHistory.tab-default': '连接中...\n',
-      });
-    }
-  }, [tabs.length, projectPath]);
-
-  // Keep processes spawned and listen for output changes stably
-  useEffect(() => {
-    if (tabs.length === 0) return;
-
-    // 1. Remove listeners for tabs that no longer exist
-    const tabIds = new Set(tabs.map(t => t.id));
-    for (const [id, unsub] of listenersRef.current.entries()) {
-      if (!tabIds.has(id)) {
-        unsub();
-        listenersRef.current.delete(id);
-      }
-    }
-
-    // 2. Add spawn and listeners for new/unregistered tabs
-    tabs.forEach((tab) => {
-      if (listenersRef.current.has(tab.id)) return;
-
-      // Spawn process
-      (window as any).electronAPI.spawnTerminal(tab.id, tab.cwd)
-        .then(() => {
-          if (!tab.autoStarted) {
-            tab.autoStarted = true;
-            // Update tabs array
-            const currentTabs = Blood.getValue<TerminalTab[]>('system.terminalTabs', []);
-            const updated = currentTabs.map(t => t.id === tab.id ? { ...t, autoStarted: true } : t);
-            Blood.updateKey('system.terminalTabs', updated);
-
-            // Execute agy directly
-            const startCommands = process.platform === 'win32'
-              ? 'cls && agy\n'
-              : 'clear && agy\n';
-            (window as any).electronAPI.writeTerminal(tab.id, startCommands);
-
-            if (projectPath) {
-              setTimeout(() => {
-                (window as any).electronAPI.writeTerminal(tab.id, `/add-dir ${projectPath}\n`);
-              }, 1200);
-            }
-          }
-        })
-        .catch((err: any) => console.error('[Terminal] Spawn failed:', err));
-
-      // Listen for output streaming
-      const unsub = (window as any).electronAPI.onTerminalOutput(tab.id, (data: string) => {
-        const currentHist = Blood.getValue<string>(`system.terminalHistory.${tab.id}`, '');
-        Blood.updateKey(`system.terminalHistory.${tab.id}`, currentHist + data);
-      });
-
-      listenersRef.current.set(tab.id, unsub);
-    });
-  }, [tabs, projectPath]);
-
-  // Clean up all output listeners on unmount
-  useEffect(() => {
-    return () => {
-      for (const unsub of listenersRef.current.values()) {
-        unsub();
-      }
-      listenersRef.current.clear();
-    };
+  const applyTabs = useCallback((newTabs: TerminalTab[]) => {
+    Blood.updateKey(BLOOD_TABS, newTabs);
+    setTabs(newTabs);
   }, []);
 
-  // Scroll to bottom on output updates
-  useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history]);
+  const applyActiveTabId = useCallback((id: string) => {
+    Blood.updateKey(BLOOD_ACTIVE_TAB, id);
+    setActiveTabId(id);
+  }, []);
 
-  // Listen for toolbar commands like clear
+  // ─── Create a brand-new xterm + PTY tab ──────────────────────────────────
+
+  const spawnTab = useCallback((tabId: string, tabName: string, notesProject: string) => {
+    const wrapper = xtermWrapperRef.current;
+    if (!wrapper) return;
+
+    // If instance already exists (component remounted), just re-attach container
+    if (xtermInstances.has(tabId)) {
+      const inst = xtermInstances.get(tabId)!;
+      wrapper.appendChild(inst.container);
+      return;
+    }
+
+    // ── Create permanent DOM container ──
+    const container = document.createElement('div');
+    container.style.cssText = 'position:absolute;inset:0;overflow:hidden;display:none;';
+    wrapper.appendChild(container);
+
+    // ── Create xterm instance ──
+    const term = new XTerm({
+      fontFamily: '"JetBrains Mono","Cascadia Code",Menlo,monospace',
+      fontSize: 13,
+      lineHeight: 1.4,
+      theme: {
+        background: '#141414', foreground: '#cccccc',
+        cursor: '#cccccc', selectionBackground: 'rgba(255,255,255,0.15)',
+        black: '#141414',    brightBlack: '#555',
+        red: '#f44747',      brightRed: '#f44747',
+        green: '#4ec9b0',    brightGreen: '#4ec9b0',
+        yellow: '#dcdcaa',   brightYellow: '#dcdcaa',
+        blue: '#569cd6',     brightBlue: '#9cdcfe',
+        magenta: '#c586c0',  brightMagenta: '#c586c0',
+        cyan: '#4fc1ff',     brightCyan: '#4fc1ff',
+        white: '#cccccc',    brightWhite: '#ffffff',
+      },
+      cursorBlink: true,
+      scrollback: 8000,
+      allowProposedApi: true,
+    });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.loadAddon(new WebLinksAddon());
+    term.open(container);
+    setTimeout(() => { fit.fit(); term.focus(); }, 30);
+
+    // ── PTY output → xterm ──
+    const unsubOutput = (window as any).electronAPI.onTerminalOutput(tabId, (data: string) => {
+      term.write(data);
+    });
+    const unsubExit = (window as any).electronAPI.onTerminalExit(tabId, () => {
+      term.write('\r\n\x1b[33m[进程已退出]\x1b[0m\r\n');
+    });
+
+    // ── xterm input → PTY ──
+    term.onData((data) => {
+      (window as any).electronAPI.writeTerminal(tabId, data);
+    });
+
+    xtermInstances.set(tabId, { term, fit, container, unsubOutput, unsubExit });
+
+    // ── Spawn PTY (cwd = DNOTE app dir) ──
+    const dir = appDirRef.current;
+    (window as any).electronAPI
+      .spawnTerminal(tabId, dir, term.cols || 80, term.rows || 24)
+      .then(() => {
+        // Only send auto-start once per tab ID, ever
+        if (!startedTabIds.has(tabId)) {
+          startedTabIds.add(tabId);
+          (window as any).electronAPI.writeTerminal(tabId, 'agy\r');
+          if (notesProject) {
+            setTimeout(() => {
+              (window as any).electronAPI.writeTerminal(tabId, `/add-dir ${notesProject}\r`);
+            }, 1500);
+          }
+        }
+      })
+      .catch((err: any) => {
+        term.write(`\r\n\x1b[31m[错误] PTY 启动失败: ${err.message}\x1b[0m\r\n`);
+      });
+
+    // Update tabs state
+    const currentTabs = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []);
+    const newTab: TerminalTab = { id: tabId, name: tabName, projectPath: notesProject };
+    const newTabs = [...currentTabs, newTab];
+    applyTabs(newTabs);
+    applyActiveTabId(tabId);
+  }, [applyTabs, applyActiveTabId]);
+
+  // ─── On appDir ready: restore from Blood or bootstrap ────────────────────
+
+  useEffect(() => {
+    if (!appDir) return;
+
+    const savedTabs   = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []);
+    const savedActive = Blood.getValue<string>(BLOOD_ACTIVE_TAB, '');
+    const wrapper     = xtermWrapperRef.current;
+    if (!wrapper) return;
+
+    if (savedTabs.length > 0) {
+      // ── Restore: re-attach orphaned containers to new wrapper DOM ──
+      for (const tab of savedTabs) {
+        const inst = xtermInstances.get(tab.id);
+        if (inst) {
+          wrapper.appendChild(inst.container);
+        }
+      }
+      setTabs(savedTabs);
+      const activeId = savedActive && savedTabs.find(t => t.id === savedActive)
+        ? savedActive
+        : savedTabs[0].id;
+      setActiveTabId(activeId);
+      prevProjectPathRef.current = savedTabs[0]?.projectPath || '';
+    } else {
+      // ── First bootstrap: create initial tab ──
+      const project = Blood.getValue<string>('system.projectPath', '');
+      prevProjectPathRef.current = project;
+      const tabId = `pty-${areaId}-0`;
+      spawnTab(tabId, '终端 1', project);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appDir]);
+
+  // ─── Fetch app root dir once on mount ────────────────────────────────────
+
+  useEffect(() => {
+    (window as any).electronAPI.getAppPath().then((dir: string) => {
+      setAppDir(dir);
+    });
+  }, []);
+
+  // ─── Show/hide containers when active tab changes ─────────────────────────
+
+  useEffect(() => {
+    for (const [id, inst] of xtermInstances.entries()) {
+      inst.container.style.display = id === activeTabId ? 'block' : 'none';
+    }
+    const inst = xtermInstances.get(activeTabId);
+    if (inst) {
+      requestAnimationFrame(() => {
+        inst.fit.fit();
+        (window as any).electronAPI
+          .resizeTerminal(activeTabId, inst.term.cols, inst.term.rows)
+          .catch(() => {});
+        inst.term.focus();
+      });
+    }
+  }, [activeTabId]);
+
+  // ─── Resize observer for wrapper ─────────────────────────────────────────
+
+  useEffect(() => {
+    const wrapper = xtermWrapperRef.current;
+    if (!wrapper) return;
+    const ro = new ResizeObserver(() => {
+      const id = activeTabIdRef.current;
+      const inst = xtermInstances.get(id);
+      if (!inst) return;
+      inst.fit.fit();
+      (window as any).electronAPI.resizeTerminal(id, inst.term.cols, inst.term.rows).catch(() => {});
+    });
+    ro.observe(wrapper);
+    return () => ro.disconnect();
+  }, []);
+
+  // ─── New tab on notes project switch ─────────────────────────────────────
+
+  useEffect(() => {
+    if (!appDir || !projectPath) return;
+    if (projectPath === prevProjectPathRef.current) return;
+    // Don't fire until initial bootstrap has run
+    if (Blood.getValue<TerminalTab[]>(BLOOD_TABS, []).length === 0) return;
+
+    prevProjectPathRef.current = projectPath;
+
+    // If a tab for this project already exists, switch to it
+    const existing = Blood.getValue<TerminalTab[]>(BLOOD_TABS, [])
+      .find(t => t.projectPath === projectPath);
+    if (existing && xtermInstances.has(existing.id)) {
+      applyActiveTabId(existing.id);
+      return;
+    }
+
+    // Create new tab for new project
+    const tabId = `pty-${areaId}-${Date.now()}`;
+    const shortName = projectPath.split('/').pop() || `终端`;
+    spawnTab(tabId, shortName, projectPath);
+  }, [projectPath, appDir, areaId, spawnTab, applyActiveTabId]);
+
+  // ─── Toolbar actions ──────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!lastAction) return;
-
     if (lastAction.id === 'terminal.clear') {
-      // Clear output history
-      Blood.updateKey(`system.terminalHistory.${activeTabId}`, '');
-      // Write system clear command to clean terminal stdout
-      const clearCmd = process.platform === 'win32' ? 'cls\n' : 'clear\n';
-      (window as any).electronAPI.writeTerminal(activeTabId, clearCmd);
-    } else if (lastAction.id === 'terminal.openNative') {
-      (window as any).electronAPI.openTerminal(projectPath || '.');
+      const inst = xtermInstances.get(activeTabId);
+      if (inst) {
+        inst.term.clear();
+        (window as any).electronAPI.writeTerminal(activeTabId, 'clear\r');
+      }
     }
-  }, [lastAction, activeTabId, projectPath]);
+  }, [lastAction, activeTabId]);
 
-  const addNewTab = () => {
-    const nextIndex = tabs.length + 1;
-    const newTabId = `tab-${Date.now()}`;
-    const newTab: TerminalTab = {
-      id: newTabId,
-      name: `终端 ${nextIndex}`,
-      cwd: projectPath || '.',
-      autoStarted: false,
-    };
+  // ─── Close tab ────────────────────────────────────────────────────────────
 
-    Blood.update({
-      [`system.terminalHistory.${newTabId}`]: '连接中...\n',
-      'system.terminalTabs': [...tabs, newTab],
-      'system.terminalActiveTabId': newTabId,
-    });
-  };
-
-  const closeTab = (tabIdToClose: string, e: React.MouseEvent) => {
+  const closeTab = useCallback((tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (tabs.length === 1) return;
+    const currentTabs = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []);
+    if (currentTabs.length === 1) return;
 
-    (window as any).electronAPI.killTerminal(tabIdToClose);
+    (window as any).electronAPI.killTerminal(tabId);
+    startedTabIds.delete(tabId);
 
-    const index = tabs.findIndex((t) => t.id === tabIdToClose);
-    const updated = tabs.filter((t) => t.id !== tabIdToClose);
-
-    Blood.updateKey('system.terminalTabs', updated);
-    Blood.updateKey(`system.terminalHistory.${tabIdToClose}`, undefined);
-
-    if (activeTabId === tabIdToClose) {
-      const nextActiveIndex = Math.max(0, index - 1);
-      Blood.updateKey('system.terminalActiveTabId', updated[nextActiveIndex].id);
+    const inst = xtermInstances.get(tabId);
+    if (inst) {
+      inst.unsubOutput();
+      inst.unsubExit();
+      inst.term.dispose();
+      inst.container.remove();
+      xtermInstances.delete(tabId);
     }
-  };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const command = inputVal;
-      // Write directly to standard input stream of shell
-      (window as any).electronAPI.writeTerminal(activeTabId, command + '\n');
-      setInputVal('');
+    const idx = currentTabs.findIndex(t => t.id === tabId);
+    const newTabs = currentTabs.filter(t => t.id !== tabId);
+    applyTabs(newTabs);
+    if (activeTabId === tabId) {
+      applyActiveTabId(newTabs[Math.max(0, idx - 1)].id);
     }
-  };
+  }, [activeTabId, applyTabs, applyActiveTabId]);
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        backgroundColor: 'var(--bg-panel)',
-      }}
-    >
-      {/* Dynamic Tab Bar Navigation */}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', backgroundColor: '#141414' }}>
+      {/* Tab bar */}
       <div className="terminal-tabs-bar">
         {tabs.map((tab) => (
           <div
             key={tab.id}
             className={`terminal-tab-item ${tab.id === activeTabId ? 'active' : ''}`}
-            onClick={() => Blood.updateKey('system.terminalActiveTabId', tab.id)}
+            onClick={() => applyActiveTabId(tab.id)}
             style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
           >
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -225,59 +356,26 @@ function TerminalView({
             )}
           </div>
         ))}
-        <button className="terminal-tab-add" onClick={addNewTab} title="添加新标签页">
+        <button
+          className="terminal-tab-add"
+          onClick={() => {
+            const tabId = `pty-${areaId}-${Date.now()}`;
+            const proj = Blood.getValue<string>('system.projectPath', '');
+            const num = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []).length + 1;
+            spawnTab(tabId, `终端 ${num}`, proj);
+          }}
+          title="新建终端"
+        >
           +
         </button>
       </div>
 
-      {/* Terminal History Display */}
+      {/* xterm wrapper — all containers mounted here */}
       <div
-        className="terminal-view"
-        style={{
-          flexGrow: 1,
-          padding: '12px',
-          overflowY: 'auto',
-          whiteSpace: 'pre-wrap',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '12px',
-          lineHeight: '1.4',
-        }}
-      >
-        {history}
-        <div ref={terminalEndRef} />
-      </div>
-
-      {/* Input Prompt Box */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          borderTop: '1px solid var(--border-color)',
-          padding: '6px 8px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '12px',
-          backgroundColor: 'rgba(0, 0, 0, 0.05)',
-        }}
-      >
-        <span style={{ color: 'var(--terminal-green)' }}>dnote-macOS ~ %</span>
-        <input
-          type="text"
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          onKeyDown={handleKeyDown}
-          style={{
-            flexGrow: 1,
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            color: 'var(--text-normal)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '12px',
-          }}
-          autoFocus
-        />
-      </div>
+        ref={xtermWrapperRef}
+        style={{ flexGrow: 1, position: 'relative', overflow: 'hidden' }}
+        onClick={() => xtermInstances.get(activeTabId)?.term.focus()}
+      />
     </div>
   );
 }
