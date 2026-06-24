@@ -59,6 +59,14 @@
           "**/*",
           "!**/.DS_Store"
         ]
+      },
+      {
+        "from": "APP",
+        "to": "APP",
+        "filter": [
+          "**/services/**/*",
+          "!**/.DS_Store"
+        ]
       }
     ],
     "mac": {

@@ -161,6 +161,53 @@ npm run build
 
 ---
 
+## 🔌 独立开发与拓展自定义插件 (Organ Plugin Development)
+
+DNOTE 采用了高度松耦合的**器官 (Organ) 插件机制**。任何开发者在本地拉取代码后，均可自由在 `APP/` 下新建或修改插件，无需重新打包：
+
+1. **新建插件文件夹**：
+   在 `APP/` 目录下新建一个以插件命名的文件夹，例如 `APP/my-custom-plugin/`。
+2. **编写插件入口 (`index.ts`)**：
+   创建 `APP/my-custom-plugin/index.ts`，导出满足 DNOTE `AreaComponent` 规范的插件配置：
+   ```typescript
+   import { MyCustomView } from './MyCustomView';
+   import { BC } from '../../CORE/BloodChannels';
+
+   export const MyCustomPlugin = {
+     typeId: 'myCustomPlugin',          // 全局唯一标识
+     displayName: '我的自定义插件',      // 界面显示名称
+     iconName: 'star',                 // 界面图标
+     component: MyCustomView,          // UI 视图组件
+     bloodChannels: [                  // 订阅的血液状态频道
+       BC.system.projectPath
+     ],
+     manifest: {
+       description: '描述你的插件功能...',
+       reads: [BC.system.projectPath],
+       writes: []
+     }
+   };
+   ```
+3. **编写 React 视图组件 (`MyCustomView.tsx`)**：
+   直接在文件夹根目录下编写 React 组件：
+   ```typescript
+   import React from 'react';
+
+   export function MyCustomView({ state, updateBloodKey }: any) {
+     const projectPath = state[BC.system.projectPath] || '';
+     return (
+       <div style={{ padding: '12px', color: 'var(--text-main)' }}>
+         <h3>自定义插件面板</h3>
+         <p>当前项目：{projectPath}</p>
+       </div>
+     );
+   }
+   ```
+4. **实时热重载调试**：
+   在终端运行 `npm run dev`。Vite 拥有自动发现机制（`import.meta.glob`），它会自动扫描、注册并加载您的新插件。您可以在编辑器右上角的网格布局菜单中选择切换为您刚才新加的 `我的自定义插件`，编写 TSX 时界面会实时热重载更新。
+
+---
+
 ## 📅 待开发功能清单 (Roadmap & Backlog)
 
 项目接下来阶段计划开发以下功能，以进一步增强搜索、模板化和文档编辑体验：

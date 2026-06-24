@@ -365,6 +365,9 @@ ipcMain.handle('shell:runScript', async (_, scriptPath: string, stdinPayload: st
 // Resolve the absolute path of a service script inside an APP plugin folder
 // e.g. getServiceScriptPath('graph-view', 'lattice.py') => APP/graph-view/services/lattice.py
 ipcMain.handle('shell:getServiceScriptPath', async (_, pluginFolder: string, scriptName: string) => {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'APP', pluginFolder, 'services', scriptName);
+  }
   return path.join(app.getAppPath(), 'APP', pluginFolder, 'services', scriptName);
 });
 
@@ -537,7 +540,9 @@ ipcMain.handle('app:getDevDefault', () => {
   if (fs.existsSync(userProject)) {
     return userProject;
   }
-  return path.join(app.getAppPath(), 'template-project');
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'template-project')
+    : path.join(app.getAppPath(), 'template-project');
 });
 
 ipcMain.handle('app:getConfig', () => {
