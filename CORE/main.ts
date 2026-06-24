@@ -598,14 +598,33 @@ async function initUserData() {
 // ── PTY Terminal Manager (node-pty) ──────────────────────────────────────────
 // Uses a real PTY — same as VS Code, Hyper, Warp. Supports TUI apps (agy, vim, etc.)
 const ptyProcesses = new Map<string, pty.IPty>();
+const ptyListeners = new Map<string, pty.IDisposable>();
 
 ipcMain.handle('terminal:spawn', (event, id: string, cwd: string, cols: number, rows: number) => {
-  if (ptyProcesses.has(id)) return true;
+  let ptyProcess = ptyProcesses.get(id);
+
+  // Clean up any old listener bound to a previous (potentially destroyed) WebContents
+  const oldListener = ptyListeners.get(id);
+  if (oldListener) {
+    oldListener.dispose();
+    ptyListeners.delete(id);
+  }
+
+  if (ptyProcess) {
+    // Re-bind listener to the new active window's WebContents
+    const listener = ptyProcess.onData((data) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(`terminal:output:${id}`, data);
+      }
+    });
+    ptyListeners.set(id, listener);
+    return true;
+  }
 
   const shell = process.platform === 'win32' ? 'cmd.exe' : (process.env.SHELL || 'zsh');
 
   try {
-    const ptyProcess = pty.spawn(shell, [], {
+    ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
@@ -613,13 +632,23 @@ ipcMain.handle('terminal:spawn', (event, id: string, cwd: string, cols: number, 
       env: getSecureEnv() as Record<string, string>,
     });
 
-    ptyProcess.onData((data) => {
-      event.sender.send(`terminal:output:${id}`, data);
+    const listener = ptyProcess.onData((data) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(`terminal:output:${id}`, data);
+      }
     });
+    ptyListeners.set(id, listener);
 
     ptyProcess.onExit(() => {
       ptyProcesses.delete(id);
-      event.sender.send(`terminal:exit:${id}`);
+      const listenerToDispose = ptyListeners.get(id);
+      if (listenerToDispose) {
+        listenerToDispose.dispose();
+        ptyListeners.delete(id);
+      }
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(`terminal:exit:${id}`);
+      }
     });
 
     ptyProcesses.set(id, ptyProcess);
@@ -653,9 +682,13 @@ ipcMain.handle('terminal:kill', (_, id: string) => {
   if (ptyProcess) {
     ptyProcess.kill();
     ptyProcesses.delete(id);
-    return true;
   }
-  return false;
+  const listener = ptyListeners.get(id);
+  if (listener) {
+    listener.dispose();
+    ptyListeners.delete(id);
+  }
+  return true;
 });
 
 app.on('will-quit', () => {
