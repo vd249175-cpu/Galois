@@ -353,9 +353,19 @@ export function App() {
       // 3. Load layout state from layout.json in userData
       try {
         const savedLayout = await window.electronAPI.getLayout();
-        if (savedLayout) {
+        // Guard: only restore a layout that actually contains at least one area node.
+        // An empty/null layout (from a prior session where all panels were closed)
+        // would leave the user with a blank screen, so fall back to defaultLayout.
+        const hasAnyArea = (node: any): boolean => {
+          if (!node) return false;
+          if (node.type === 'area') return true;
+          return hasAnyArea(node.first) || hasAnyArea(node.second);
+        };
+        if (savedLayout && hasAnyArea(savedLayout)) {
           setLayout(savedLayout);
           console.log('[App] Layout loaded from layout.json in userData.');
+        } else if (savedLayout) {
+          console.warn('[App] Saved layout has no area nodes — falling back to defaultLayout.');
         }
       } catch (_) {}
     };
@@ -482,12 +492,32 @@ export function App() {
 
   // Initial layout tree
   const [layout, setLayout] = useState<AreaLayout>(defaultLayout);
+  const [isAllClosed, setIsAllClosed] = useState(false);
 
   const handleLayoutChange = (newLayout: AreaLayout) => {
     setLayout(newLayout);
     window.electronAPI.setLayout(newLayout).catch((err) => {
       console.error('[App] Failed to save layout:', err);
     });
+  };
+
+  // Listen for the "all panels closed" signal from LayoutEngine
+  useEffect(() => {
+    if (isPopped) return;
+    return Blood.subscribe((changedKeys) => {
+      if (changedKeys.has('layout.allClosed')) {
+        setIsAllClosed(true);
+      }
+    });
+  }, [isPopped]);
+
+  // Restore default layout and clear the closed state
+  const handleRestoreLayout = () => {
+    setIsAllClosed(false);
+    setLayout(defaultLayout);
+    // Clear all removeArea flags so the new areas aren't immediately hidden
+    Blood.updateKey('layout.allClosed', 0);
+    window.electronAPI.setLayout(defaultLayout).catch(() => {});
   };
 
   if (isPopped) {
@@ -532,7 +562,58 @@ export function App() {
         <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', flexGrow: 1, overflow: 'hidden' }}>
           <LeftActivityBar />
           <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
-            <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
+            {isAllClosed ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+                gap: '24px',
+                backgroundColor: 'var(--bg-main)',
+              }}>
+                <div style={{ fontSize: '52px', opacity: 0.18, lineHeight: 1 }}>⬜</div>
+                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', opacity: 0.7 }}>
+                    工作区已清空
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    所有面板已关闭，点击下方按钮恢复默认布局
+                  </div>
+                </div>
+                <button
+                  onClick={handleRestoreLayout}
+                  style={{
+                    padding: '10px 28px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--accent-color)',
+                    background: 'var(--highlight-color)',
+                    color: 'var(--accent-color)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    letterSpacing: '0.02em',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'var(--accent-color)';
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--bg-main)';
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = 'var(--highlight-color)';
+                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-color)';
+                  }}
+                >
+                  恢复默认布局
+                </button>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.5 }}>
+                  或在左侧活动栏点击图标打开新面板
+                </div>
+              </div>
+            ) : (
+              <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
+            )}
           </div>
           <RightSidebar onToggleSettings={handleToggleSettings} />
         </div>

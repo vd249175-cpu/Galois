@@ -33,8 +33,15 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
         } else if (channel.startsWith('layout.removeArea.')) {
           const areaId = channel.replace('layout.removeArea.', '');
           if (Blood.getValue(channel, false)) {
-            nextLayout = exciseNode(nextLayout, areaId) || nextLayout;
-            treeModified = true;
+            const after = exciseNode(nextLayout, areaId);
+            if (after === null) {
+              // Last panel removed — signal the recovery screen
+              Blood.updateKey('layout.allClosed', Date.now());
+              // Don't update nextLayout; App will handle the reset
+            } else {
+              nextLayout = after;
+              treeModified = true;
+            }
           }
         } else if (channel.startsWith('layout.splitArea.')) {
           const areaId = channel.replace('layout.splitArea.', '');
