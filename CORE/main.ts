@@ -61,7 +61,7 @@ function createMainWindow() {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
   mainWindow.on('closed', () => {
@@ -377,7 +377,7 @@ ipcMain.handle('window:openSecondary', async (_, { id, componentType, title }: {
   if (process.env.NODE_ENV === 'development') {
     win.loadURL(`http://localhost:5173/${queryParams}`);
   } else {
-    win.loadFile(path.join(__dirname, '../index.html'), { hash: queryParams });
+    win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: queryParams });
   }
 
   win.on('closed', () => {
