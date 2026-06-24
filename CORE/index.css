@@ -771,12 +771,12 @@ body {
 .settings-modal {
   width: 480px;
   max-width: 90vw;
-  background-color: rgba(250, 247, 242, 0.97); /* Bulging waterdrop thickness: opaque base */
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  background-color: var(--bg-modal);
+  border: 1.5px solid var(--border-modal);
   border-radius: 20px; /* Waterdrop bulging roundness */
   box-shadow: 
-    inset 2.5px 2.5px 0px rgba(255, 255, 255, 0.95),
-    inset -2.5px -2.5px 0px rgba(0, 0, 0, 0.05),
+    inset 2.5px 2.5px 0px var(--shadow-modal-inset-top),
+    inset -2.5px -2.5px 0px var(--shadow-modal-inset-bottom),
     0 24px 50px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
@@ -803,7 +803,7 @@ body {
   justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border-color);
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: var(--bg-modal-header);
 }
 
 .settings-modal-header h3 {
@@ -845,8 +845,8 @@ body {
   justify-content: space-between;
   padding: 8px 12px;
   border-radius: 6px;
-  background-color: rgba(255, 255, 255, 0.35);
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  background-color: var(--bg-shortcut-row);
+  border: 1px solid var(--border-color);
   transition: all 0.15s ease;
 }
 
@@ -928,12 +928,12 @@ body {
 }
 
 .pane-modal-content {
-  background-color: rgba(250, 247, 242, 0.97); /* Low transparency, matching settings layout format */
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  background-color: var(--bg-modal);
+  border: 1.5px solid var(--border-modal);
   border-radius: 20px; /* Bulging waterdrop roundness */
   box-shadow: 
-    inset 2.5px 2.5px 0px rgba(255, 255, 255, 0.95),
-    inset -2.5px -2.5px 0px rgba(0, 0, 0, 0.05),
+    inset 2.5px 2.5px 0px var(--shadow-modal-inset-top),
+    inset -2.5px -2.5px 0px var(--shadow-modal-inset-bottom),
     0 20px 45px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
@@ -960,13 +960,13 @@ body {
   border-radius: 10px;
   padding: 6px 12px;
   cursor: pointer;
-  background-color: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.65);
+  background-color: var(--bg-file-card);
+  border: 1px solid var(--border-file-card);
   transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
               box-shadow 0.2s ease, 
               border-color 0.15s ease,
               background-color 0.15s ease;
-  box-shadow: inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.85), inset -1px -1px 0px rgba(0, 0, 0, 0.03), 0 2px 4px rgba(0,0,0,0.03);
+  box-shadow: inset 1.5px 1.5px 0px var(--shadow-file-card-inset), inset -1px -1px 0px rgba(0, 0, 0, 0.03), 0 2px 4px rgba(0,0,0,0.03);
   overflow: hidden;
   flex: 1 1 auto; /* Grow to fill row spaces, shrink if needed */
   min-width: 80px; /* Minimum width threshold */
@@ -976,10 +976,10 @@ body {
 /* Bulging waterdrop lift effect on hover */
 .file-card-item:hover {
   transform: translateY(-2px) scale(1.03);
-  background-color: rgba(255, 255, 255, 0.88);
+  background-color: var(--bg-file-card-hover);
   border-color: var(--accent-color);
   box-shadow: 
-    inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.95),
+    inset 1.5px 1.5px 0px var(--shadow-file-card-inset-hover),
     0 8px 20px rgba(0, 0, 0, 0.06);
 }
 
@@ -1003,4 +1003,26 @@ body {
 .file-card-item .file-rename-btn:hover {
   background-color: var(--accent-color) !important;
   color: #ffffff !important;
+}
+
+/* Custom Window Titlebar CSS styling */
+.window-titlebar {
+  height: 30px;
+  background-color: var(--bg-header);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding-right: 12px;
+  user-select: none;
+  -webkit-app-region: drag;
+  z-index: 1000;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.window-titlebar-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
 }

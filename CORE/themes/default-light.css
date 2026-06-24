@@ -14,4 +14,19 @@
   --terminal-green: #2a3439;
   --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* Settings & Pane Modals Light Theme Variables */
+  --bg-modal: rgba(250, 247, 242, 0.97);
+  --border-modal: rgba(255, 255, 255, 0.9);
+  --shadow-modal-inset-top: rgba(255, 255, 255, 0.95);
+  --shadow-modal-inset-bottom: rgba(0, 0, 0, 0.05);
+  --bg-modal-header: rgba(255, 255, 255, 0.3);
+  --bg-shortcut-row: rgba(255, 255, 255, 0.35);
+
+  /* File Card Light Theme Variables */
+  --bg-file-card: rgba(255, 255, 255, 0.55);
+  --border-file-card: rgba(255, 255, 255, 0.65);
+  --shadow-file-card-inset: rgba(255, 255, 255, 0.85);
+  --bg-file-card-hover: rgba(255, 255, 255, 0.88);
+  --shadow-file-card-inset-hover: rgba(255, 255, 255, 0.95);
 }

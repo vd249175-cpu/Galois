@@ -38,6 +38,8 @@ function createMainWindow() {
     width: bounds.width || 1200,
     height: bounds.height || 800,
     title: 'DNOTE Workspace',
+    titleBarStyle: 'hidden',
+    backgroundColor: '#121212',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -379,6 +381,8 @@ ipcMain.handle('window:openSecondary', async (_, { id, componentType, title }: {
     width: 600,
     height: 400,
     title: title || 'Workspace Pane',
+    titleBarStyle: 'hidden',
+    backgroundColor: '#121212',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

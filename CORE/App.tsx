@@ -192,11 +192,31 @@ function LeftActivityBar() {
   );
 }
 
+function TitleBar({ title = 'DNOTE Workspace' }: { title?: string }) {
+  const isMac = typeof window !== 'undefined' && navigator.userAgent.includes('Mac');
+  return (
+    <div className="window-titlebar" style={{ paddingLeft: isMac ? '80px' : '12px' }}>
+      <span className="window-titlebar-title">{title}</span>
+    </div>
+  );
+}
+
 export function App() {
-  const searchParams = new URLSearchParams(window.location.search);
-  const isPopped = searchParams.get('popped') === 'true';
-  const poppedAreaId = searchParams.get('areaId') || '';
-  const poppedType = searchParams.get('type') || '';
+  const getQueryParam = (key: string): string => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.has(key)) return searchParams.get(key) || '';
+    const hash = window.location.hash;
+    const hashSearchIndex = hash.indexOf('?');
+    if (hashSearchIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.substring(hashSearchIndex));
+      return hashParams.get(key) || '';
+    }
+    return '';
+  };
+
+  const isPopped = getQueryParam('popped') === 'true';
+  const poppedAreaId = getQueryParam('areaId');
+  const poppedType = getQueryParam('type');
 
   // Load theme on startup for all windows (including popped-out windows)
   useEffect(() => {
@@ -451,9 +471,22 @@ export function App() {
   };
 
   if (isPopped) {
+    const poppedTitleMap: Record<string, string> = {
+      editor: '编辑器',
+      fileTree: '文件浏览器',
+      graphView: '标签拓扑图',
+      linkGraph: '关系图',
+      terminal: '终端控制台',
+      agent: '智能副驾驶'
+    };
+    const title = poppedTitleMap[poppedType] || '工作区窗格';
+
     return (
-      <div className="popped-window-root">
-        <AreaShell areaId={poppedAreaId} componentType={poppedType} isPopped={true} />
+      <div className="popped-window-root" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
+        <TitleBar title={title} />
+        <div style={{ flexGrow: 1, overflow: 'hidden' }}>
+          <AreaShell areaId={poppedAreaId} componentType={poppedType} isPopped={true} />
+        </div>
       </div>
     );
   }
@@ -474,12 +507,15 @@ export function App() {
         </defs>
       </svg>
 
-      <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', height: '100vh', overflow: 'hidden' }}>
-        <LeftActivityBar />
-        <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
-          <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
+        <TitleBar />
+        <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', flexGrow: 1, overflow: 'hidden' }}>
+          <LeftActivityBar />
+          <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
+            <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
+          </div>
+          <RightSidebar onToggleSettings={handleToggleSettings} />
         </div>
-        <RightSidebar onToggleSettings={handleToggleSettings} />
       </div>
 
       {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
