@@ -21,6 +21,66 @@ interface Link {
   target: string;
 }
 
+// Bypasses virtual nodes by connecting all of their neighbors to each other in a hierarchical direction
+function contractVirtualNodes(nodes: Node[], links: Link[]): { nodes: Node[], links: Link[] } {
+  const realNodes = nodes.filter(n => !n.isVirtual);
+  const virtualNodes = nodes.filter(n => n.isVirtual);
+
+  let currentLinks = [...links];
+
+  // Contract each virtual node by connecting its neighbors pairwise
+  virtualNodes.forEach(vn => {
+    // Find all nodes connected to this virtual node (source or target)
+    const connectedIds = currentLinks
+      .filter(l => l.source === vn.id || l.target === vn.id)
+      .map(l => l.source === vn.id ? l.target : l.source);
+
+    const uniqueNeighbors = Array.from(new Set(connectedIds));
+
+    // Connect all neighbors to each other in the hierarchical direction
+    for (let i = 0; i < uniqueNeighbors.length; i++) {
+      for (let j = i + 1; j < uniqueNeighbors.length; j++) {
+        const n1 = uniqueNeighbors[i];
+        const n2 = uniqueNeighbors[j];
+
+        if (n1 !== n2) {
+          const node1 = nodes.find(n => n.id === n1);
+          const node2 = nodes.find(n => n.id === n2);
+
+          if (node1 && node2) {
+            const lvl1 = node1.level || 0;
+            const lvl2 = node2.level || 0;
+
+            let src = n1;
+            let tgt = n2;
+
+            if (lvl1 > lvl2) {
+              src = n2;
+              tgt = n1;
+            } else if (lvl1 === lvl2) {
+              // Tie-breaker based on ID comparison to maintain a stable single direction
+              if (n1 > n2) {
+                src = n2;
+                tgt = n1;
+              }
+            }
+
+            const exists = currentLinks.some(l => l.source === src && l.target === tgt);
+            if (!exists) {
+              currentLinks.push({ source: src, target: tgt });
+            }
+          }
+        }
+      }
+    }
+
+    // Remove all links connected to/from this virtual node
+    currentLinks = currentLinks.filter(l => l.source !== vn.id && l.target !== vn.id);
+  });
+
+  return { nodes: realNodes, links: currentLinks };
+}
+
 /**
  * GraphViewComponent — Lattice Graph 插件注册对象
  *
@@ -107,8 +167,11 @@ function GraphView({
   const arrowSizeRef = useRef(arrowSize);
   const spacingRef = useRef(spacing);
 
-  // Toggle mode for hierarchical tag decomposition (级数拆解 / 隐式关联模式)
-  const [isHierarchicalMode, setIsHierarchicalMode] = useState(true);
+  // Toggle modes for graph visualization:
+  // 'hierarchical': 级数拆解模式 (show real & virtual nodes)
+  // 'contracted': 隐藏虚标签 (run hierarchical, but hide/contract virtual nodes)
+  // 'flat': 隐式包含模式 (no virtual nodes computed at all)
+  const [graphMode, setGraphMode] = useState<'hierarchical' | 'contracted' | 'flat'>('hierarchical');
 
   // Color Palette state
   const [palettes, setPalettes] = useState<Record<string, string[]>>({
@@ -226,7 +289,8 @@ function GraphView({
 
         // Call Python lattice.py — 传入 { nodes, showVirtual }，由 Python 侧做 FCA 虚节点计算
         const scriptPath = await (window as any).electronAPI.getServiceScriptPath('graph-view', 'lattice.py');
-        const latticePayload = JSON.stringify({ nodes: rawNodes, showVirtual: isHierarchicalMode });
+        const showVirtual = graphMode !== 'flat';
+        const latticePayload = JSON.stringify({ nodes: rawNodes, showVirtual });
         const result = await (window as any).electronAPI.runScript(scriptPath, latticePayload, projectPath);
 
         if (result.stderr && result.stderr.trim()) {
@@ -304,10 +368,30 @@ function GraphView({
           };
         });
 
+        let displayNodes = physicsNodes;
+        let displayEdges = calculatedEdges;
+ 
+        if (graphMode === 'contracted') {
+          const contracted = contractVirtualNodes(physicsNodes, calculatedEdges);
+          displayNodes = contracted.nodes;
+          displayEdges = contracted.links;
+          
+          // Re-calculate degrees for displayNodes based on displayEdges
+          const contractedDegrees: Record<string, number> = {};
+          displayNodes.forEach(n => { contractedDegrees[n.id] = 0; });
+          displayEdges.forEach(edge => {
+            if (contractedDegrees[edge.source] !== undefined) contractedDegrees[edge.source]++;
+            if (contractedDegrees[edge.target] !== undefined) contractedDegrees[edge.target]++;
+          });
+          displayNodes = displayNodes.map(n => ({
+            ...n,
+            degree: contractedDegrees[n.id] || 0
+          }));
+        }
 
-        simRef.current = { nodes: physicsNodes, links: calculatedEdges };
-        setNodes(physicsNodes);
-        setLinks(calculatedEdges);
+        simRef.current = { nodes: displayNodes, links: displayEdges };
+        setNodes(displayNodes);
+        setLinks(displayEdges);
         wakeSimulation();
       } catch (err) {
         console.error('Lattice builder error:', err);
@@ -315,7 +399,7 @@ function GraphView({
     };
 
     buildLatticeGraph();
-  }, [projectPath, state[BC.system.resolvedTags], fileSavedEvent, isHierarchicalMode]);
+  }, [projectPath, state[BC.system.resolvedTags], fileSavedEvent, graphMode]);
 
   // 2. Physics Simulation Loop - Free 2D Force-Directed Layout
   useEffect(() => {
@@ -549,8 +633,8 @@ function GraphView({
         setArrowSize={setArrowSize}
         spacing={spacing}
         setSpacing={setSpacing}
-        isHierarchicalMode={isHierarchicalMode}
-        setIsHierarchicalMode={setIsHierarchicalMode}
+        graphMode={graphMode}
+        setGraphMode={setGraphMode}
       />
 
 

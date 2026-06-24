@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BC } from '../../CORE/BloodChannels';
 
 export const SettingsComponent = {
   typeId: 'settings',
@@ -6,19 +7,22 @@ export const SettingsComponent = {
   iconName: 'settings',
   component: SettingsView,
   bloodChannels: [
-    'system.focusedAreaId'
+    BC.system.focusedAreaId,
+    BC.system.projectPath,
   ],
   manifest: {
     description: '快捷键与系统偏好设置（当前由 SettingsModal 承载，此插件为占位）',
-    reads: ['system.focusedAreaId'],
+    reads: [BC.system.focusedAreaId, BC.system.projectPath],
     writes: ['system.maxIterations'],   // 将来修改迭代次数会写入此频道
     dependsOn: [],
   },
 };
 
 function SettingsView({
+  state,
   shortcutAPI,
 }: {
+  state: Record<string, any>;
   shortcutAPI: {
     getAllActions: () => any[];
     getShortcutForAction: (actionId: string) => string | undefined;
@@ -243,8 +247,8 @@ function SettingsView({
           {activeCategory === 'system' && (
             <div style={{ padding: '16px' }}>
               <h2>系统偏好设置</h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '12px' }}>
-                工作区路径：/Users/apexwave/Desktop/DNOTE
+              <p style={{ color: 'var(--text-main)', fontSize: '13px', marginTop: '12px' }}>
+                工作区路径：<code style={{ backgroundColor: 'var(--bg-input)', padding: '2px 6px', borderRadius: '4px', fontFamily: 'var(--font-mono)' }}>{state[BC.system.projectPath] || '未打开笔记本'}</code>
               </p>
             </div>
           )}

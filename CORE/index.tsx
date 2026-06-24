@@ -14,11 +14,8 @@ if (typeof window !== 'undefined') {
       error: event.error ? event.error.stack : null,
       timestamp: new Date().toISOString()
     };
-    if ((window as any).electronAPI?.writeFile) {
-      (window as any).electronAPI.writeFile(
-        '/Users/apexwave/Desktop/DNOTE/renderer_error.log',
-        JSON.stringify(errorMsg, null, 2)
-      ).catch(console.error);
+    if (window.electronAPI?.logRendererError) {
+      window.electronAPI.logRendererError(errorMsg).catch(console.error);
     }
   });
 
@@ -29,11 +26,8 @@ if (typeof window !== 'undefined') {
       error: event.reason ? event.reason.stack : null,
       timestamp: new Date().toISOString()
     };
-    if ((window as any).electronAPI?.writeFile) {
-      (window as any).electronAPI.writeFile(
-        '/Users/apexwave/Desktop/DNOTE/renderer_error.log',
-        JSON.stringify(errorMsg, null, 2)
-      ).catch(console.error);
+    if (window.electronAPI?.logRendererError) {
+      window.electronAPI.logRendererError(errorMsg).catch(console.error);
     }
   });
 }

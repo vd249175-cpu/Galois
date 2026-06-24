@@ -282,6 +282,79 @@ function FileTreeView({
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteIndex, setAutocompleteIndex] = useState(0);
 
+  const [showHistoryMenu, setShowHistoryMenu] = useState(false);
+  const [historyList, setHistoryList] = useState<string[]>([]);
+  const [demoPath, setDemoPath] = useState<string>('');
+
+  // Load app path dynamically at mount to determine the absolute demo project path
+  useEffect(() => {
+    const fetchPaths = async () => {
+      try {
+        const appPath = await window.electronAPI.getAppPath();
+        if (appPath) {
+          const pathWithSlash = appPath.endsWith('/') ? appPath : `${appPath}/`;
+          setDemoPath(`${pathWithSlash}template-project`);
+        }
+      } catch (err) {
+        console.error('Failed to get app path:', err);
+      }
+    };
+    fetchPaths();
+  }, []);
+
+  // Load project history list from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('dnote_project_history');
+    let parsed: string[] = [];
+    if (stored) {
+      try {
+        parsed = JSON.parse(stored);
+      } catch (_) {}
+    }
+    if (!Array.isArray(parsed)) {
+      parsed = [];
+    }
+    setHistoryList(parsed);
+  }, []);
+
+  // Save projectPath to history and update dnote_last_project when it changes
+  useEffect(() => {
+    if (!projectPath) return;
+    localStorage.setItem('dnote_last_project', projectPath);
+    setHistoryList((prev) => {
+      const updated = [projectPath, ...prev.filter((p) => p !== projectPath)];
+      const capped = updated.slice(0, 10);
+      localStorage.setItem('dnote_project_history', JSON.stringify(capped));
+      return capped;
+    });
+  }, [projectPath]);
+
+  // Click-outside listener for history projects dropdown menu
+  useEffect(() => {
+    if (!showHistoryMenu) return;
+    const handleGlobalClick = (e: MouseEvent) => {
+      const menu = document.getElementById('history-projects-menu');
+      const btn = document.getElementById('history-projects-btn');
+      if (menu && !menu.contains(e.target as Node) && btn && !btn.contains(e.target as Node)) {
+        setShowHistoryMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleGlobalClick);
+    return () => document.removeEventListener('mousedown', handleGlobalClick);
+  }, [showHistoryMenu]);
+
+  // Displayed history project list: ensure demoPath is always the last option and never duplicated
+  const displayedHistory = useMemo(() => {
+    const filtered = historyList.filter(p => p !== demoPath && p.trim() !== '');
+    return [...filtered, demoPath];
+  }, [historyList, demoPath]);
+
+  const handleSelectHistoryProject = (path: string) => {
+    updateBloodKey(BC.system.projectPath, path);
+    setSelectedPath('');
+    setShowHistoryMenu(false);
+  };
+
   const allProjectTags = useMemo(() => {
     const resolved = state[BC.system.resolvedTags] || {};
     const staticTags = state[BC.system.staticTags] || {};
@@ -706,7 +779,7 @@ function FileTreeView({
 
   if (!projectPath) {
     return (
-      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
+      <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', overflowY: 'auto' }}>
         <svg width="36" height="36" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
           <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
         </svg>
@@ -714,9 +787,61 @@ function FileTreeView({
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
           打开一个笔记本目录以开始管理标签格子笔记。
         </p>
-        <button className="right-sidebar-btn" onClick={handleOpenFolder} style={{ width: 'auto', height: '30px', padding: '0 16px', fontSize: '11px', fontWeight: 600 }}>
+        <button className="right-sidebar-btn" onClick={handleOpenFolder} style={{ width: 'auto', height: '30px', padding: '0 16px', fontSize: '11px', fontWeight: 600, marginBottom: '20px' }}>
           打开文件夹
         </button>
+
+        {displayedHistory.length > 0 && (
+          <div style={{ width: '100%', maxWidth: '240px', marginTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '6px' }}>
+            <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px', textAlign: 'left', marginBottom: '4px' }}>历史项目</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+              {displayedHistory.map((item) => {
+                const name = item.split('/').pop() || item;
+                const isDemo = item === demoPath;
+                return (
+                  <button
+                    key={item}
+                    onClick={() => handleSelectHistoryProject(item)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: '1.2px solid rgba(0, 0, 0, 0.08)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.45)',
+                      color: 'var(--text-main)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--highlight-color)';
+                      e.currentTarget.style.borderColor = 'var(--accent-color)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.45)';
+                      e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.08)';
+                    }}
+                    title={item}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                      {name}
+                    </span>
+                    {isDemo && (
+                      <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(255, 59, 48, 0.1)', color: 'var(--accent-color)' }}>
+                        演示
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -740,8 +865,95 @@ function FileTreeView({
               <path d="M4 10.5h8" />
             </svg>
           </button>
+          <button id="history-projects-btn" className="area-btn" onClick={() => setShowHistoryMenu(!showHistoryMenu)} title="历史项目" style={{ position: 'relative' }}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="8" cy="8" r="7" />
+              <path d="M8 3v5h3" />
+            </svg>
+          </button>
         </div>
       </div>
+
+      {showHistoryMenu && (
+        <div
+          id="history-projects-menu"
+          style={{
+            position: 'absolute',
+            top: '44px',
+            right: '10px',
+            zIndex: 1100,
+            width: '240px',
+            maxHeight: '260px',
+            overflowY: 'auto',
+            backgroundColor: 'var(--bg-main)',
+            border: '1.2px solid var(--border-color)',
+            borderRadius: '12px',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+            backdropFilter: 'blur(20px) saturate(150%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(150%)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '6px',
+            gap: '2px',
+          }}
+        >
+          <div style={{ padding: '6px 8px', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', marginBottom: '4px', letterSpacing: '0.5px' }}>
+            历史笔记本
+          </div>
+          {displayedHistory.map((item) => {
+            const name = item.split('/').pop() || item;
+            const isCurrent = item === projectPath;
+            const isDemo = item === demoPath;
+            return (
+              <div
+                key={item}
+                onClick={() => handleSelectHistoryProject(item)}
+                style={{
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  backgroundColor: isCurrent ? 'var(--highlight-color)' : 'transparent',
+                  color: isCurrent ? 'var(--accent-color)' : 'var(--text-main)',
+                  transition: 'background-color 0.12s',
+                  fontWeight: isCurrent ? 700 : 500,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isCurrent) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.04)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCurrent) e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title={item}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', marginRight: '6px' }}>
+                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {name}
+                  </span>
+                  <span style={{ fontSize: '8.5px', opacity: 0.5, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                    {item}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                  {isCurrent && (
+                    <span style={{ fontSize: '8px', padding: '1px 3px', borderRadius: '2px', backgroundColor: 'var(--accent-color)', color: '#fff' }}>
+                      当前
+                    </span>
+                  )}
+                  {isDemo && (
+                    <span style={{ fontSize: '8px', padding: '1px 3px', borderRadius: '2px', backgroundColor: 'rgba(255, 59, 48, 0.1)', color: 'var(--accent-color)' }}>
+                      演示
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div style={{ marginBottom: '10px', position: 'relative' }}>
         <input

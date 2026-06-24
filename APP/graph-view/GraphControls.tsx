@@ -14,8 +14,8 @@ interface GraphControlsProps {
   setArrowSize: (val: number) => void;
   spacing: number;
   setSpacing: (val: number) => void;
-  isHierarchicalMode: boolean;
-  setIsHierarchicalMode: (val: boolean) => void;
+  graphMode: 'hierarchical' | 'contracted' | 'flat';
+  setGraphMode: (val: 'hierarchical' | 'contracted' | 'flat') => void;
 }
 
 export function GraphControls({
@@ -25,8 +25,8 @@ export function GraphControls({
   setArrowSize,
   spacing,
   setSpacing,
-  isHierarchicalMode,
-  setIsHierarchicalMode,
+  graphMode,
+  setGraphMode,
 }: GraphControlsProps) {
   const [isCollapsed, setIsCollapsed] = useState(true);
 
@@ -160,36 +160,41 @@ export function GraphControls({
             />
           </div>
 
-          {/* Hierarchical Decomposition Mode Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
-            <span style={{ color: 'var(--text-main)' }}>级数拆解模式</span>
-            <button
-              onClick={() => setIsHierarchicalMode(!isHierarchicalMode)}
-              style={{
-                background: isHierarchicalMode ? 'var(--accent-color)' : 'rgba(0,0,0,0.08)',
-                border: 'none',
-                borderRadius: '12px',
-                width: '32px',
-                height: '18px',
-                position: 'relative',
-                cursor: 'pointer',
-                transition: 'background 0.2s',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
+          {/* Display Mode Slider (拖动切换) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+              <span>显示模式</span>
+              <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>
+                {graphMode === 'hierarchical' && '级数拆解'}
+                {graphMode === 'contracted' && '隐藏虚标签'}
+                {graphMode === 'flat' && '隐式包含'}
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="2"
+              step="1"
+              value={graphMode === 'hierarchical' ? 0 : graphMode === 'contracted' ? 1 : 2}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (val === 0) setGraphMode('hierarchical');
+                else if (val === 1) setGraphMode('contracted');
+                else if (val === 2) setGraphMode('flat');
               }}
-            >
-              <div style={{
-                width: '14px',
-                height: '14px',
-                borderRadius: '50%',
-                backgroundColor: '#ffffff',
-                position: 'absolute',
-                left: isHierarchicalMode ? '16px' : '2px',
-                transition: 'left 0.2s',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-              }} />
-            </button>
+              style={{
+                width: '100%',
+                accentColor: 'var(--accent-color)',
+                height: '3px',
+                cursor: 'pointer',
+              }}
+            />
+            {/* Ticks Label */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              <span>级数拆解</span>
+              <span>隐藏虚标签</span>
+              <span>隐式包含</span>
+            </div>
           </div>
         </div>
       )}

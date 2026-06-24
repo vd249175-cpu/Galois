@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppPath: () =>
     ipcRenderer.invoke('app:getAppPath'),
 
+  logRendererError: (errorMsg: any) =>
+    ipcRenderer.invoke('app:logRendererError', errorMsg),
+
   // ── Window management ─────────────────────────────────────────────────────
   openSecondaryWindow: (id: string, componentType: string, title: string) =>
     ipcRenderer.invoke('window:openSecondary', { id, componentType, title }),

@@ -79,6 +79,13 @@ function AgentView({
   const [isProcessing, setIsProcessing] = useState(false);
   const [streamText, setStreamText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (inputText === '' && textareaRef.current) {
+      textareaRef.current.style.height = '32px';
+    }
+  }, [inputText]);
 
   // Initialize LLM Settings and Conversations from localStorage
   useEffect(() => {
@@ -872,12 +879,26 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
           borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
           backgroundColor: 'var(--bg-header, rgba(0, 0, 0, 0.15))',
           gap: '8px',
+          alignItems: 'flex-end',
         }}
       >
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
+          onChange={(e) => {
+            setInputText(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = `${Math.min(120, e.target.scrollHeight)}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (inputText.trim() && !isProcessing && currentFile) {
+                const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+                handleSend(fakeEvent);
+              }
+            }
+          }}
           placeholder={currentFile ? "发送指令来重构当前打开的笔记..." : "请先在左侧树双击打开一个笔记文件..."}
           disabled={isProcessing || !currentFile}
           style={{
@@ -889,6 +910,12 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             padding: '6px 12px',
             fontSize: '12px',
             outline: 'none',
+            resize: 'none',
+            height: '32px',
+            minHeight: '32px',
+            maxHeight: '120px',
+            fontFamily: 'inherit',
+            lineHeight: '1.4',
           }}
         />
         <button

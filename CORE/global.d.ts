@@ -14,6 +14,7 @@ export interface ElectronAPI {
   runScript: (scriptPath: string, stdin: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
   getServiceScriptPath: (pluginFolder: string, scriptName: string) => Promise<string>;
   getAppPath: () => Promise<string>;
+  logRendererError: (errorMsg: any) => Promise<boolean>;
 
   openSecondaryWindow: (id: string, componentType: string, title: string) => Promise<void>;
   closeSecondaryWindow: (id: string) => Promise<void>;

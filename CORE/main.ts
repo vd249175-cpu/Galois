@@ -520,6 +520,17 @@ ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
 
 ipcMain.handle('app:getAppPath', () => app.getAppPath());
 
+ipcMain.handle('app:logRendererError', (_, errorMsg: any) => {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'renderer_error.log');
+    fs.appendFileSync(logPath, JSON.stringify(errorMsg) + '\n', 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Failed to log renderer error:', err);
+    return false;
+  }
+});
+
 ipcMain.handle('app:getDevDefault', () => {
   const docsDir = app.getPath('documents');
   const userProject = path.join(docsDir, 'DNOTE Projects', 'Getting Started');
