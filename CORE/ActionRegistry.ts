@@ -58,6 +58,11 @@ class ActionRegistryClass {
     }
   }
 
+  public unregister(actionId: string) {
+    this.removeShortcutForAction(actionId);
+    this.registry.delete(actionId);
+  }
+
   public registerShortcut(combo: string, actionId: string) {
     const action = this.registry.get(actionId);
     if (!action) {

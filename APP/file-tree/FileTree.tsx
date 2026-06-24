@@ -4,6 +4,7 @@ import { useProjectLifecycle } from './useProjectLifecycle';
 import { fileTreeActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 import { updateYamlFrontmatterIcon } from '../utils';
+import { Blood } from '../../CORE/Blood';
 
 interface FileInfo {
   name: string;
@@ -664,13 +665,25 @@ function FileTreeView({
 
   const handleFileClick = (file: FileInfo) => {
     setSelectedPath(file.path);
-    const targetEditorId =
-      state[BC.system.lastFocusedEditorId] || (state[BC.system.activeEditors] || [])[0];
-    if (targetEditorId) {
-      updateBloodKey(BC.events.openFile(targetEditorId), file.path);
-    } else {
-      updateBloodKey(BC.events.openFile('global'), file.path);
+    // Query Blood synchronously to bypass React state synchronization latency
+    const lastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
+    const activeEds = Blood.getValue<string[]>(BC.system.activeEditors, []);
+    
+    let targetEditorId = lastFocused || activeEds[0];
+    if (!targetEditorId) {
+      const allState = Blood.getRawState() || {};
+      const prefix = 'system.areaComponentTypes.';
+      for (const [key, value] of Object.entries(allState)) {
+        if (key.startsWith(prefix) && value === 'editor') {
+          targetEditorId = key.substring(prefix.length);
+          break;
+        }
+      }
     }
+    if (!targetEditorId) targetEditorId = 'editor-root';
+    
+    console.log('[FileTree] Clicked file:', file.path, 'lastFocused:', lastFocused, 'activeEds:', activeEds, 'targetEditorId:', targetEditorId);
+    updateBloodKey(BC.events.openFile(targetEditorId), file.path);
   };
 
   const handleDeleteFile = async (e: React.MouseEvent, file: FileInfo) => {

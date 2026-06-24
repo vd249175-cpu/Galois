@@ -137,6 +137,8 @@ function EditorView({
   const projectPath = state[BC.system.projectPath] || '';
   const openedFile = state[BC.events.openFile(areaId)] || '';
   const isFocused = state[BC.system.focusedAreaId] === areaId;
+  const configPath = projectPath ? `${projectPath}/command/commands.json` : '';
+  const commandsSavedEvent = state[BC.events.fileSaved(configPath)] || 0;
 
   const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc?: string; content?: string; defaultShortcut?: string; shortcut?: string; script?: string }>>([]);
 
@@ -162,7 +164,7 @@ function EditorView({
       }
     };
     loadProjectCommands();
-  }, [projectPath]);
+  }, [projectPath, commandsSavedEvent]);
 
   // ── Keyboard Shortcuts & Prompt Modal States ─────────────────────────────
   const [editorShortcuts, setEditorShortcuts] = useState<Record<string, string>>(() => {
@@ -363,10 +365,10 @@ function EditorView({
     return () => {
       // Cleanup registered shortcuts for custom and project actions on re-runs or unmount
       customCommands.forEach((cmd) => {
-        ActionRegistry.removeShortcutForAction(cmd.id);
+        ActionRegistry.unregister(cmd.id);
       });
       projectCommands.forEach((cmd) => {
-        ActionRegistry.removeShortcutForAction(cmd.id);
+        ActionRegistry.unregister(cmd.id);
       });
     };
   }, [customCommands, projectCommands, editorShortcuts]);
@@ -1237,19 +1239,22 @@ function EditorView({
   // ── LinkNavigator ─────────────────────────────────────────────────────────
   const { handleLinkClick } = useLinkNavigator({ projectPath, areaId, updateBloodKey });
 
-  // ── 1. Register editor instance ───────────────────────────────────────────
   useEffect(() => {
-    const editors = state[BC.system.activeEditors] || [];
+    const editors = Blood.getValue<string[]>(BC.system.activeEditors, []);
     if (!editors.includes(areaId)) {
       updateBloodKey(BC.system.activeEditors, [...editors, areaId]);
     }
-    if (!state[BC.system.lastFocusedEditorId]) {
+    const lastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
+    if (!lastFocused) {
       updateBloodKey(BC.system.lastFocusedEditorId, areaId);
     }
     return () => {
-      const remaining = (state[BC.system.activeEditors] || []).filter((id: string) => id !== areaId);
+      const currentEditors = Blood.getValue<string[]>(BC.system.activeEditors, []);
+      const remaining = currentEditors.filter((id) => id !== areaId);
       updateBloodKey(BC.system.activeEditors, remaining);
-      if (state[BC.system.lastFocusedEditorId] === areaId) {
+      
+      const currentLastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
+      if (currentLastFocused === areaId) {
         updateBloodKey(BC.system.lastFocusedEditorId, remaining[0] || null);
       }
     };
@@ -1307,6 +1312,7 @@ function EditorView({
   const fileSavedEvent = state[BC.events.fileSaved(openedFile)] || 0;
 
   useEffect(() => {
+    console.log('[Editor] File loading useEffect triggered. openedFile =', openedFile, 'areaId =', areaId);
     if (!openedFile) {
       setContent('');
       setCurrentFile('');
@@ -1663,6 +1669,7 @@ function EditorView({
 
     if (matchedType) {
       e.preventDefault();
+      e.stopPropagation();
       if (matchedType.startsWith('custom.') || matchedType.startsWith('project.')) {
         // Trigger custom/project command immediately via Blood signal
         Blood.updateKey(`actions.${matchedType}.${areaId}`, Date.now());

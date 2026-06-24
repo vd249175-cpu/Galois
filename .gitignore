@@ -5,9 +5,17 @@ node_modules/
 dist/
 dist-electron/
 .build/
-dist-electron/
 
 # OS files
 .DS_Store
 Thumbs.db
 *.log
+
+# IDE & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary/Process files
+*.pid

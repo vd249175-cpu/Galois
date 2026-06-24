@@ -31,8 +31,11 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
             treeModified = true;
           }
         } else if (channel.startsWith('layout.removeArea.')) {
-          // React state handles layout collapse natively, we just trigger a render update
-          treeModified = true;
+          const areaId = channel.replace('layout.removeArea.', '');
+          if (Blood.getValue(channel, false)) {
+            nextLayout = exciseNode(nextLayout, areaId) || nextLayout;
+            treeModified = true;
+          }
         } else if (channel.startsWith('layout.splitArea.')) {
           const areaId = channel.replace('layout.splitArea.', '');
           const dirStr = Blood.getValue(channel, '');

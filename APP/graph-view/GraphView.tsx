@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { GraphControls } from './GraphControls';
 import { graphViewActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { Blood } from '../../CORE/Blood';
 
 interface Node {
   id: string;
@@ -150,6 +151,11 @@ function GraphView({
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Click vs drag position tracking
+  const nodeDragStartPos = useRef<{ x: number; y: number } | null>(null);
+  const svgClickStartPos = useRef<{ x: number; y: number } | null>(null);
 
   // SVG Pan and Zoom states
   const [pan, setPan] = useState({ x: 300, y: 250 });
@@ -527,6 +533,7 @@ function GraphView({
     if (dragNodeId.current) return;
     isPanning.current = true;
     startPan.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    svgClickStartPos.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleSVGMouseMove = (e: React.MouseEvent) => {
@@ -551,14 +558,37 @@ function GraphView({
     }
   };
 
-  const handleSVGMouseUp = () => {
+  const handleSVGMouseUp = (e?: React.MouseEvent) => {
+    const wasPanning = isPanning.current;
     isPanning.current = false;
-    dragNodeId.current = null;
+    
+    if (dragNodeId.current) {
+      if (e && nodeDragStartPos.current) {
+        const dx = e.clientX - nodeDragStartPos.current.x;
+        const dy = e.clientY - nodeDragStartPos.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 5) {
+          setSelectedNodeId(dragNodeId.current);
+        }
+      }
+      dragNodeId.current = null;
+      return;
+    }
+
+    if (wasPanning && e && svgClickStartPos.current) {
+      const dx = e.clientX - svgClickStartPos.current.x;
+      const dy = e.clientY - svgClickStartPos.current.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 5) {
+        setSelectedNodeId(null);
+      }
+    }
   };
 
   const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     dragNodeId.current = nodeId;
+    nodeDragStartPos.current = { x: e.clientX, y: e.clientY };
     const node = simRef.current.nodes.find((n) => n.id === nodeId);
     if (node) {
       node.vx = 0;
@@ -576,14 +606,23 @@ function GraphView({
       const tagName = nodeId.substring(4);
       targetPath = `${projectPath}/${tagName}.md`;
     }
-    const targetEditorId = state[BC.system.lastFocusedEditorId]
-      || (state[BC.system.activeEditors] || [])[0];
-
-    if (targetEditorId) {
-      updateBloodKey(BC.events.openFile(targetEditorId), targetPath);
-    } else {
-      updateBloodKey(BC.events.openFile('global'), targetPath);
+    
+    const lastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
+    const activeEds = Blood.getValue<string[]>(BC.system.activeEditors, []);
+    let targetEditorId = lastFocused || activeEds[0];
+    if (!targetEditorId) {
+      const allState = Blood.getRawState() || {};
+      const prefix = 'system.areaComponentTypes.';
+      for (const [key, value] of Object.entries(allState)) {
+        if (key.startsWith(prefix) && value === 'editor') {
+          targetEditorId = key.substring(prefix.length);
+          break;
+        }
+      }
     }
+    if (!targetEditorId) targetEditorId = 'editor-root';
+
+    updateBloodKey(BC.events.openFile(targetEditorId), targetPath);
   };
 
   const handleZoom = (factor: number) => {
@@ -682,15 +721,16 @@ function GraphView({
             const target = nodes.find((n) => n.id === link.target);
             if (!source || !target) return null;
 
-            const isRelated = hoveredNode === link.source || hoveredNode === link.target;
+            const activeFocusNode = hoveredNode || selectedNodeId;
+            const isRelated = activeFocusNode === link.source || activeFocusNode === link.target;
             
             // Calculate proper directional line endpoints with arrow markers
+            const isTargetFocused = activeFocusNode === link.target;
             const dx = target.x - source.x;
             const dy = target.y - source.y;
             const len = Math.sqrt(dx * dx + dy * dy) || 1;
             
             // Anchor arrow tip exactly to target node boundary based on target node type and size
-            const isTargetHovered = hoveredNode === link.target;
             let targetRadius = 6;
             if (target.isVirtual) {
               const dTarget = target.degree || 0;
@@ -710,7 +750,7 @@ function GraphView({
             } else {
               const dTarget = target.degree || 0;
               const rTarget = 6 + 10 * (dTarget / (dTarget + 3.0));
-              targetRadius = isTargetHovered ? rTarget + 3.5 : rTarget + 1.8;
+              targetRadius = isTargetFocused ? rTarget + 3.5 : rTarget + 1.8;
             }
 
             const x2 = target.x - (dx / len) * targetRadius;
@@ -732,7 +772,7 @@ function GraphView({
                 y2={y2}
                 stroke={linkColor}
                 strokeWidth={isRelated ? 1.8 : 1.1}
-                strokeOpacity={isRelated ? 0.8 : (hoveredNode ? 0.12 : 0.35)}
+                strokeOpacity={isRelated ? 0.8 : (activeFocusNode ? 0.12 : 0.35)}
                 markerEnd={`url(#${markerId})`}
                 style={{ transition: 'stroke 0.15s, stroke-width 0.15s, stroke-opacity 0.15s' }}
               />
@@ -742,8 +782,12 @@ function GraphView({
           {/* Render Lattice Nodes */}
           {nodes.map((node) => {
             const isHovered = hoveredNode === node.id;
-            const isDimmed = hoveredNode !== null && !isHovered && 
-              !links.some((l) => (l.source === node.id && l.target === hoveredNode) || (l.target === node.id && l.source === hoveredNode));
+            const isSelected = selectedNodeId === node.id;
+            const isHighlight = isHovered || isSelected;
+
+            const activeFocusNode = hoveredNode || selectedNodeId;
+            const isDimmed = activeFocusNode !== null && !isHovered && !isSelected && 
+              !links.some((l) => (l.source === node.id && l.target === activeFocusNode) || (l.target === node.id && l.source === activeFocusNode));
 
             return (
               <g
@@ -760,12 +804,20 @@ function GraphView({
                   const nodeColor = getLevelColor(node.level || 0);
 
                   if (node.isVirtual) {
+                    const displayLabel = (() => {
+                      const tags = node.tags || [];
+                      if (tags.length <= 3) {
+                        return '#' + tags.join('#');
+                      }
+                      return '#' + tags.slice(0, 2).join('#') + '... [' + tags.length + ']';
+                    })();
                     const height = 14 + 8 * (d / (d + 3.0));
                     const fontSize = 8 + 3 * (d / (d + 3.0));
-                    const width = getPillWidth(node.label, fontSize);
+                    const width = getPillWidth(displayLabel, fontSize);
 
                     return (
                       <>
+                        <title>{(node.tags || []).map(t => '#' + t).join(' ')}</title>
                         {/* Glow ring */}
                         <rect
                           x={-width / 2 - 4}
@@ -774,7 +826,7 @@ function GraphView({
                           height={height + 8}
                           rx={6}
                           fill={nodeColor}
-                          opacity={isHovered ? 0.22 : 0.04}
+                          opacity={isHighlight ? 0.22 : 0.04}
                           style={{ transition: 'opacity 0.15s' }}
                         />
                         {/* Tag Pill */}
@@ -785,10 +837,10 @@ function GraphView({
                           height={height}
                           rx={5}
                           fill={nodeColor}
-                          fillOpacity={isHovered ? 0.22 : 0.08}
+                          fillOpacity={isHighlight ? 0.22 : 0.08}
                           stroke={nodeColor}
-                          strokeWidth={isHovered ? 1.6 : 1.1}
-                          strokeDasharray={isHovered ? "none" : "3,2"}
+                          strokeWidth={isHighlight ? 1.6 : 1.1}
+                          strokeDasharray={isSelected ? "none" : (isHovered ? "none" : "3,2")}
                           style={{ transition: 'fill-opacity 0.15s, stroke-width 0.15s' }}
                         />
                         {/* Node Label (Inside) */}
@@ -804,16 +856,16 @@ function GraphView({
                               transition: 'fill 0.15s, font-size 0.15s',
                             }}
                           >
-                            {node.label}
+                            {displayLabel}
                           </text>
                         </g>
                       </>
                     );
                   } else {
                     const radius = 6 + 10 * (d / (d + 3.0));
-                    const rCurrent = isHovered ? radius + 2.5 : radius;
+                    const rCurrent = isHighlight ? radius + 2.5 : radius;
                     const textY = rCurrent + 11;
-                    const textFS = isHovered ? 9.5 : 8.5;
+                    const textFS = isHighlight ? 9.5 : 8.5;
 
                     return (
                       <>
@@ -821,22 +873,22 @@ function GraphView({
                         <circle
                           r={rCurrent + 7}
                           fill={nodeColor}
-                          opacity={isHovered ? 0.25 : 0.06}
+                          opacity={isHighlight ? 0.25 : 0.06}
                           style={{ transition: 'r 0.15s, opacity 0.15s' }}
                         />
                         {/* Node Center Dot */}
                         <circle
                           r={rCurrent}
-                          fill={isHovered ? nodeColor : 'var(--bg-main)'}
+                          fill={isHighlight ? nodeColor : 'var(--bg-main)'}
                           stroke={nodeColor}
-                          strokeWidth={isHovered ? 2.5 : 1.8}
+                          strokeWidth={isHighlight ? 2.5 : 1.8}
                           style={{ transition: 'fill 0.15s, stroke 0.15s, r 0.15s' }}
                         />
                         {/* Node Title Label (Below) */}
                         <g transform={`translate(0, ${textY})`} style={{ pointerEvents: 'none' }}>
                           <text
                             textAnchor="middle"
-                            fill={isHovered ? nodeColor : 'var(--text-main)'}
+                            fill={isHighlight ? nodeColor : 'var(--text-main)'}
                             style={{
                               fontSize: `${textFS}px`,
                               fontWeight: 600,
@@ -858,6 +910,192 @@ function GraphView({
           })}
         </g>
       </svg>
+
+      {/* Styled slideUp keyframes dynamically injected */}
+      <style>{`
+        @keyframes slideUp {
+          from {
+            transform: translateY(16px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
+
+      {/* Selected Node Details Drawer Panel */}
+      {selectedNodeId && (() => {
+        const node = nodes.find(n => n.id === selectedNodeId);
+        if (!node) return null;
+        
+        // Find connected links and neighbors
+        const connectedLinks = links.filter(l => l.source === node.id || l.target === node.id);
+        const neighborIds = connectedLinks.map(l => l.source === node.id ? l.target : l.source);
+        const neighbors = nodes.filter(n => neighborIds.includes(n.id));
+
+        return (
+          <div style={{
+            position: 'absolute',
+            bottom: '12px',
+            left: '12px',
+            right: '12px',
+            maxHeight: '170px',
+            backgroundColor: 'var(--bg-panel)',
+            backdropFilter: 'blur(20px) saturate(120%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(120%)',
+            border: '1.2px solid var(--border-color)',
+            borderRadius: '10px',
+            boxShadow: 'inset 1px 1px 0px rgba(255, 255, 255, 0.6), inset -1px -1px 0px rgba(0, 0, 0, 0.02), 0 8px 24px rgba(0, 0, 0, 0.12)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '10px 14px',
+            color: 'var(--text-main)',
+            fontSize: '12px',
+            fontFamily: 'var(--font-sans)',
+            zIndex: 100,
+            gap: '8px',
+            animation: 'slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  backgroundColor: getLevelColor(node.level || 0)
+                }} />
+                <span style={{ fontWeight: 600 }}>
+                  {node.isVirtual ? `分类标签聚类 (FCA Concept Node)` : `相关文件详情`}
+                </span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                  {node.tags && node.tags.length > 0 ? `含有 ${node.tags.length} 个标签` : `无标签`}
+                </span>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setSelectedNodeId(null); }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  transition: 'background-color 0.15s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable contents */}
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+              {/* Tag Badges list */}
+              {node.tags && node.tags.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 600 }}>包含标签:</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {node.tags.map((tag, tIdx) => (
+                      <span
+                        key={tIdx}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: 'rgba(0, 0, 0, 0.03)',
+                          border: '1px solid var(--border-color)',
+                          fontSize: '11px',
+                          color: 'var(--text-main)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          cursor: 'default'
+                        }}
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Note / Path details for real node */}
+              {!node.isVirtual && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 600 }}>笔记路径 (双击打开):</div>
+                  <div
+                    onClick={() => handleNodeDoubleClick(node.id)}
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: '10.5px',
+                      color: 'var(--accent-color)',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      wordBreak: 'break-all'
+                    }}
+                  >
+                    {node.id.replace(projectPath + '/', '')}
+                  </div>
+                </div>
+              )}
+
+              {/* Neighbors list */}
+              {neighbors.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 600 }}>关联节点 (点击选中定位 / 虚线为概念节点):</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {neighbors.map((neighbor) => (
+                      <span
+                        key={neighbor.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedNodeId(neighbor.id);
+                          // Center the view on neighbor
+                          let cx = 300;
+                          let cy = 250;
+                          if (svgRef.current) {
+                            cx = svgRef.current.clientWidth / 2;
+                            cy = svgRef.current.clientHeight / 2;
+                          }
+                          setPan({
+                            x: cx - neighbor.x * zoom,
+                            y: cy - neighbor.y * zoom
+                          });
+                        }}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          backgroundColor: neighbor.isVirtual ? 'rgba(255,255,255,0.4)' : 'rgba(0, 0, 0, 0.02)',
+                          border: neighbor.isVirtual ? `1.2px dashed ${getLevelColor(neighbor.level || 0)}` : '1.2px solid var(--border-color)',
+                          fontSize: '11px',
+                          color: neighbor.isVirtual ? getLevelColor(neighbor.level || 0) : 'var(--text-main)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--bg-main)';
+                          e.currentTarget.style.borderColor = 'var(--accent-color)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = neighbor.isVirtual ? 'rgba(255,255,255,0.4)' : 'rgba(0, 0, 0, 0.02)';
+                          e.currentTarget.style.borderColor = neighbor.isVirtual ? `${getLevelColor(neighbor.level || 0)}` : 'var(--border-color)';
+                        }}
+                      >
+                        {neighbor.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Frosted Glass Overlay for Color Palette Manager */}
       {isPaletteEditorOpen && (

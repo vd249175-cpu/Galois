@@ -78,6 +78,11 @@ function ComponentWrapper({
         Blood.updateKey(key, undefined);
 
         setLastAction({ id: actionId, timestamp: ts as number });
+        
+        // Auto-clear lastAction signal after propagation to prevent duplicate executions on subsequent state/prop updates
+        setTimeout(() => {
+          setLastAction(null);
+        }, 50);
       });
     });
     return unsubscribe;

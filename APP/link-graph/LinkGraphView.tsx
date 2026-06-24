@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { linkGraphActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { Blood } from '../../CORE/Blood';
 
 interface LinkNode {
   id: string; // The canonical name (e.g., "00_新手指引")
@@ -462,19 +463,36 @@ function LinkGraphView({
   };
 
   const handleNodeDoubleClick = (node: LinkNode) => {
+    const getTargetEditorId = () => {
+      const lastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
+      const activeEds = Blood.getValue<string[]>(BC.system.activeEditors, []);
+      let targetId = lastFocused || activeEds[0];
+      if (!targetId) {
+        const allState = Blood.getRawState() || {};
+        const prefix = 'system.areaComponentTypes.';
+        for (const [key, value] of Object.entries(allState)) {
+          if (key.startsWith(prefix) && value === 'editor') {
+            targetId = key.substring(prefix.length);
+            break;
+          }
+        }
+      }
+      return targetId || 'editor-root';
+    };
+
     if (!node.exists || !node.filePath) {
       // If it doesn't exist, create it!
       const newPath = `${projectPath}/${node.id}.md`;
       const defaultContent = `---\ntags:\n  - ${node.id}\n---\n# ${node.id}\n\nStart writing here...\n`;
       (window as any).electronAPI.writeFile(newPath, defaultContent).then(() => {
         updateBloodKey(BC.events.fileSaved(newPath), Date.now());
-        const editorId = state[BC.system.lastFocusedEditorId] || (state[BC.system.activeEditors] || [])[0] || 'editor-root';
+        const editorId = getTargetEditorId();
         updateBloodKey(BC.events.openFile(editorId), newPath);
       });
       return;
     }
 
-    const editorId = state[BC.system.lastFocusedEditorId] || (state[BC.system.activeEditors] || [])[0] || 'editor-root';
+    const editorId = getTargetEditorId();
     updateBloodKey(BC.events.openFile(editorId), node.filePath);
   };
 

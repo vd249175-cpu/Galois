@@ -8,7 +8,7 @@
     "build:electron": "tsc CORE/main.ts CORE/preload.ts --outDir dist-electron --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop true --ignoreConfig",
     "dev:vite": "vite",
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
-    "dev": "concurrently \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
+    "dev": "concurrently -k \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
     "build": "npm run build:vite && npm run build:electron",
     "start": "NODE_ENV=production electron .",
     "package": "npm run build && electron-builder",
@@ -48,7 +48,6 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "node_modules/**/*",
       "index.html"
     ],
     "extraResources": [
@@ -57,7 +56,9 @@
         "to": "template-project",
         "filter": [
           "**/*",
-          "!**/.DS_Store"
+          "!**/.DS_Store",
+          "!**/.venv",
+          "!**/.venv/**/*"
         ]
       },
       {

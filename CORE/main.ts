@@ -59,7 +59,6 @@ function createMainWindow() {
   // Load Vite dev server in development, built index.html in production
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -163,9 +162,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
 
 // IPC Filesystem APIs
@@ -465,8 +462,10 @@ function watchProjectPath(projectPath: string) {
         return;
       }
       
-      // Only watch for markdown files
-      if (!filename.endsWith('.md')) {
+      // Watch for markdown files and commands config files
+      const cleanFilename = filename.replace(/\\/g, '/');
+      const isConfig = cleanFilename.endsWith('command/commands.json') || cleanFilename.endsWith('commands.json');
+      if (!filename.endsWith('.md') && !isConfig) {
         return;
       }
       
@@ -730,14 +729,33 @@ ipcMain.handle('terminal:spawn', (event, id: string, cwd: string, cols: number, 
     return true;
   }
 
-  const shell = process.platform === 'win32' ? 'cmd.exe' : (process.env.SHELL || 'zsh');
+  let shell = 'zsh';
+  if (process.platform === 'win32') {
+    shell = 'cmd.exe';
+  } else {
+    const envShell = process.env.SHELL;
+    if (envShell && fs.existsSync(envShell)) {
+      shell = envShell;
+    } else if (fs.existsSync('/bin/zsh')) {
+      shell = '/bin/zsh';
+    } else if (fs.existsSync('/bin/bash')) {
+      shell = '/bin/bash';
+    } else {
+      shell = 'zsh';
+    }
+  }
+
+  let spawnCwd = cwd;
+  if (!spawnCwd || !fs.existsSync(spawnCwd)) {
+    spawnCwd = os.homedir();
+  }
 
   try {
     ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: cols || 80,
       rows: rows || 24,
-      cwd: cwd || os.homedir(),
+      cwd: spawnCwd,
       env: getSecureEnv() as Record<string, string>,
     });
 
