@@ -24,8 +24,11 @@
   --bg-shortcut-row: rgba(255, 255, 255, 0.35);
 
   /* File Card Light Theme Variables */
-  --bg-file-card: rgba(255, 255, 255, 0.55);
-  --border-file-card: rgba(255, 255, 255, 0.65);
+  --bg-file-card: #ffffff;
+  --border-file-card: rgba(0, 0, 0, 0.08);
+  --text-file-card: #000000;
+  --text-file-card-muted: #3c3c43;
+  --bg-file-card-tag: rgba(0, 0, 0, 0.05);
   --shadow-file-card-inset: rgba(255, 255, 255, 0.85);
   --bg-file-card-hover: rgba(255, 255, 255, 0.88);
   --shadow-file-card-inset-hover: rgba(255, 255, 255, 0.95);

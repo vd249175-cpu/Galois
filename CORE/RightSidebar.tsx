@@ -138,61 +138,36 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
   };
 
   return (
-    <>
-      {/* SVG Liquid Glass Refraction Filter Definition */}
-      <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}>
-        <defs>
-          <filter id="liquid-glass-sidebar-refraction" x="0%" y="0%" width="100%" height="100%">
-            {/* High-quality fractal noise map to generate organic thickness refraction */}
-            <feTurbulence type="fractalNoise" baseFrequency="0.015 0.03" numOctaves="3" result="noise" seed="42" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="24" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
-
+    <div
+      className="right-sidebar"
+      style={{
+        width: displayMode === 'text' ? '64px' : '40px',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        position: 'relative',
+        borderLeft: '1px solid var(--border-color)',
+        backgroundColor: 'var(--bg-header)',
+        boxShadow: 'inset 1px 0px 0px rgba(255, 255, 255, 0.06)',
+        zIndex: 10,
+        transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+      }}
+    >
+      {/* Interactive components */}
       <div
-        className="right-sidebar"
         style={{
-          width: displayMode === 'text' ? '64px' : '40px',
-          height: '100%',
+          position: 'relative',
+          zIndex: 1,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          position: 'relative',
-          borderLeft: '1px solid var(--border-color)',
-          backgroundColor: 'transparent',
-          zIndex: 10,
-          transition: 'width 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          gap: '12px',
+          width: '100%',
+          height: '100%',
+          padding: '12px 0px',
         }}
       >
-        {/* Layer 1: Liquid Glass Refracted backdrop */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: 'var(--bg-panel)',
-            backdropFilter: 'url(#liquid-glass-sidebar-refraction) blur(24px) saturate(135%) contrast(90%)',
-            WebkitBackdropFilter: 'url(#liquid-glass-sidebar-refraction) blur(24px) saturate(135%) contrast(90%)',
-            boxShadow: 'inset 1px 0 0 rgba(255, 255, 255, 0.55), inset -1px 0 0 rgba(0, 0, 0, 0.03)',
-            zIndex: 0,
-            pointerEvents: 'none',
-          }}
-        />
-
-        {/* Layer 2: Interactive components */}
-        <div
-          style={{
-            position: 'relative',
-            zIndex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '12px',
-            width: '100%',
-            height: '100%',
-            padding: '12px 0px',
-          }}
-        >
           <div className="right-sidebar-section" style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
             {globalActions.map((action) => renderActionButton(action.id, action.label, action.icon))}
           </div>
@@ -292,8 +267,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
               '设置'
             )}
           </button>
-        </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -1085,12 +1085,7 @@ function FileTreeView({
                 <div
                   key={file.path}
                   onClick={() => handleFileClick(file)}
-                  className="file-card-item"
-                  style={{
-                    backgroundColor: isSelected ? 'var(--highlight-color)' : 'rgba(255,255,255,0.45)',
-                    color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
-                    border: isSelected ? '1.5px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.65)',
-                  }}
+                  className={`file-card-item ${isSelected ? 'selected' : ''}`}
                 >
                   {/* 右上角悬浮操作按钮 */}
                   <div className="file-card-actions" style={{ position: 'absolute', top: '6px', right: '6px', display: 'flex', gap: '4px', zIndex: 10 }}>
@@ -1194,15 +1189,7 @@ function FileTreeView({
                         return (
                           <span
                             key={`${file.path}_tag_${t}`}
-                            style={{
-                              fontSize: '8.5px',
-                              fontWeight: 700,
-                              backgroundColor: isSelected ? 'rgba(255, 59, 48, 0.15)' : 'rgba(0, 0, 0, 0.05)',
-                              color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)',
-                              padding: '1px 5px',
-                              borderRadius: '3px',
-                              whiteSpace: 'nowrap'
-                            }}
+                            className={`file-card-tag ${isSelected ? 'selected' : ''}`}
                           >
                             {labelText}
                           </span>
