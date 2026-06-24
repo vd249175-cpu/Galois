@@ -77,3 +77,10 @@ export interface OrganAction {
 
 **禁止**在 CORE 里使用 `project.*`、`debug.*` 等非规范前缀。这些应迁移到上述四个命名空间中。
 
+#### 5. 项目指令与插值片段配置规范 (`commands.json` & Slash Menu)
+任何在项目 `command/commands.json` 中配置的动作均需遵循以下分流设计，并在 `Editor` 面板中闭环实现：
+- **后台脚本指令 (`"script"` 字段)**：用于在后台通过 `execCommand` 静默运行外部 Python 脚本。为了防止菜单杂乱且不污染正文，此类命令**必须在编辑器斜线 `/` 菜单中隐藏**，仅通过全局/局域快捷键或右侧栏挂载动作静默触发，执行完毕后将结果状态写回 `.dnote_cache/`，并通过 `events.commandExecuted.{id}` 广播。
+- **插值模板指令 (`"content"` 字段)**：用于在光标处插入富文本或反应式插值小部件占位符（如 `{{ ... }}`）。此类指令**必须在编辑器斜线 `/` 自动补全菜单中显示**，插入文本后依靠渲染层的 `ReactiveExpression` 钩子实现自动解析执行。
+- **作用域自定义声明 (`"scope"` 字段)**：配置指令在哪些页面/视图可被快捷键触发。
+  - `"global"` / `"all"` / `true`：全局快捷键，在任何页面聚焦时（甚至无焦点时）均可触发。含 `"script"` 的命令默认值为 `"global"`。
+  - `"editor"`、`"fileTree"`、`"graphView"` 等页面/组件类型 ID：局域快捷键，仅在聚焦于对应的组件页面时，快捷键才生效。含 `"content"` 的插值命令默认值为 `"editor"`。

@@ -1,6 +1,128 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ReactiveExpression } from './ReactiveExpression';
 import { parseMarkdownBody } from '../utils';
+
+// Global state to track dynamic loading of Mermaid CDN library
+let mermaidLoading = false;
+let mermaidLoaded = false;
+const mermaidLoadCallbacks = new Set<() => void>();
+
+function loadMermaid(callback: () => void) {
+  if (mermaidLoaded) {
+    callback();
+    return;
+  }
+  mermaidLoadCallbacks.add(callback);
+  if (mermaidLoading) return;
+  mermaidLoading = true;
+
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+  script.async = true;
+  script.onload = () => {
+    mermaidLoaded = true;
+    const mermaid = (window as any).mermaid;
+    if (mermaid) {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose',
+      });
+    }
+    mermaidLoadCallbacks.forEach((cb) => cb());
+    mermaidLoadCallbacks.clear();
+  };
+  document.body.appendChild(script);
+}
+
+export function MermaidRenderer({ code }: { code: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [svg, setSvg] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    loadMermaid(() => {
+      setLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const mermaid = (window as any).mermaid;
+    if (!mermaid || !containerRef.current) return;
+
+    let isMounted = true;
+    const renderId = `mermaid-render-${Math.random().toString(36).substring(2, 9)}`;
+
+    const renderDiagram = async () => {
+      try {
+        const cleanCode = code.trim();
+        const { svg: renderedSvg } = await mermaid.render(renderId, cleanCode);
+        if (isMounted) {
+          setSvg(renderedSvg);
+          setError(null);
+        }
+      } catch (err: any) {
+        console.error('[Mermaid] render error:', err);
+        const badEl = document.getElementById(renderId);
+        if (badEl) badEl.remove();
+
+        if (isMounted) {
+          setError(err.message || String(err));
+        }
+      }
+    };
+
+    renderDiagram();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [code, loaded]);
+
+  if (error) {
+    return (
+      <div style={{ margin: '14px 0', border: '1px solid #fecaca', backgroundColor: '#fef2f2', padding: '10px 14px', borderRadius: '6px' }}>
+        <div style={{ color: '#dc2626', fontWeight: 600, fontSize: '12px', marginBottom: '4px' }}>Mermaid 渲染失败</div>
+        <pre style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#991b1b', whiteSpace: 'pre-wrap' }}>
+          {error}
+        </pre>
+        <details style={{ marginTop: '6px' }}>
+          <summary style={{ fontSize: '11px', cursor: 'pointer', color: '#7f1d1d' }}>查看源代码</summary>
+          <pre style={{ margin: '4px 0 0 0', padding: '6px', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#374151' }}>
+            {code}
+          </pre>
+        </details>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        margin: '14px 0',
+        padding: '12px',
+        border: '1.2px solid var(--border-color)',
+        borderRadius: '6px',
+        backgroundColor: 'var(--bg-secondary, rgba(0,0,0,0.01))',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflowX: 'auto'
+      }}
+    >
+      {svg ? (
+        <div dangerouslySetInnerHTML={{ __html: svg }} style={{ width: '100%', display: 'flex', justifyContent: 'center' }} />
+      ) : (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+          正在渲染 Mermaid 图表...
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface MarkdownPreviewProps {
   content: string;
@@ -76,107 +198,267 @@ export function MarkdownPreview({
     }
 
     const lines = body.split('\n');
-    return lines.map((line, idx) => {
-      const fileLineIndex = frontmatterLinesOffset + idx;
+    const elements: React.ReactNode[] = [];
+    
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const fileLineIndex = frontmatterLinesOffset + i;
+
+      // ── Code Block & Mermaid Parsing ─────────────────────────────────────────
+      if (line.trim().startsWith('```')) {
+        const lang = line.trim().substring(3).trim();
+        const codeLines: string[] = [];
+        let j = i + 1;
+        while (j < lines.length && !lines[j].trim().startsWith('```')) {
+          codeLines.push(lines[j]);
+          j++;
+        }
+        const codeText = codeLines.join('\n');
+        
+        if (lang.toLowerCase() === 'mermaid') {
+          elements.push(
+            <MermaidRenderer key={`mermaid_${i}`} code={codeText} />
+          );
+        } else {
+          elements.push(
+            <div key={`codeblock_${i}`} style={{ margin: '14px 0', overflowX: 'auto' }}>
+              <pre
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.03))',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-main)',
+                  margin: 0,
+                  whiteSpace: 'pre'
+                }}
+              >
+                <code>{codeText}</code>
+              </pre>
+            </div>
+          );
+        }
+
+        i = j + 1; // skip past closing backticks
+        continue;
+      }
+
+      // ── Table Parsing ────────────────────────────────────────────────────────
+      const isTableRow = (l: string) => l.trim().startsWith('|') && l.trim().endsWith('|');
+      const isSeparatorRow = (l: string) => l.trim().startsWith('|') && /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l.trim());
+
+      if (i + 1 < lines.length && isTableRow(line) && isSeparatorRow(lines[i+1])) {
+        const headerRow = line;
+        const separatorRow = lines[i+1];
+        
+        // Parse headers
+        const headerCells = headerRow.split('|').map(c => c.trim());
+        if (headerCells[0] === '') headerCells.shift();
+        if (headerCells[headerCells.length - 1] === '') headerCells.pop();
+
+        // Parse alignments
+        const separatorCells = separatorRow.split('|').map(c => c.trim());
+        if (separatorCells[0] === '') separatorCells.shift();
+        if (separatorCells[separatorCells.length - 1] === '') separatorCells.pop();
+
+        const alignments = separatorCells.map(cell => {
+          const left = cell.startsWith(':');
+          const right = cell.endsWith(':');
+          if (left && right) return 'center';
+          if (right) return 'right';
+          return 'left';
+        });
+
+        // Parse data rows
+        const dataRows: string[][] = [];
+        let j = i + 2;
+        while (j < lines.length && isTableRow(lines[j])) {
+          const cells = lines[j].split('|').map(c => c.trim());
+          if (cells[0] === '') cells.shift();
+          if (cells[cells.length - 1] === '') cells.pop();
+          dataRows.push(cells);
+          j++;
+        }
+
+        // Render table
+        elements.push(
+          <div key={`table_${i}`} style={{ overflowX: 'auto', margin: '14px 0' }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '13px',
+                border: '1.2px solid var(--border-color)',
+                borderRadius: '6px'
+              }}
+            >
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.015)' }}>
+                  {headerCells.map((cell, colIdx) => (
+                    <th
+                      key={`th_${colIdx}`}
+                      style={{
+                        padding: '8px 12px',
+                        fontWeight: '600',
+                        textAlign: (alignments[colIdx] || 'left') as any,
+                        color: 'var(--text-main)',
+                        borderBottom: '2px solid var(--border-color)'
+                      }}
+                    >
+                      {renderInline(cell, fileLineIndex)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {dataRows.map((rowCells, rowIdx) => (
+                  <tr
+                    key={`tr_${rowIdx}`}
+                    style={{
+                      borderBottom: '1px solid var(--border-color)',
+                      backgroundColor: rowIdx % 2 === 1 ? 'rgba(0,0,0,0.005)' : 'transparent'
+                    }}
+                  >
+                    {headerCells.map((_, colIdx) => {
+                      const cellVal = rowCells[colIdx] || '';
+                      return (
+                        <td
+                          key={`td_${rowIdx}_${colIdx}`}
+                          style={{
+                            padding: '8px 12px',
+                            textAlign: (alignments[colIdx] || 'left') as any,
+                            color: 'var(--text-main)'
+                          }}
+                        >
+                          {renderInline(cellVal, fileLineIndex + 2 + rowIdx)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+
+        i = j; // skip forward
+        continue;
+      }
+
+      // Default line parsers
       let content = line;
-      if (content.startsWith('# ')) {
-        return (
+      const isHorizontalRule = (l: string) => /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
+
+      if (isHorizontalRule(content)) {
+        elements.push(
+          <hr
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, {
+              border: 'none',
+              borderTop: '1px solid var(--border-color)',
+              margin: '16px 0'
+            })}
+          />
+        );
+      } else if (content.startsWith('# ')) {
+        elements.push(
           <h1
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700' })}
           >
             {renderInline(content.substring(2), fileLineIndex)}
           </h1>
         );
-      }
-      if (content.startsWith('## ')) {
-        return (
+      } else if (content.startsWith('## ')) {
+        elements.push(
           <h2
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600' })}
           >
             {renderInline(content.substring(3), fileLineIndex)}
           </h2>
         );
-      }
-      if (content.startsWith('### ')) {
-        return (
+      } else if (content.startsWith('### ')) {
+        elements.push(
           <h3
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600' })}
           >
             {renderInline(content.substring(4), fileLineIndex)}
           </h3>
         );
-      }
-      if (content.startsWith('- [ ] ')) {
-        return (
+      } else if (content.startsWith('- [ ] ')) {
+        elements.push(
           <div
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0' })}
           >
             <input type="checkbox" disabled checked={false} />
             <span>{renderInline(content.substring(6), fileLineIndex)}</span>
           </div>
         );
-      }
-      if (content.startsWith('- [x] ')) {
-        return (
+      } else if (content.startsWith('- [x] ')) {
+        elements.push(
           <div
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55 })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55 })}
           >
             <input type="checkbox" disabled checked={true} />
             <span style={{ textDecoration: 'line-through' }}>{renderInline(content.substring(6), fileLineIndex)}</span>
           </div>
         );
-      }
-      if (content.startsWith('- ')) {
-        return (
+      } else if (content.startsWith('- ')) {
+        elements.push(
           <li
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { marginLeft: '16px', margin: '4px 0', fontSize: '13px' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { marginLeft: '16px', margin: '4px 0', fontSize: '13px' })}
           >
             {renderInline(content.substring(2), fileLineIndex)}
           </li>
         );
-      }
-      if (content.startsWith('> ')) {
-        return (
+      } else if (content.startsWith('> ')) {
+        elements.push(
           <blockquote
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0' })}
           >
             {renderInline(content.substring(2), fileLineIndex)}
           </blockquote>
         );
-      }
-      if (content.trim() === '') {
-        return (
+      } else if (content.trim() === '') {
+        elements.push(
           <div
-            key={idx}
-            {...getLineDragProps(idx)}
-            style={getLineStyle(idx, { height: '14px', margin: '4px 0' })}
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { height: '14px', margin: '4px 0' })}
           />
         );
+      } else {
+        elements.push(
+          <p
+            key={i}
+            {...getLineDragProps(i)}
+            style={getLineStyle(i, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px' })}
+          >
+            {renderInline(content, fileLineIndex)}
+          </p>
+        );
       }
-      return (
-        <p
-          key={idx}
-          {...getLineDragProps(idx)}
-          style={getLineStyle(idx, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px' })}
-        >
-          {renderInline(content, fileLineIndex)}
-        </p>
-      );
-    });
+      i++;
+    }
+
+    return elements;
   };
 
   const renderInline = (text: string, lineIndex: number) => {

@@ -59,7 +59,17 @@ function ComponentWrapper({
 
       changedKeys.forEach(key => {
         if (!key.startsWith(actionChannelPrefix)) return;
-        if (!myActions.includes(key)) return;
+        
+        // Extract actionId: strip "actions." prefix and ".{areaId}" suffix
+        const withoutPrefix = key.slice(actionChannelPrefix.length);
+        if (!withoutPrefix.endsWith(`.${areaIdRef.current}`)) return;
+        const actionId = withoutPrefix.slice(0, -(`.${areaIdRef.current}`.length));
+
+        const isMyStaticAction = myActions.includes(key);
+        const isDynamicEditorAction = currentComponent.typeId === 'editor' && 
+          (actionId.startsWith('custom.') || actionId.startsWith('project.'));
+
+        if (!isMyStaticAction && !isDynamicEditorAction) return;
 
         const ts = Blood.getValue<number | undefined>(key, undefined);
         if (ts === undefined || ts === null) return; // ignore the clear-signal
@@ -67,9 +77,6 @@ function ComponentWrapper({
         // Consume the signal immediately
         Blood.updateKey(key, undefined);
 
-        // Extract actionId: strip "actions." prefix and ".{areaId}" suffix
-        const withoutPrefix = key.slice(actionChannelPrefix.length);
-        const actionId = withoutPrefix.slice(0, -(`.${areaIdRef.current}`.length));
         setLastAction({ id: actionId, timestamp: ts as number });
       });
     });
@@ -375,6 +382,22 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="8" cy="8" r="2.5" />
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
+            </svg>
+          ) : currentComponent?.typeId === 'graphView' ? (
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="4" cy="4" r="1.5" />
+              <circle cx="12" cy="4" r="1.5" />
+              <circle cx="8" cy="12" r="1.5" />
+              <path d="M4 5.5l3.5 5M12 5.5l-3.5 5" />
+            </svg>
+          ) : currentComponent?.typeId === 'linkGraph' ? (
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="8" cy="8" r="2" />
+              <circle cx="3" cy="3" r="1.5" />
+              <circle cx="13" cy="3" r="1.5" />
+              <circle cx="3" cy="13" r="1.5" />
+              <circle cx="13" cy="13" r="1.5" />
+              <path d="M4.5 4.5l2.5 2.5M11.5 4.5L9.5 6.5M4.5 11.5l2.5-2.5M11.5 11.5L9.5 9.5" />
             </svg>
           ) : (
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">

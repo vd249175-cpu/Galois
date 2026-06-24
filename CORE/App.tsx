@@ -205,7 +205,7 @@ export function App() {
       if (actionId) {
         e.preventDefault();
         const action = ActionRegistry.getAction(actionId);
-        const targetAreaId = action?.isGlobal ? focusedAreaId : (focusedAreaType === action?.sourceType ? focusedAreaId : null);
+        const targetAreaId = action?.isGlobal ? (focusedAreaId || 'global') : (focusedAreaType === action?.sourceType ? focusedAreaId : null);
 
         if (targetAreaId) {
           ActionRegistry.runAction(actionId, {

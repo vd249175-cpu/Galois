@@ -68,6 +68,10 @@ export function ReactiveExpression({
     }
   }
 
+  if (resolvedRelativeJsonPath.startsWith('script/')) {
+    resolvedRelativeJsonPath = resolvedRelativeJsonPath.substring(7);
+  }
+
   const absoluteOutputPath = `${projectPath}/script/${resolvedRelativeJsonPath}`;
 
   // 3. Read JSON data from injected state prop instead of using useBloodChannel
@@ -93,6 +97,19 @@ export function ReactiveExpression({
     };
     loadInitialJson();
   }, [projectPath, resolvedRelativeJsonPath, absoluteOutputPath]);
+
+  const pollFile = async () => {
+    if (!projectPath || !resolvedRelativeJsonPath) return;
+    try {
+      const rawContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
+      if (rawContent) {
+        const parsedData = JSON.parse(rawContent);
+        updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+      }
+    } catch (e) {
+      // File might not exist yet
+    }
+  };
 
   // 5. Script execution runner
   const runScript = async () => {
@@ -138,14 +155,20 @@ export function ReactiveExpression({
   useEffect(() => {
     if (run) {
       runScript();
+    } else {
+      pollFile();
     }
   }, [run]);
 
   // 7. Interval scheduler
   useEffect(() => {
-    if (!run || !interval || interval <= 0) return;
+    if (!interval || interval <= 0) return;
     const timer = setInterval(() => {
-      runScript();
+      if (run) {
+        runScript();
+      } else {
+        pollFile();
+      }
     }, interval * 1000);
 
     return () => {

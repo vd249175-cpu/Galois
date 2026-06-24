@@ -11,7 +11,7 @@ description: Covenants and guidelines for authoring DNOTE project custom command
 
 ## 1. 项目指令配置 (`command/commands.json`)
 
-每个笔记项目可以在 `command/commands.json` 中注册自定义动作，并将其绑定到快捷键或编辑器斜线指令菜单：
+每个笔记项目可以在 `command/commands.json` 中注册自定义动作，并在其中指定要执行的脚本（静默运行于后台，隐藏在斜线菜单外，支持全局快捷键）或要在编辑器中插入的自定义文本片段（显示在斜线 `/` 菜单中）：
 
 ```json
 {
@@ -23,32 +23,36 @@ description: Covenants and guidelines for authoring DNOTE project custom command
       "script": "uv run script/note_stats.py"
     },
     {
-      "id": "project.calculateTags",
-      "label": "运行深度标签计算",
-      "shortcut": "meta+shift+l",
-      "script": "uv run script/calculate_tags.py"
-    },
-    {
-      "id": "project.buildPipeline",
-      "label": "执行生成构建",
-      "shortcut": "meta+alt+b",
-      "script": "uv run script/build_project.py"
+      "id": "project.sysMonitorWidget",
+      "label": "插入系统实时监控小部件",
+      "desc": "在当前位置插入动态测量CPU和内存占用的反应式组件",
+      "content": "⚡ 系统监控：{{script/sys_monitor.json:status | run=\"sys_monitor.py\" & interval=3}}"
     }
   ]
 }
 ```
 
-### 1.1 斜线指令菜单集成
+### 1.1 指令类型与斜线菜单过滤规则
 
-`command/commands.json` 中注册的指令会自动出现在编辑器的 **斜线指令菜单**（`/` 快捷唤起）中。
-用户在编辑区输入 `/` 后可以搜索并选中项目指令，触发脚本执行：
+为了保证编辑器斜线菜单的纯净度，DNOTE 将指令的运行分流如下：
 
-```
-用户输入 / → 显示内置格式指令 + 自定义文本片段 + 项目指令
-选中 "统计项目字数" → 触发 execCommand("uv run script/note_stats.py", projectPath)
-                   → 结果写入 .dnote_cache/project.runStats.json
-                   → 编辑器读取并展示执行结果
-```
+| 指令配置字段 | 指令类型 | 斜线菜单 `/` 状态 | 触发行为 |
+| :--- | :--- | :--- | :--- |
+| **`script`**（配置脚本命令） | 外部静默执行脚本 | 🚫 **隐藏过滤** | 不在文档中插入任何文本。按下快捷键后静默通过 `execCommand` 执行脚本，结果输出至 `.dnote_cache/{id}.json`，状态显示在状态栏或弹出提示框。 |
+| **`content`**（配置插入片段） | 占位符文本插值命令 | 🟢 **显示在菜单** | 选中后在光标处插入 `"content"` 中的文本片段（如 `{{ ... }}` 占位符）。随后触发编辑器的反应式组件解析执行。 |
+
+### 1.2 快捷键有效作用域 (`"scope"`) 配置
+
+为了避免页面间快捷键冲突，并提供更灵活的交互控制，DNOTE 支持通过 `"scope"` 字段配置项目指令的快捷键作用域：
+
+* **`"scope": "global"`** (或 `"all"`, `true`)：**全局快捷键**。不论用户聚焦在文件树、图形视图、还是编辑器，甚至在页面无任何元素聚焦时，该快捷键均可被触发执行。
+* **`"scope": "editor"`**：**编辑器局域快捷键**。只有当光标聚焦在编辑器内时，该快捷键才会被触发。
+* **`"scope": "fileTree"` / `"graphView"` 等**：**特定页面局域快捷键**。只有当聚焦在对应的组件页面/视图上时，该快捷键才生效。
+* **默认解析规则**：
+  * 若指令配置了 `"script"` 且未声明 `"scope"`，默认其 `scope` 为 `"global"`。
+  * 若指令配置了 `"content"` 且未声明 `"scope"`，默认其 `scope` 为 `"editor"`。
+
+---
 
 ---
 

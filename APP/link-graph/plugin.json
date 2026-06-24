@@ -1,0 +1,12 @@
+{
+  "id": "linkGraph",
+  "name": "Obsidian Link Graph",
+  "version": "1.0.0",
+  "description": "Obsidian-like interactive force-directed graph of WikiLinks and note connections.",
+  "dependencies": [],
+  "bloodChannels": [
+    "system.projectPath",
+    "events.fileSaved.*"
+  ],
+  "triggerConditions": {}
+}

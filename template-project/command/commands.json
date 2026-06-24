@@ -4,19 +4,34 @@
       "id": "project.runStats",
       "label": "统计项目字数",
       "shortcut": "meta+shift+t",
+      "scope": "editor",
       "script": "uv run script/note_stats.py"
     },
     {
       "id": "project.buildIndex",
       "label": "重建标签索引报告",
       "shortcut": "meta+shift+l",
+      "scope": "global",
       "script": "uv run script/build_index.py"
     },
     {
       "id": "project.exportSummary",
       "label": "导出并更新知识库概览报告",
       "shortcut": "meta+shift+e",
+      "scope": "global",
       "script": "uv run script/export_summary.py"
+    },
+    {
+      "id": "project.sysMonitorWidget",
+      "label": "插入系统实时监控小部件",
+      "desc": "在当前光标位置插入动态测量CPU和内存占用的反应式组件",
+      "content": "⚡ 系统监控：{{script/sys_monitor.json:status | run=\"sys_monitor.py\" & interval=3}} | CPU：{{script/sys_monitor.json:cpu}} | 内存：{{script/sys_monitor.json:memory}} (最后更新: {{script/sys_monitor.json:timestamp}})"
+    },
+    {
+      "id": "project.daemonWidget",
+      "label": "插入项目生命周期及实时键入监测组件",
+      "desc": "在当前光标位置插入轮询后台守护进程以及实时键入数据分析（行号、字符数、选区）的反应式组件",
+      "content": "🔄 守护进程状态：{{script/on_project_run.json:status | interval=1}}\n* 进程 PID：{{script/on_project_run.json:pid}} | 运行时间：{{script/on_project_run.json:uptime}} (心跳: {{script/on_project_run.json:last_active}})\n* 📁 当前编辑：{{script/on_project_run.json:live_typing.active_file_name}}\n* 📍 光标位置：第 {{script/on_project_run.json:live_typing.current_line_num}} 行 | 当前行字数：{{script/on_project_run.json:live_typing.current_line_length}} 字\n* ✨ 选区长度：{{script/on_project_run.json:live_typing.selected_char_count}} 字 | 自检：{{script/on_project_run.json:live_typing.todo_status}}"
     }
   ]
 }

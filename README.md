@@ -46,6 +46,7 @@ graph TD
     *   **Lattice Explorer (file-tree/)**：文件及标签目录管理器（解析 YAML 标签与运行生命周期脚本）。
     *   **Lattice Editor (editor/)**：实例隔离的代码及 YAML 属性编辑器，支持 Draft 未保存模式。
     *   **Lattice Graph (graph-view/)**：力导向拓扑关系图谱，支持 Hill Node 算法非线性缩放及色板（Palette）管理。
+    *   **Obsidian Link Graph (link-graph/)**：Obsidian 风格的双向链接图谱，实时扫描解析 WikiLinks 并在 2D 力导向画布上渲染笔记关联拓扑，支持幻影节点与物理模拟参数微调。
     *   **Terminal Console (terminal/)**：基于 xterm.js 的独立多标签 Shell 终端。
     *   **Settings Panel (settings/)**：自定义首选项、3D 实体键帽快捷键录制及一键 Reset 页面。
 *   **插件即是组件即是应用本身**。器官在运行时可以自由被销毁、复用或任意组合。
@@ -116,6 +117,10 @@ DNOTE/
 │   │   ├── actions/             # 缩放、居中、色板动作定义
 │   │   └── services/
 │   │       └── lattice.py       # Python 多维度层级极小化（Transitive Reduction）计算脚本
+│   ├── link-graph/              # 双链关系图谱 (Obsidian Link Graph)
+│   │   ├── index.ts             # 插件入口
+│   │   ├── LinkGraphView.tsx    # 2D力导向模拟与关系图谱主渲染组件
+│   │   └── actions/             # 缩放、重置视角动作定义
 │   ├── terminal/                # 独立分页的 Shell 终端 (Terminal Console)
 │   │   ├── index.ts             # 插件入口
 │   │   ├── Terminal.tsx         # 终端 UI 主组件 (基于 xterm.js 桥接)

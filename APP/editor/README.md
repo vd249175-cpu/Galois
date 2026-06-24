@@ -35,15 +35,21 @@ Lattice Editor 是 DNOTE 的**核心编辑器官**。它不仅是支持 Markdown
 - 协议注册于 Electron 主进程：`standard: true`、`secure: true`、`stream: true`
 
 ### 6. ⚡ 斜线指令菜单（Slash Commands）
-在编辑模式行首或空格后输入 `/`，唤起三类指令菜单（键盘上下键导航）：
+在编辑模式行首或空格后输入 `/`，唤起三类指令插值菜单（键盘上下键导航）：
 
 | 类型 | 来源 | 说明 |
 |------|------|------|
-| **内置格式指令** | 硬编码 | `/h1`–`/h3`、`/code`、`/todo` 等 |
-| **自定义文本片段** | localStorage `dnote_custom_commands` | 用户自定义可复用文本块 |
-| **项目指令** | `command/commands.json` | 执行外部 Python 脚本，结果展示在编辑区 |
+| **内置格式指令** | 硬编码 | `/h1`–`/h3`、`/code`、`/todo` 等排版动作 |
+| **用户自定义文本** | localStorage `dnote_custom_commands` | 用户在首选项中定义的自定义可复用文本快照 |
+| **项目插值组件** | `command/commands.json`（带有 `content` 键） | 项目层面共用的反应式小部件（如：系统监控、生命周期监测） |
 
-选中项目指令后 → 调用 `execCommand(script, projectPath)` → 输出写入 `.dnote_cache/{id}.json` → 编辑器自动读取并展示结果摘要。
+> ⚠️ **注意**：在 `commands.json` 中配置有 `"script"` 键的后台脚本命令会被**自动过滤并隐藏**在斜线 `/` 菜单之外，它们仅通过**全局快捷键**或**右侧栏动作面板**进行静默触发，从而避免插值菜单杂乱。
+> 
+> 💡 **项目指令的作用域自定义声明 (`"scope"` 字段)**：
+> 每个在 `commands.json` 中定义的项目指令可以通过配置 `"scope"` 来声明其快捷键的有效区域：
+> - `"global"` / `"all"` / `true`：全局快捷键，在系统任何视图处于聚焦时，或整个页面无特定聚焦时，均能激活该快捷键并执行指令。
+> - `"editor"`、`"fileTree"`、`"graphView"` 等页面/组件类型：局部快捷键，只有当用户聚焦在对应的页面组件内时，该快捷键才会被触发，从而避免不同页面间的快捷键冲突。
+> - *默认规则*：带有 `"script"`（脚本命令）的指令默认 `scope` 为 `"global"`，带有 `"content"`（插值命令）的指令默认 `scope` 为 `"editor"`。
 
 ### 7. ⌨️ Markdown 格式快捷键
 内置快捷键（均可在快捷键编辑弹窗中自定义并持久化至 `localStorage dnote_markdown_shortcuts`）：

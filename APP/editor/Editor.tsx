@@ -301,12 +301,38 @@ function EditorView({
         return;
       }
 
+      let targetIsGlobal = false;
+      let targetSourceType: string | undefined = undefined;
+
+      if (cmd.scope !== undefined) {
+        if (cmd.scope === 'global' || cmd.scope === 'all' || cmd.scope === true) {
+          targetIsGlobal = true;
+        } else {
+          targetIsGlobal = false;
+          targetSourceType = String(cmd.scope);
+        }
+      } else if ((cmd as any).isGlobal !== undefined) {
+        targetIsGlobal = !!(cmd as any).isGlobal;
+        if (!targetIsGlobal) {
+          targetSourceType = 'editor';
+        }
+      } else {
+        // Default behavior: script-based commands are global, insert text commands are editor-only
+        targetIsGlobal = !!cmd.script;
+        if (!targetIsGlobal) {
+          targetSourceType = 'editor';
+        }
+      }
+
       ActionRegistry.register({
         id: cmd.id,
         label: cmd.label,
-        sourceType: 'editor',
+        isGlobal: targetIsGlobal,
+        sourceType: targetSourceType,
         run: (context) => {
-          Blood.updateKey(`actions.${cmd.id}.${context.areaId}`, Date.now());
+          // Always route project command execution signals to the active Editor areaId
+          const activeEditorId = Blood.getValue<string | null>('system.lastFocusedEditorId', null) || 'editor-root';
+          Blood.updateKey(`actions.${cmd.id}.${activeEditorId}`, Date.now());
         }
       });
 
@@ -540,10 +566,11 @@ function EditorView({
 
     const projectList = projectCommands
       .filter(cmd => !customCommands.some(c => c.id === cmd.id))
+      .filter(cmd => !cmd.script)
       .map((cmd) => ({
         id: cmd.id,
         label: cmd.label,
-        desc: `${cmd.desc} (Project)`,
+        desc: `${cmd.desc || ''} (Project)`,
         icon: React.createElement(
           'svg',
           { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
@@ -730,12 +757,35 @@ function EditorView({
     }
 
     if (cmd.id.startsWith('project.')) {
+      const projCmd = projectCommands.find(p => p.id === cmd.id);
+      if (projCmd && projCmd.content) {
+        // Run it like a custom command (insert content snippet)
+        const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
+        const end = textareaRef.current.selectionEnd;
+        pushStateToUndoStack(content, actualStart, end);
+        const before = content.substring(0, actualStart);
+        const after = content.substring(end);
+        const snippet = projCmd.content || '';
+        const textAfterInsert = before + snippet + after;
+        setContent(textAfterInsert);
+        lastHistoryContentRef.current = textAfterInsert;
+        saveNodeFile(textAfterInsert);
+        setShowSlashMenu(false);
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(actualStart + snippet.length, actualStart + snippet.length);
+          }
+        }, 0);
+        return;
+      }
+
+      // Fallback: Run project script command
       const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
       const end = textareaRef.current.selectionEnd;
       
       pushStateToUndoStack(content, actualStart, end);
       
-      // Clean up the typed slash "/" character or command trigger word
       const before = content.substring(0, actualStart);
       const after = content.substring(end);
       const cleanContent = before + after;
@@ -745,7 +795,6 @@ function EditorView({
       saveNodeFile(cleanContent);
       setShowSlashMenu(false);
       
-      const projCmd = projectCommands.find(p => p.id === cmd.id);
       if (projCmd) {
         setTimeout(() => {
           if (textareaRef.current) {
@@ -1480,7 +1529,7 @@ function EditorView({
     else if (lastAction.id.startsWith('custom.') || lastAction.id.startsWith('project.')) {
       const cmd = customCommands.find(c => c.id === lastAction.id) || projectCommands.find(c => c.id === lastAction.id);
       if (cmd) {
-        if (lastAction.id.startsWith('project.')) {
+        if (cmd.script) {
           handleExecuteProjectCommand(cmd as any);
         } else {
           handleExecuteCommand(cmd as any);
@@ -1573,8 +1622,7 @@ function EditorView({
       e.preventDefault();
       if (matchedType.startsWith('custom.') || matchedType.startsWith('project.')) {
         // Trigger custom/project command immediately via Blood signal
-        const editorId = state[BC.system.lastFocusedEditorId] || 'global';
-        Blood.updateKey(`actions.${matchedType}.${editorId}`, Date.now());
+        Blood.updateKey(`actions.${matchedType}.${areaId}`, Date.now());
       } else if (matchedType === 'link') {
         showPrompt('输入链接 URL:', 'https://', (url) => {
           if (!url) return;
