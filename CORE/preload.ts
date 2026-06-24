@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:writeFile', filePath, content),
   deleteFile: (filePath: string) =>
     ipcRenderer.invoke('fs:deleteFile', filePath),
+  renameFile: (oldPath: string, newPath: string) =>
+    ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
   listDir: (dirPath: string) =>
     ipcRenderer.invoke('fs:listDir', dirPath),
   openDirectory: () =>

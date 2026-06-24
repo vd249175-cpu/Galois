@@ -157,8 +157,8 @@ function AgentView({
     return (
       <div style={{
         padding: '20px',
-        color: '#94a3b8',
-        backgroundColor: '#1b1b22',
+        color: 'var(--text-muted, #94a3b8)',
+        backgroundColor: 'transparent',
         height: '100%',
         width: '100%',
         display: 'flex',
@@ -591,8 +591,8 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: '#1b1b22', // Sleek dark styling
-        color: '#e2e8f0',
+        backgroundColor: 'transparent',
+        color: 'var(--text-main, #e2e8f0)',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
@@ -605,8 +605,8 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 12px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          backgroundColor: 'rgba(0, 0, 0, 0.2)',
+          borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+          backgroundColor: 'var(--bg-header, rgba(0, 0, 0, 0.2))',
           zIndex: 10,
         }}
       >
@@ -615,9 +615,9 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             value={activeChatId}
             onChange={(e) => setActiveChatId(e.target.value)}
             style={{
-              backgroundColor: '#262630',
-              color: '#e2e8f0',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
+              backgroundColor: 'var(--bg-input, #262630)',
+              color: 'var(--text-main, #e2e8f0)',
+              border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
               borderRadius: '4px',
               padding: '2px 6px',
               fontSize: '11px',
@@ -652,7 +652,7 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             onClick={handleDeleteCurrentChat}
             style={{
               backgroundColor: 'transparent',
-              color: '#ef4444',
+              color: 'var(--error-color, #ef4444)',
               border: 'none',
               fontSize: '11px',
               cursor: 'pointer',
@@ -666,7 +666,7 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
           <button
             onClick={() => setShowSettings(!showSettings)}
             style={{
-              backgroundColor: showSettings ? '#2b2b35' : 'transparent',
+              backgroundColor: showSettings ? 'var(--bg-input, #2b2b35)' : 'transparent',
               border: 'none',
               cursor: 'pointer',
               fontSize: '11px',
@@ -675,7 +675,7 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              color: '#e2e8f0'
+              color: 'var(--text-main, #e2e8f0)'
             }}
           >
             ⚙️ 模型设置
@@ -691,27 +691,27 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             top: '37px',
             left: 0,
             right: 0,
-            backgroundColor: '#262630',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.15)',
+            backgroundColor: 'var(--bg-header, #262630)',
+            borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
             padding: '12px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.5)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
             zIndex: 100,
           }}
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '4px', color: 'var(--accent-color)' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.06))', paddingBottom: '4px', color: 'var(--accent-color)' }}>
             🤖 AI 接口及重构模型配置
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <label style={{ fontSize: '9px', color: '#94a3b8' }}>API 供应商</label>
+              <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>API 供应商</label>
               <select
                 value={provider}
                 onChange={(e) => saveSetting('dnote_agent_provider', e.target.value, setProvider)}
-                style={{ backgroundColor: '#1b1b22', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
+                style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
               >
                 <option value="ollama">Ollama (本地)</option>
                 <option value="openai">OpenAI (官方)</option>
@@ -720,36 +720,36 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             </div>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <label style={{ fontSize: '9px', color: '#94a3b8' }}>模型名称</label>
+              <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>模型名称</label>
               <input
                 type="text"
                 value={model}
                 placeholder="e.g. gpt-4o-mini"
                 onChange={(e) => saveSetting('dnote_agent_model', e.target.value, setModel)}
-                style={{ backgroundColor: '#1b1b22', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
+                style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
               />
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <label style={{ fontSize: '9px', color: '#94a3b8' }}>接口基础端点 (Base URL)</label>
+            <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>接口基础端点 (Base URL)</label>
             <input
               type="text"
               value={baseURL}
               placeholder="e.g. https://api.openai.com/v1"
               onChange={(e) => saveSetting('dnote_agent_base_url', e.target.value, setBaseURL)}
-              style={{ backgroundColor: '#1b1b22', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
+              style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
             />
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <label style={{ fontSize: '9px', color: '#94a3b8' }}>API 密钥 (API Key)</label>
+            <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>API 密钥 (API Key)</label>
             <input
               type="password"
               value={apiKey}
               placeholder={provider === 'ollama' ? '本地 Ollama 不需要密钥' : '请输入 API 访问密钥'}
               onChange={(e) => saveSetting('dnote_agent_api_key', e.target.value, setApiKey)}
-              style={{ backgroundColor: '#1b1b22', border: '1px solid rgba(255,255,255,0.1)', color: '#e2e8f0', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
+              style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
             />
           </div>
 
@@ -806,15 +806,15 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
               style={{
                 alignSelf: isUser ? 'flex-end' : 'flex-start',
                 maxWidth: '85%',
-                backgroundColor: isUser ? 'var(--accent-color, #3b82f6)' : '#262630',
-                color: '#ffffff',
+                backgroundColor: isUser ? 'var(--accent-color, #3b82f6)' : 'var(--bg-input, rgba(128, 128, 128, 0.08))',
+                color: isUser ? '#ffffff' : 'var(--text-main, #e2e8f0)',
                 padding: '8px 12px',
                 borderRadius: isUser ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                 fontSize: '12px',
                 lineHeight: '1.5',
                 whiteSpace: 'pre-wrap',
-                border: isUser ? 'none' : '1px solid rgba(255,255,255,0.06)'
+                border: isUser ? 'none' : '1px solid var(--border-color, rgba(255,255,255,0.06))'
               }}
             >
               {msg.text}
@@ -828,24 +828,24 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             style={{
               alignSelf: 'flex-start',
               maxWidth: '85%',
-              backgroundColor: '#262630',
-              color: '#ffffff',
+              backgroundColor: 'var(--bg-input, rgba(128, 128, 128, 0.08))',
+              color: 'var(--text-main, #e2e8f0)',
               padding: '8px 12px',
               borderRadius: '12px 12px 12px 2px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
               fontSize: '12px',
               lineHeight: '1.5',
               whiteSpace: 'pre-wrap',
-              border: '1px solid rgba(255,255,255,0.06)'
+              border: '1px solid var(--border-color, rgba(255,255,255,0.06))'
             }}
           >
             {streamText}
-            <span style={{ display: 'inline-block', width: '4px', height: '14px', backgroundColor: '#e2e8f0', marginLeft: '2px', animation: 'blink 1s step-end infinite' }}>|</span>
+            <span style={{ display: 'inline-block', width: '4px', height: '14px', backgroundColor: 'var(--text-main, #e2e8f0)', marginLeft: '2px', animation: 'blink 1s step-end infinite' }}>|</span>
           </div>
         )}
 
         {isProcessing && !streamText && (
-          <div style={{ alignSelf: 'flex-start', color: '#94a3b8', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
+          <div style={{ alignSelf: 'flex-start', color: 'var(--text-muted, #94a3b8)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
             <span>⚡ AI 正在思考中...</span>
           </div>
         )}
@@ -855,7 +855,7 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
 
       {/* active file context tag indicator */}
       {currentFile && (
-        <div style={{ fontSize: '10px', color: '#94a3b8', padding: '4px 12px', borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(0,0,0,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted, #94a3b8)', padding: '4px 12px', borderTop: '1px solid var(--border-color, rgba(255,255,255,0.05))', backgroundColor: 'var(--bg-header, rgba(0,0,0,0.1))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>📖 当前聚焦笔记: <strong style={{ color: 'var(--accent-color)' }}>{currentFile.split(/[/\\]/).pop()}</strong></span>
           {cursorData && (
             <span>📍 光标行: {cursorData.line}</span>
@@ -869,8 +869,8 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
         style={{
           display: 'flex',
           padding: '8px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          backgroundColor: 'rgba(0, 0, 0, 0.15)',
+          borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
+          backgroundColor: 'var(--bg-header, rgba(0, 0, 0, 0.15))',
           gap: '8px',
         }}
       >
@@ -882,9 +882,9 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
           disabled={isProcessing || !currentFile}
           style={{
             flexGrow: 1,
-            backgroundColor: '#1b1b22',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            color: '#e2e8f0',
+            backgroundColor: 'var(--bg-input, #1b1b22)',
+            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
+            color: 'var(--text-main, #e2e8f0)',
             borderRadius: '6px',
             padding: '6px 12px',
             fontSize: '12px',
@@ -895,13 +895,13 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
           type="submit"
           disabled={isProcessing || !inputText.trim() || !currentFile}
           style={{
-            backgroundColor: isProcessing || !inputText.trim() || !currentFile ? '#262630' : 'var(--accent-color, #3b82f6)',
-            color: '#ffffff',
+            backgroundColor: isProcessing || !inputText.trim() || !currentFile ? 'var(--bg-header, #262630)' : 'var(--accent-color, #3b82f6)',
+            color: isProcessing || !inputText.trim() || !currentFile ? 'var(--text-muted, #888)' : '#ffffff',
             border: 'none',
             borderRadius: '6px',
             padding: '6px 14px',
             fontSize: '12px',
-            cursor: 'pointer',
+            cursor: isProcessing || !inputText.trim() || !currentFile ? 'default' : 'pointer',
             fontWeight: 600,
           }}
         >

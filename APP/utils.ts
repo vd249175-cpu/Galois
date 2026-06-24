@@ -58,6 +58,16 @@ export function resolveTagsSync(rawTags: string[], content: string): string[] {
   const resolved = new Set<string>();
   const bodyText = parseMarkdownBody(content);
 
+  // Extract body hashtags (e.g. #tag, #中文标签)
+  const hashtagRegex = /(?:^|[^a-zA-Z0-9_\u4e00-\u9fa5#])#([a-zA-Z0-9_\u4e00-\u9fa5]+)/g;
+  const hashMatches = bodyText.matchAll(hashtagRegex);
+  for (const m of hashMatches) {
+    const val = m[1].trim();
+    if (val && isNaN(Number(val))) {
+      resolved.add(val);
+    }
+  }
+
   for (const tag of rawTags) {
     if (tag.startsWith('re:')) {
       const patternStr = tag.substring(3).trim();

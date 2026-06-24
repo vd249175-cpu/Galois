@@ -149,8 +149,13 @@ function TerminalView({
     term.open(container);
     setTimeout(() => { fit.fit(); term.focus(); }, 30);
 
+    let detectedAntigravity = false;
+
     // ── PTY output → xterm ──
     const unsubOutput = window.electronAPI.onTerminalOutput(tabId, (data: string) => {
+      if (data && data.toLowerCase().includes('antigravity')) {
+        detectedAntigravity = true;
+      }
       term.write(data);
     });
     const unsubExit = window.electronAPI.onTerminalExit(tabId, () => {
@@ -172,12 +177,23 @@ function TerminalView({
         // Only send auto-start once per tab ID, ever
         if (!startedTabIds.has(tabId)) {
           startedTabIds.add(tabId);
-          window.electronAPI.writeTerminal(tabId, 'agy\r');
-          if (notesProject) {
-            setTimeout(() => {
-              window.electronAPI.writeTerminal(tabId, `/add-dir ${notesProject}\r`);
-            }, 1500);
-          }
+          // Wait 600ms to check if "Antigravity" output was generated during shell startup
+          setTimeout(() => {
+            const formattedProj = notesProject ? (notesProject.endsWith('/') ? notesProject : notesProject + '/') : '';
+            if (detectedAntigravity) {
+              // Shell already auto-started agy. Just type /add-dir to sync project.
+              if (formattedProj) {
+                window.electronAPI.writeTerminal(tabId, `/add-dir ${formattedProj}\r`);
+              }
+            } else {
+              // Shell did not auto-start agy. Start it with the --add-dir parameter directly.
+              if (formattedProj) {
+                window.electronAPI.writeTerminal(tabId, `agy --add-dir ${formattedProj}\r`);
+              } else {
+                window.electronAPI.writeTerminal(tabId, 'agy\r');
+              }
+            }
+          }, 600);
         }
       })
       .catch((err: any) => {

@@ -1518,6 +1518,49 @@ function EditorView({
     });
   };
 
+  const handleRenameCurrentFile = async () => {
+    if (!currentFile || !projectPath) return;
+    const oldPath = currentFile;
+    const currentName = oldPath.split(/[/\\]/).pop()?.replace('.md', '') || '';
+
+    showPrompt('重命名笔记:', currentName, async (newName) => {
+      if (!newName || newName.trim() === currentName) return;
+
+      const cleanName = newName.trim().endsWith('.md') ? newName.trim() : `${newName.trim()}.md`;
+      const dirPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+      const newPath = `${dirPath}/${cleanName}`;
+
+      try {
+        const list = await (window as any).electronAPI.listDir(dirPath);
+        const exists = list.some((f: any) => f.name.toLowerCase() === cleanName.toLowerCase() && f.path !== oldPath);
+        if (exists) {
+          alert('同名笔记已存在！');
+          return;
+        }
+
+        await (window as any).electronAPI.renameFile(oldPath, newPath);
+
+        const activeEditors = state[BC.system.activeEditors] || [];
+        activeEditors.forEach((editorId: string) => {
+          const opened = state[BC.events.openFile(editorId)] || '';
+          if (opened === oldPath) {
+            updateBloodKey(BC.events.openFile(editorId), newPath);
+          }
+        });
+        if (state[BC.events.openFile('global')] === oldPath) {
+          updateBloodKey(BC.events.openFile('global'), newPath);
+        }
+
+        updateBloodKey(BC.events.fileSaved(oldPath), Date.now());
+        updateBloodKey(BC.events.fileSaved(newPath), Date.now());
+        
+        setStatusMessage(`Editing Note: ${newName.trim()}`);
+      } catch (err: any) {
+        alert(`重命名笔记失败: ${err.message}`);
+      }
+    });
+  };
+
   // ── 7. lastAction handler ─────────────────────────────────────────────────
   useEffect(() => {
     if (!lastAction) return;
@@ -1707,8 +1750,35 @@ function EditorView({
     >
       {/* Editor Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px' }}>
-        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>
-          {isPreviewMode ? '✨ 笔记预览' : '✍️ 笔记编辑器'}
+        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span>{isPreviewMode ? '✨ 笔记预览' : '✍️ 笔记编辑器'}</span>
+          {currentFile && (
+            <>
+              <span style={{ color: 'var(--border-color)', margin: '0 2px' }}>|</span>
+              <span
+                onClick={handleRenameCurrentFile}
+                title="点击重命名此笔记"
+                style={{
+                  color: 'var(--text-main)',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  backgroundColor: 'rgba(0,0,0,0.03)',
+                  transition: 'background-color 0.12s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--highlight-color)'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.03)'}
+              >
+                {currentFile.split(/[/\\]/).pop()?.replace('.md', '')}
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ opacity: 0.8 }}>
+                  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z" fill="currentColor"/>
+                </svg>
+              </span>
+            </>
+          )}
         </span>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button

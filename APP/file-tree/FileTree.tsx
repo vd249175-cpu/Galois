@@ -477,7 +477,7 @@ function FileTreeView({
         return;
       }
 
-      const sanitizedContent = stripRunTags(template.content);
+      const sanitizedContent = template.content;
       try {
         await (window as any).electronAPI.writeFile(fullPath, sanitizedContent);
         updateBloodKey(BC.events.fileSaved(fullPath), Date.now());
@@ -505,6 +505,7 @@ function FileTreeView({
     if (lastAction.id === 'fileTree.createFile') handleCreateFile();
     else if (lastAction.id === 'fileTree.openFolder') handleOpenFolder();
     else if (lastAction.id === 'fileTree.openTemplates') handleOpenTemplateModal();
+    else if (lastAction.id === 'fileTree.manageTemplates') handleOpenTempleFolder();
   }, [lastAction]);
 
   // Load project markdown files and compute resolved tags
@@ -627,6 +628,51 @@ function FileTreeView({
     } catch (err: any) {
       alert(`Failed to delete note: ${err.message}`);
     }
+  };
+
+  const handleRenameFile = async (e: React.MouseEvent, file: FileInfo) => {
+    e.stopPropagation();
+    const currentName = file.name.endsWith('.md') ? file.name.slice(0, -3) : file.name;
+    
+    showPrompt('重命名笔记:', currentName, async (newName) => {
+      if (!newName || newName.trim() === currentName) return;
+      
+      const cleanName = newName.trim().endsWith('.md') ? newName.trim() : `${newName.trim()}.md`;
+      const oldPath = file.path;
+      const dirPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+      const newPath = `${dirPath}/${cleanName}`;
+
+      try {
+        const list = await (window as any).electronAPI.listDir(dirPath);
+        const exists = list.some((f: any) => f.name.toLowerCase() === cleanName.toLowerCase() && f.path !== oldPath);
+        if (exists) {
+          alert('同名笔记已存在！');
+          return;
+        }
+
+        await (window as any).electronAPI.renameFile(oldPath, newPath);
+
+        const activeEditors = state[BC.system.activeEditors] || [];
+        activeEditors.forEach((editorId: string) => {
+          const opened = state[BC.events.openFile(editorId)] || '';
+          if (opened === oldPath) {
+            updateBloodKey(BC.events.openFile(editorId), newPath);
+          }
+        });
+        if (state[BC.events.openFile('global')] === oldPath) {
+          updateBloodKey(BC.events.openFile('global'), newPath);
+        }
+
+        if (selectedPath === oldPath) {
+          setSelectedPath(newPath);
+        }
+
+        updateBloodKey(BC.events.fileSaved(oldPath), Date.now());
+        updateBloodKey(BC.events.fileSaved(newPath), Date.now());
+      } catch (err: any) {
+        alert(`重命名笔记失败: ${err.message}`);
+      }
+    });
   };
 
   const filteredFiles = files.filter((f) => {
@@ -816,31 +862,49 @@ function FileTreeView({
                     border: isSelected ? '1.5px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.65)',
                   }}
                 >
-                  {/* 右上角悬浮删除按钮 */}
-                  <button
-                    className="file-delete-btn"
-                    onClick={(e) => handleDeleteFile(e, file)}
-                    title="删除笔记"
-                    style={{
-                      position: 'absolute',
-                      top: '6px',
-                      right: '6px',
-                      background: 'rgba(0,0,0,0.05)',
-                      border: 'none',
-                      color: 'var(--text-muted)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '4px',
-                      borderRadius: '50%',
-                      zIndex: 10,
-                    }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M2 4h12M4 4v10a1 1 0 001 1h6a1 1 0 001-1V4M5.5 4V2.5a1 1 0 011-1h3a1 1 0 011-1V4M6.5 7.5v4.5M9.5 7.5v4.5" />
-                    </svg>
-                  </button>
+                  {/* 右上角悬浮操作按钮 */}
+                  <div className="file-card-actions" style={{ position: 'absolute', top: '6px', right: '6px', display: 'flex', gap: '4px', zIndex: 10 }}>
+                    <button
+                      className="file-rename-btn"
+                      onClick={(e) => handleRenameFile(e, file)}
+                      title="重命名笔记"
+                      style={{
+                        background: 'rgba(0,0,0,0.05)',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        borderRadius: '50%',
+                      }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z" fill="currentColor"/>
+                      </svg>
+                    </button>
+                    <button
+                      className="file-delete-btn"
+                      onClick={(e) => handleDeleteFile(e, file)}
+                      title="删除笔记"
+                      style={{
+                        background: 'rgba(0,0,0,0.05)',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        borderRadius: '50%',
+                      }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M2 4h12M4 4v10a1 1 0 001 1h6a1 1 0 001-1V4M5.5 4V2.5a1 1 0 011-1h3a1 1 0 011-1V4M6.5 7.5v4.5M9.5 7.5v4.5" />
+                      </svg>
+                    </button>
+                  </div>
 
                   {/* 文件头：图标 + 文件名 */}
                   <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '4.5px', position: 'relative' }}>
@@ -880,7 +944,7 @@ function FileTreeView({
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap',
-                      marginRight: '18px', // Leave space for delete button
+                      marginRight: '44px', // Leave space for delete and rename buttons
                     }} title={displayName}>
                       {displayName}
                     </span>

@@ -46,12 +46,12 @@ export const LinkGraphComponent = {
 
 function LinkGraphView({
   areaId: _areaId,
-  state,
+  state = {},
   updateBloodKey,
   lastAction,
 }: {
   areaId: string;
-  state: Record<string, any>;
+  state?: Record<string, any>;
   updateBloodKey: (key: string, value: any) => void;
   lastAction: { id: string; timestamp: number } | null;
 }) {
@@ -71,9 +71,9 @@ function LinkGraphView({
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Simulation parameters (customizable in controls panel)
-  const [repulsion, setRepulsion] = useState(1200);
-  const [gravity, setGravity] = useState(0.03);
-  const [linkDistance, setLinkDistance] = useState(80);
+  const [repulsion, setRepulsion] = useState(2500);
+  const [gravity, setGravity] = useState(0.015);
+  const [linkDistance, setLinkDistance] = useState(120);
   const [showLabels, setShowLabels] = useState(true);
   const [showPhantoms, setShowPhantoms] = useState(true);
 
@@ -86,6 +86,18 @@ function LinkGraphView({
   const simRef = useRef<{ nodes: LinkNode[]; links: LinkEdge[] }>({ nodes: [], links: [] });
   simRef.current = { nodes, links };
 
+  // Ref tracking if component is currently mounted to prevent async state setting leaks
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, []);
+
   const wakeSimulation = () => {
     alpha.current = 1.0;
     if (!isSimulationRunning.current) {
@@ -96,23 +108,68 @@ function LinkGraphView({
     }
   };
 
+  const lastProjectPathRef = useRef<string>('');
+
   // 1. Scan files and build graph nodes/edges
   useEffect(() => {
-    if (!projectPath) return;
+    if (!projectPath) {
+      setNodes([]);
+      setLinks([]);
+      lastProjectPathRef.current = '';
+      return;
+    }
+
+    // Reset coordinates and files when project path changes to prevent layout confusion
+    if (projectPath !== lastProjectPathRef.current) {
+      setNodes([]);
+      setLinks([]);
+      lastProjectPathRef.current = projectPath;
+    }
 
     let isMounted = true;
 
     const buildGraph = async () => {
       try {
-        const list = await (window as any).electronAPI.listDir(projectPath);
-        const mdFiles = list.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
+        const scanDirRecursive = async (dir: string): Promise<any[]> => {
+          const raw = await (window as any).electronAPI.listDir(dir);
+          const dirList = Array.isArray(raw) ? raw : [];
+          const files: any[] = [];
+          
+          for (const item of dirList) {
+            if (item.isDir) {
+              const nameLower = item.name.toLowerCase();
+              if (item.name.startsWith('.') || 
+                  nameLower === 'node_modules' || 
+                  nameLower === 'dist' || 
+                  nameLower === 'dist-electron' || 
+                  nameLower === 'build' ||
+                  nameLower === 'venv' || 
+                  nameLower === '.venv' ||
+                  nameLower === 'bin' ||
+                  nameLower === 'templates' ||
+                  nameLower === 'template') {
+                continue;
+              }
+              const subFiles = await scanDirRecursive(item.path);
+              files.push(...subFiles);
+            } else {
+              files.push(item);
+            }
+          }
+          return files;
+        };
+
+        const list = await scanDirRecursive(projectPath);
+        const mdFiles = list.filter((f: any) => !f.isDir && f.name && f.name.endsWith('.md'));
         
         const noteMap = new Map<string, { filePath: string; links: string[] }>();
         const existingTitles = new Set<string>();
 
         // Phase 1: Read all contents and collect links
         for (const file of mdFiles) {
+          if (!isMounted) return;
           const content = await (window as any).electronAPI.readFile(file.path);
+          const safeContent = typeof content === 'string' ? content : '';
           const canonicalTitle = file.name.substring(0, file.name.length - 3);
           existingTitles.add(canonicalTitle);
 
@@ -121,7 +178,7 @@ function LinkGraphView({
           // Match WikiLinks: [[Target]] or [[Target|Label]]
           const wikiRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
           let match;
-          while ((match = wikiRegex.exec(content)) !== null) {
+          while ((match = wikiRegex.exec(safeContent)) !== null) {
             const target = match[1].trim();
             if (target) {
               const cleanTarget = target.endsWith('.md') ? target.substring(0, target.length - 3) : target;
@@ -131,7 +188,7 @@ function LinkGraphView({
 
           // Match Markdown Links: [label](target.md)
           const mdLinkRegex = /\[[^\]]+\]\(([^)]+\.md)\)/g;
-          while ((match = mdLinkRegex.exec(content)) !== null) {
+          while ((match = mdLinkRegex.exec(safeContent)) !== null) {
             const targetPath = match[1].trim();
             // Get filename without path and ext
             const parts = targetPath.split('/');
@@ -228,6 +285,7 @@ function LinkGraphView({
   const tickRef = useRef<() => void>(null as any);
   useEffect(() => {
     const tick = () => {
+      if (!isMountedRef.current) return;
       if (alpha.current < 0.01) {
         isSimulationRunning.current = false;
         return;
@@ -250,7 +308,7 @@ function LinkGraphView({
           const dist = Math.sqrt(dx * dx + dy * dy) || 1.0;
           
           if (dist < 400) {
-            const force = (repulsion / (dist * dist)) * currentAlpha;
+            const force = (repulsion / Math.max(15, dist)) * currentAlpha * 0.2;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
             n1.vx -= fx;
@@ -304,7 +362,9 @@ function LinkGraphView({
         n.vy *= damping;
       });
 
-      setNodes([...simNodes]);
+      if (isMountedRef.current) {
+        setNodes([...simNodes]);
+      }
 
       // Decay temperature
       const isDragging = dragNodeId.current !== null;
@@ -314,7 +374,7 @@ function LinkGraphView({
         alpha.current *= 0.98;
       }
 
-      if (alpha.current >= 0.01 || isDragging) {
+      if (isMountedRef.current && (alpha.current >= 0.01 || isDragging)) {
         requestRef.current = requestAnimationFrame(tick);
       } else {
         isSimulationRunning.current = false;
@@ -337,6 +397,23 @@ function LinkGraphView({
       }
     }
   }, [lastAction]);
+
+  // Non-passive wheel event listener to allow preventDefault inside the SVG container
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+      setZoom(z => Math.max(0.2, Math.min(3.0, z * zoomFactor)));
+    };
+
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   // 3. User SVG Pan/Zoom & Drag Handlers
   const handleSVGMouseDown = (e: React.MouseEvent) => {
@@ -422,8 +499,8 @@ function LinkGraphView({
       style={{
         width: '100%',
         height: '100%',
-        backgroundColor: '#16161a', // Dark theme matches Obsidian
-        color: '#e2e8f0',
+        backgroundColor: 'transparent',
+        color: 'var(--text-main, #e2e8f0)',
         position: 'relative',
         overflow: 'hidden',
         display: 'flex',
@@ -438,11 +515,6 @@ function LinkGraphView({
         onMouseMove={handleSVGMouseMove}
         onMouseUp={handleSVGMouseUp}
         onMouseLeave={handleSVGMouseUp}
-        onWheel={(e) => {
-          e.preventDefault();
-          const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
-          setZoom(z => Math.max(0.2, Math.min(3.0, z * zoomFactor)));
-        }}
       >
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {/* Edges */}
@@ -461,7 +533,7 @@ function LinkGraphView({
                   y1={sNode.y}
                   x2={tNode.x}
                   y2={tNode.y}
-                  stroke={active ? 'var(--accent-color, #3b82f6)' : 'rgba(255, 255, 255, 0.06)'}
+                  stroke={active ? 'var(--accent-color, #ff453a)' : 'var(--border-color, rgba(255, 255, 255, 0.06))'}
                   strokeWidth={active ? 1.5 : 0.8}
                   opacity={hoveredNodeId && !active ? 0.15 : 1}
                   style={{ transition: 'stroke 0.25s, stroke-width 0.25s, opacity 0.25s' }}
@@ -481,9 +553,9 @@ function LinkGraphView({
               const r = baseRadius + Math.min(6, node.degree * 0.8);
 
               // Colors
-              let fill = 'var(--accent-color, #3b82f6)'; // Real node = theme accent
+              let fill = 'var(--accent-color, #ff453a)'; // Real node = theme accent
               if (!node.exists) {
-                fill = '#ef4444'; // Phantom node = light red
+                fill = 'var(--error-color, #ff453a)'; // Phantom node = error color
               }
 
               return (
@@ -508,7 +580,7 @@ function LinkGraphView({
                     opacity={node.exists ? (active ? 1 : 0.15) : (active ? 0.5 : 0.1)}
                     style={{
                       cursor: 'pointer',
-                      stroke: node.exists ? 'rgba(255, 255, 255, 0.15)' : 'rgba(239, 68, 68, 0.2)',
+                      stroke: node.exists ? 'var(--border-color, rgba(255, 255, 255, 0.15))' : 'var(--error-color, rgba(239, 68, 68, 0.2))',
                       strokeWidth: 1,
                       transition: 'opacity 0.25s, fill 0.2s',
                     }}
@@ -524,16 +596,15 @@ function LinkGraphView({
                       x={node.x}
                       y={node.y - r - 6}
                       textAnchor="middle"
-                      fill={isHovered ? '#ffffff' : '#94a3b8'}
+                      fill={isHovered ? 'var(--accent-color, #ff453a)' : 'var(--text-main, #2b2b2f)'}
                       opacity={active ? 1 : 0.15}
                       style={{
                         fontSize: isHovered ? '11px' : '10px',
-                        fontFamily: 'system-ui, sans-serif',
+                        fontFamily: 'var(--font-sans, system-ui, sans-serif)',
                         pointerEvents: 'none',
                         userSelect: 'none',
-                        fontWeight: isHovered ? 600 : 400,
-                        backgroundColor: '#16161a',
-                        textShadow: '0 1px 2px rgba(0,0,0,0.8)'
+                        fontWeight: isHovered ? 600 : 500,
+                        textShadow: '0 1.5px 3px var(--bg-main, #121214), 0 -1.5px 3px var(--bg-main, #121214), 1.5px 0 3px var(--bg-main, #121214), -1.5px 0 3px var(--bg-main, #121214)'
                       }}
                     >
                       {node.id}
@@ -553,23 +624,23 @@ function LinkGraphView({
           position: 'absolute',
           top: '12px',
           left: '12px',
-          backgroundColor: 'rgba(22, 22, 26, 0.85)',
+          backgroundColor: 'var(--bg-panel, rgba(30, 30, 34, 0.75))',
           backdropFilter: 'blur(8px)',
-          border: '1.2px solid rgba(255,255,255,0.08)',
+          border: '1px solid var(--border-color, rgba(255,255,255,0.08))',
           borderRadius: '8px',
           padding: '8px 12px',
           fontSize: '11px',
           pointerEvents: 'none',
           maxWidth: '240px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         }}
       >
-        <div style={{ fontWeight: 600, color: 'var(--accent-color)', marginBottom: '4px' }}>🕸️ Obsidian 双链图谱</div>
-        <div style={{ color: '#94a3b8', lineHeight: '1.4' }}>
+        <div style={{ fontWeight: 600, color: 'var(--accent-color, #ff453a)', marginBottom: '4px' }}>🕸️ Obsidian 双链图谱</div>
+        <div style={{ color: 'var(--text-muted, #94a3b8)', lineHeight: '1.4' }}>
           • 拖拽背景：平移视角<br />
           • 滚轮缩放：聚焦至指针<br />
           • 双击节点：打开/创建对应笔记<br />
-          • 节点颜色：蓝色为实体，<span style={{ color: '#ef4444' }}>红色</span>为幻影链接
+          • 节点颜色：实体为主色，<span style={{ color: 'var(--error-color, #ff453a)' }}>红色/幻影色</span>为虚构引用
         </div>
       </div>
 
@@ -625,15 +696,15 @@ function GraphControls({
         position: 'absolute',
         bottom: '12px',
         right: '12px',
-        backgroundColor: 'rgba(22, 22, 26, 0.95)',
+        backgroundColor: 'var(--bg-panel, rgba(30, 30, 34, 0.85))',
         backdropFilter: 'blur(8px)',
-        border: '1.2px solid rgba(255, 255, 255, 0.08)',
+        border: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
         borderRadius: '8px',
         padding: isOpen ? '16px' : '6px 12px',
         width: isOpen ? '250px' : 'auto',
         maxHeight: '380px',
         overflowY: 'auto',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
         transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         zIndex: 50,
       }}
@@ -647,22 +718,22 @@ function GraphControls({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.06))', paddingBottom: '6px' }}>
             <span style={{ fontSize: '12px', fontWeight: 600 }}>⚙️ 图谱物理参数</span>
-            <span onClick={() => setIsOpen(false)} style={{ cursor: 'pointer', fontSize: '11px', opacity: 0.6 }}>收起 ✕</span>
+            <span onClick={() => setIsOpen(false)} style={{ cursor: 'pointer', fontSize: '11px', opacity: 0.6, color: 'var(--text-muted)' }}>收起 ✕</span>
           </div>
 
           {/* Repulsion */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94a3b8' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted, #94a3b8)' }}>
               <span>排斥力 (斥力强度)</span>
               <span>{repulsion}</span>
             </div>
             <input
               type="range"
-              min="200"
-              max="4000"
-              step="50"
+              min="500"
+              max="8000"
+              step="100"
               value={repulsion}
               onChange={(e) => {
                 setRepulsion(Number(e.target.value));
@@ -674,15 +745,15 @@ function GraphControls({
 
           {/* Gravity */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94a3b8' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted, #94a3b8)' }}>
               <span>重力 (向中心收缩力)</span>
               <span>{gravity.toFixed(3)}</span>
             </div>
             <input
               type="range"
-              min="0.005"
-              max="0.1"
-              step="0.005"
+              min="0.002"
+              max="0.08"
+              step="0.002"
               value={gravity}
               onChange={(e) => {
                 setGravity(Number(e.target.value));
@@ -694,15 +765,15 @@ function GraphControls({
 
           {/* Link Distance */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#94a3b8' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted, #94a3b8)' }}>
               <span>连线拉力距离</span>
               <span>{linkDistance}px</span>
             </div>
             <input
               type="range"
-              min="40"
-              max="200"
-              step="5"
+              min="50"
+              max="350"
+              step="10"
               value={linkDistance}
               onChange={(e) => {
                 setLinkDistance(Number(e.target.value));
@@ -713,7 +784,7 @@ function GraphControls({
           </div>
 
           {/* Toggle Options */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '4px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-color, rgba(255,255,255,0.06))', paddingTop: '10px', marginTop: '4px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
               <input
                 type="checkbox"

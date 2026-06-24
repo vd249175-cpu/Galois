@@ -200,6 +200,19 @@ ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
   }
 });
 
+ipcMain.handle('fs:renameFile', async (_, oldPath: string, newPath: string) => {
+  try {
+    const parentDir = path.dirname(newPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
+    fs.renameSync(oldPath, newPath);
+    return true;
+  } catch (err: any) {
+    throw new Error(`Failed to rename file: ${err.message}`);
+  }
+});
+
 ipcMain.handle('fs:listDir', async (_, dirPath: string) => {
   try {
     const items = fs.readdirSync(dirPath);

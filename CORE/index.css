@@ -983,17 +983,24 @@ body {
     0 8px 20px rgba(0, 0, 0, 0.06);
 }
 
-/* File Delete Button in card view: hidden by default, shown on hover */
-.file-card-item .file-delete-btn {
+/* File Delete & Rename Button in card view: hidden by default, shown on hover */
+.file-card-item .file-delete-btn,
+.file-card-item .file-rename-btn {
   opacity: 0;
   transition: opacity 0.18s ease, background-color 0.15s ease, color 0.15s ease;
 }
 
-.file-card-item:hover .file-delete-btn {
+.file-card-item:hover .file-delete-btn,
+.file-card-item:hover .file-rename-btn {
   opacity: 1;
 }
 
 .file-card-item .file-delete-btn:hover {
   background-color: var(--error-color) !important;
+  color: #ffffff !important;
+}
+
+.file-card-item .file-rename-btn:hover {
+  background-color: var(--accent-color) !important;
   color: #ffffff !important;
 }
