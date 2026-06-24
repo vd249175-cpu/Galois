@@ -6,6 +6,30 @@ DNOTE 是一个基于 **TypeScript / Electron / Vite / React** 打造的现代�
 
 ---
 
+## 🧮 核心技术特性 (Core Technical Features)
+
+### 1. 🕸️ 概念格与形式概念分析 (Formal Concept Analysis & Relation Discovery)
+
+DNOTE 内置了**形式概念分析（Formal Concept Analysis, FCA）**引擎。它不仅能展示普通的双向链接，还能从海量笔记中自动挖掘和发现知识概念的层次包含关系：
+
+*   **对象-属性形式背景构建**：将**笔记文档**视为“形式对象”（Objects），将文档中包含的**知识标签**视为“形式属性”（Attributes）。FCA 引擎会实时扫描所有笔记，建立二元关系矩阵。
+*   **伽罗瓦连接与概念自动推导**：基于数学上的 Galois Connection，系统自动归纳出“最大共性概念”（即包含相同属性子集的最大对象集合，以及包含相同对象子集的最大属性集合），生成概念格（Concept Lattice）。
+*   **层次包含关系自动发现**：通过概念格的拓扑层级结构，系统能自动挖掘出标签之间的蕴含关系（Implications）。例如，若包含 `#机器学习` 的笔记总是包含 `#人工智能`，概念格拓扑图谱中将自动生成指向关系。这无需用户手动建立父子标签，实现了自底向上的知识树演化与层次拓扑发现。
+
+### 2. 🐍 复杂 Python 脚本高级支持与异步血流闭环 (Advanced Python Scripting & Asynchronous Loop)
+
+为了提供极高的自由度与强大的计算能力，DNOTE 深度集成了对复杂 Python 脚本的调用支持：
+
+*   **动态标签计算器 (Dynamic Tag Resolvers)**：支持配置并运行 Python 动态脚本。脚本能接收并扫描当前文档内容，运行复杂的自然语言处理（NLP）或统计学模型，并按照约定的 JSON 标准通过标准输出（stdout）将解析结果返回给 DNOTE 主进程，实现动态标签计算与标签自动填充。
+*   **静默后台指令执行 (`commands.json` & Slash Menu)**：定义在 `commands.json` 中的高级指令可以指定运行外部复杂的 Python 脚本（如 `sys_monitor.py` 或双链图谱优化算法 `lattice.py`）。主进程通过异步子进程安全地运行这些脚本，不会阻塞前端 UI 的渲染和输入响应。
+*   **基于缓存与血液的事件闭环**：
+    1. Python 脚本在后台独立运行，执行大量 CPU 密集型计算。
+    2. 计算完成后，脚本将结果静默写入 `.dnote_cache/` 缓存文件夹。
+    3. 脚本退出时通过主进程广播血液事件 `events.commandExecuted.{id}`。
+    4. 对应面板器官的“抗体”（Antibody）监听到血液信号变化，自动读取对应的缓存文件并刷新 UI。这种设计完全解耦了核心进程，保证了编辑器的丝滑体验。
+
+---
+
 ## 🧬 仿生设计核心理念 (Biomimetic Concept)
 
 本项目不采用传统的组件间直接通信（回调、Event Bus 等），而是模拟生物体的生命运行机制：
@@ -208,26 +232,3 @@ DNOTE 采用了高度松耦合的**器官 (Organ) 插件机制**。任何开发�
 4. **实时热重载调试**：
    在终端运行 `npm run dev`。Vite 拥有自动发现机制（`import.meta.glob`），它会自动扫描、注册并加载您的新插件。您可以在编辑器右上角的网格布局菜单中选择切换为您刚才新加的 `我的自定义插件`，编写 TSX 时界面会实时热重载更新。
 
----
-
-## 🧮 核心技术特性 (Core Technical Features)
-
-### 1. 🕸️ 概念格与形式概念分析 (Formal Concept Analysis & Relation Discovery)
-
-DNOTE 内置了**形式概念分析（Formal Concept Analysis, FCA）**引擎。它不仅能展示普通的双向链接，还能从海量笔记中自动挖掘和发现知识概念的层次包含关系：
-
-*   **对象-属性形式背景构建**：将**笔记文档**视为“形式对象”（Objects），将文档中包含的**知识标签**视为“形式属性”（Attributes）。FCA 引擎会实时扫描所有笔记，建立二元关系矩阵。
-*   **伽罗瓦连接与概念自动推导**：基于数学上的 Galois Connection，系统自动归纳出“最大共性概念”（即包含相同属性子集的最大对象集合，以及包含相同对象子集的最大属性集合），生成概念格（Concept Lattice）。
-*   **层次包含关系自动发现**：通过概念格的拓扑层级结构，系统能自动挖掘出标签之间的蕴含关系（Implications）。例如，若包含 `#机器学习` 的笔记总是包含 `#人工智能`，概念格拓扑图谱中将自动生成指向关系。这无需用户手动建立父子标签，实现了自底向上的知识树演化与层次拓扑发现。
-
-### 2. 🐍 复杂 Python 脚本高级支持与异步血流闭环 (Advanced Python Scripting & Asynchronous Loop)
-
-为了提供极高的自由度与强大的计算能力，DNOTE 深度集成了对复杂 Python 脚本的调用支持：
-
-*   **动态标签计算器 (Dynamic Tag Resolvers)**：支持配置并运行 Python 动态脚本。脚本能接收并扫描当前文档内容，运行复杂的自然语言处理（NLP）或统计学模型，并按照约定的 JSON 标准通过标准输出（stdout）将解析结果返回给 DNOTE 主进程，实现动态标签计算与标签自动填充。
-*   **静默后台指令执行 (`commands.json` & Slash Menu)**：定义在 `commands.json` 中的高级指令可以指定运行外部复杂的 Python 脚本（如 `sys_monitor.py` 或双链图谱优化算法 `lattice.py`）。主进程通过异步子进程安全地运行这些脚本，不会阻塞前端 UI 的渲染和输入响应。
-*   **基于缓存与血液的事件闭环**：
-    1. Python 脚本在后台独立运行，执行大量 CPU 密集型计算。
-    2. 计算完成后，脚本将结果静默写入 `.dnote_cache/` 缓存文件夹。
-    3. 脚本退出时通过主进程广播血液事件 `events.commandExecuted.{id}`。
-    4. 对应面板器官的“抗体”（Antibody）监听到血液信号变化，自动读取对应的缓存文件并刷新 UI。这种设计完全解耦了核心进程，保证了编辑器的丝滑体验。
