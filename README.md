@@ -28,59 +28,13 @@ DNOTE 内置了**形式概念分析（Formal Concept Analysis, FCA）**引擎。
     3. 脚本退出时通过主进程广播血液事件 `events.commandExecuted.{id}`。
     4. 对应面板器官的“抗体”（Antibody）监听到血液信号变化，自动读取对应的缓存文件并刷新 UI。这种设计完全解耦了核心进程，保证了编辑器的丝滑体验。
 
----
+### 3. 🔌 极简模块化插件与即插即用开发 (Modular Plug-and-Play Plugins & Easy Extension)
 
-## 🧬 仿生设计核心理念 (Biomimetic Concept)
+DNOTE 核心采用极简且松耦合的**器官/插件架构**，无论是面板组件还是计算脚本，均实现了高内聚与即插即用：
 
-本项目不采用传统的组件间直接通信（回调、Event Bus 等），而是模拟生物体的生命运行机制：
-
-```mermaid
-graph TD
-    %% Sensory Input (Sensors)
-    subgraph Sensors ["感受器 (Sensors)"]
-        K["键盘按键 (Shortcuts)"] --> AR["反射区 (ActionRegistry)"]
-        B["工具栏按钮 (Toolbar Buttons)"] --> AR
-    end
-
-    %% State & Blood
-    subgraph BloodStream ["血管 (Blood State)"]
-        AR -- "写入信号" --> Blood["血液 (Blood.ts)"]
-        Blood -- "广播变动频道" --> AntibodyHook["抗体 (Antibody/Receptors)"]
-    end
-
-    %% Receptors & Organs
-    subgraph OrganCells ["器官与细胞 (Organs & Cells)"]
-        AntibodyHook -- "触发特定行为" --> FileTree["Lattice Explorer 器官"]
-        AntibodyHook -- "触发特定行为" --> Editor["Lattice Editor 器官"]
-        AntibodyHook -- "触发特定行为" --> Graph["Lattice Graph 器官"]
-        AntibodyHook -- "触发特定行为" --> Terminal["Terminal Console 器官"]
-        AntibodyHook -- "触发特定行为" --> Settings["Settings Panel 器官"]
-    end
-
-    style Sensors fill:#1e1e2e,stroke:#313244,color:#cdd6f4
-    style BloodStream fill:#311b1b,stroke:#f38ba8,color:#f5e0dc
-    style OrganCells fill:#181825,stroke:#cba6f7,color:#cdd6f4
-```
-
-### 1. 🩸 血液 (Blood.ts) —— 状态管理中心
-*   整个项目维持一个全局统一的单一数据源（Single Source of Truth）：`Blood` 状态机。
-*   所有的组件、按钮、键盘监听器**不直接与其它组件通信，只修改 Blood 状态**。
-*   状态被修改后，`Blood` 会向所有订阅的器官广播哪些“频道（State Keys）”发生了变化。
-
-### 2. 🫀 器官 (Organs) —— 模块化插件
-*   位于 `APP/` 目录下的组件都是“器官”（Plugins）。例如：
-    *   **Lattice Explorer (file-tree/)**：文件及标签目录管理器（解析 YAML 标签与运行生命周期脚本）。
-    *   **Lattice Editor (editor/)**：实例隔离的代码及 YAML 属性编辑器，支持 Draft 未保存模式。
-    *   **Lattice Graph (graph-view/)**：力导向拓扑关系图谱，支持 Hill Node 算法非线性缩放及色板（Palette）管理。
-    *   **Obsidian Link Graph (link-graph/)**：Obsidian 风格的双向链接图谱，实时扫描解析 WikiLinks 并在 2D 力导向画布上渲染笔记关联拓扑，支持幻影节点与物理模拟参数微调。
-    *   **Terminal Console (terminal/)**：基于 xterm.js 的独立多标签 Shell 终端。
-    *   **Settings Panel (settings/)**：自定义首选项、3D 实体键帽快捷键录制及一键 Reset 页面。
-*   **插件即是组件即是应用本身**。器官在运行时可以自由被销毁、复用或任意组合。
-
-### 3. 🛡️ 器官抗体 (Antibodies / Receptors) —— 反应接收体
-*   器官内部通过 React 响应式钩子 `useBloodChannel` 或 `useOrganAntibody` 作为“抗体”。
-*   收到血液广播后，抗体检查自己关注的频道是否有变化，无变化则不做响应，有变化则立即执行对应的细胞反应程序（如保存文件、清空终端历史）。
-*   执行完毕后，抗体负责将血液中的事件触发器状态复位（重置为 `false` 或 `null`），防止重复触发。
+*   **插件超好开发**：所有功能面板（如文件树、编辑器、各种关系图谱、终端）均作为独立“器官”存放在 `APP/` 下。新增插件只需建立独立文件夹，编写简单的 React 视图组件并导出配置即可。Vite 拥有自动发现与热重载机制，无需重新打包，在主界面网格菜单中即可一键加载并实时调试。
+*   **状态解耦即插即用**：各组件绝不直接和其它组件进行复杂的回调耦合，而是通过轻量级的 Blood 血液总线进行单向频道订阅（State Channels）。这使得任何面板在运行时可以自由被销毁、复用、或者任意组合分割（Blender 风格分栏），无需担心接口断裂。
+*   **动作与反射隔离**：所有面板动作和热键（如保存、新建、自定义指令）均由 `ActionRegistry` 收集注册，并依据当前 Focus 的实例进行智能路由隔离。配合 `commands.json`，您可以轻松定义和装配各种后台脚本，极大地扩展系统功能。
 
 ---
 
