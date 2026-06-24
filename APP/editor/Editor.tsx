@@ -18,6 +18,11 @@ export const EditorComponent = {
   typeId: 'editor',
   displayName: '文本编辑器',
   iconName: 'document',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M3 1.5h7.5L13 4v10.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-14z" />
+    </svg>
+  ),
   component: EditorView,
   actions: editorActions,
   bloodChannels: (areaId: string) => [

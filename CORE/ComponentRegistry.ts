@@ -45,6 +45,7 @@ export interface AreaComponent {
   typeId: string;
   displayName: string;
   iconName: string;
+  icon?: React.ReactNode;
   component: React.ComponentType<{ areaId: string }>;
   actions?: OrganAction[];
   /** 数据频道订阅（ComponentWrapper 用于 stateValues） */

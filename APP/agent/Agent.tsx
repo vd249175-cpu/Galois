@@ -20,6 +20,13 @@ export const AgentComponent = {
   typeId: 'agent',
   displayName: 'AI 智能副驾驶',
   iconName: 'cpu',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+      <circle cx="8" cy="8" r="2.5" />
+      <path d="M6 10h4" />
+    </svg>
+  ),
   component: AgentView,
   actions: agentActions,
   bloodChannels: (areaId: string) => [

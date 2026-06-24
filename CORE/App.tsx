@@ -7,7 +7,7 @@ import { ActionRegistry } from './ActionRegistry';
 import { RightSidebar } from './RightSidebar';
 import { SettingsModal } from './SettingsModal';
 import { BloodDebugPanel } from './BloodDebugPanel';
-import { Blood } from './Blood';
+import { Blood, useBloodChannel } from './Blood';
 import { BC } from './BloodChannels';
 import { defaultLayout } from './defaultLayout';
 import { applyTheme } from './themes';
@@ -22,6 +22,88 @@ for (const path in modules) {
       ComponentRegistry.register(exportVal);
     }
   }
+}
+
+function LeftActivityBar() {
+  const focusedAreaId = useBloodChannel(['system.focusedAreaId'], () =>
+    Blood.getValue<string | null>('system.focusedAreaId', null)
+  );
+
+  const focusedType = useBloodChannel(
+    focusedAreaId ? [`system.areaComponentTypes.${focusedAreaId}`] : [],
+    () => focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null
+  );
+
+  const availableTypes = ComponentRegistry.getAvailableTypes().filter(t => t !== 'settings');
+
+  return (
+    <div style={{
+      width: '44px',
+      height: '100%',
+      backgroundColor: 'var(--bg-header)',
+      borderRight: '1px solid var(--border-color)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      padding: '12px 0',
+      gap: '12px',
+      boxShadow: 'inset -1px 0px 0px rgba(255,255,255,0.06)',
+      zIndex: 5,
+    }}>
+      {availableTypes.map((typeId) => {
+        const comp = ComponentRegistry.getComponent(typeId);
+        if (!comp) return null;
+        
+        const isActive = focusedType === typeId;
+        
+        return (
+          <button
+            key={typeId}
+            title={`${comp.displayName}${isActive ? ' (当前聚焦)' : ''}`}
+            onClick={() => {
+              if (focusedAreaId) {
+                Blood.updateKey(`layout.changeAreaType.${focusedAreaId}`, typeId);
+              }
+            }}
+            disabled={!focusedAreaId}
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: isActive ? 'var(--accent-color)' : 'transparent',
+              color: isActive ? '#ffffff' : (focusedAreaId ? 'var(--text-main)' : 'var(--text-muted)'),
+              opacity: focusedAreaId ? 1.0 : 0.4,
+              cursor: focusedAreaId ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.18s cubic-bezier(0.16, 1, 0.3, 1)',
+              boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
+            }}
+            onMouseEnter={(e) => {
+              if (focusedAreaId && !isActive) {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.12)';
+                e.currentTarget.style.color = 'var(--accent-color)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isActive) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = focusedAreaId ? 'var(--text-main)' : 'var(--text-muted)';
+              }
+            }}
+          >
+            {comp.icon || (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
+              </svg>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export function App() {
@@ -307,6 +389,7 @@ export function App() {
       </svg>
 
       <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+        <LeftActivityBar />
         <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
           <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
         </div>

@@ -96,6 +96,14 @@ export const GraphViewComponent = {
   typeId: 'graphView',
   displayName: '标签拓扑图',
   iconName: 'git-branch',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="4" cy="4" r="1.5" />
+      <circle cx="12" cy="4" r="1.5" />
+      <circle cx="8" cy="12" r="1.5" />
+      <path d="M4 5.5l3.5 5M12 5.5l-3.5 5" />
+    </svg>
+  ),
   component: GraphView,
   actions: graphViewActions,
   bloodChannels: [

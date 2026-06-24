@@ -23,6 +23,16 @@ export const LinkGraphComponent = {
   typeId: 'linkGraph',
   displayName: '双链关系图谱',
   iconName: 'network',
+  icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8" cy="8" r="2" />
+      <circle cx="3" cy="3" r="1.5" />
+      <circle cx="13" cy="3" r="1.5" />
+      <circle cx="3" cy="13" r="1.5" />
+      <circle cx="13" cy="13" r="1.5" />
+      <path d="M4.5 4.5l2.5 2.5M11.5 4.5L9.5 6.5M4.5 11.5l2.5-2.5M11.5 11.5L9.5 9.5" />
+    </svg>
+  ),
   component: LinkGraphView,
   actions: linkGraphActions,
   bloodChannels: [
