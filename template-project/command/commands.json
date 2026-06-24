@@ -5,6 +5,18 @@
       "label": "统计项目字数",
       "shortcut": "meta+shift+t",
       "script": "uv run script/note_stats.py"
+    },
+    {
+      "id": "project.buildIndex",
+      "label": "重建标签索引报告",
+      "shortcut": "meta+shift+l",
+      "script": "uv run script/build_index.py"
+    },
+    {
+      "id": "project.exportSummary",
+      "label": "导出并更新知识库概览报告",
+      "shortcut": "meta+shift+e",
+      "script": "uv run script/export_summary.py"
     }
   ]
 }

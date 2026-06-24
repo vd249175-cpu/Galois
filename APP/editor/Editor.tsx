@@ -729,6 +729,35 @@ function EditorView({
       return;
     }
 
+    if (cmd.id.startsWith('project.')) {
+      const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
+      const end = textareaRef.current.selectionEnd;
+      
+      pushStateToUndoStack(content, actualStart, end);
+      
+      // Clean up the typed slash "/" character or command trigger word
+      const before = content.substring(0, actualStart);
+      const after = content.substring(end);
+      const cleanContent = before + after;
+      
+      setContent(cleanContent);
+      lastHistoryContentRef.current = cleanContent;
+      saveNodeFile(cleanContent);
+      setShowSlashMenu(false);
+      
+      const projCmd = projectCommands.find(p => p.id === cmd.id);
+      if (projCmd) {
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.setSelectionRange(actualStart, actualStart);
+          }
+          handleExecuteProjectCommand(projCmd);
+        }, 0);
+      }
+      return;
+    }
+
     const start = slashIndex;
     const end = textareaRef.current.selectionEnd;
     const before = content.substring(0, start);
