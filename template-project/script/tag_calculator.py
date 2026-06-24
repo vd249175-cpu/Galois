@@ -10,7 +10,7 @@ result = {
     "status": "success",
     "message": "动态标签计算成功",
     "data": {
-        "tags": ["AI推荐", "系统运算", "高频标签"]
+        "tags": ["DNOTE/标签/脚本计算", "DNOTE/推荐"]
     },
     "timestamp": int(time.time())
 }
@@ -20,4 +20,5 @@ with open(output_file, 'w', encoding='utf-8') as f:
 
 # Print to stdout for DNOTE tagResolver parsing
 print(json.dumps(result["data"]["tags"], ensure_ascii=False))
+
 
