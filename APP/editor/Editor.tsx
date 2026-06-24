@@ -8,6 +8,7 @@ import { useMediaDrop } from './hooks/useMediaDrop';
 import { useLinkNavigator } from './hooks/useLinkNavigator';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 import { ActionRegistry } from '../../CORE/ActionRegistry';
+import { Blood } from '../../CORE/Blood';
 
 /**
  * EditorComponent — 插件注册对象（完整契约）
@@ -371,7 +372,7 @@ function EditorView({
       if (Array.isArray(fileTags)) {
         fileTags.forEach(t => {
           if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
-            t.split('#').filter(Boolean).forEach(part => set.add(part));
+            t.split('#').filter(Boolean).forEach((part: string) => set.add(part));
           } else {
             set.add(t);
           }
@@ -384,7 +385,7 @@ function EditorView({
       if (Array.isArray(fileTags)) {
         fileTags.forEach(t => {
           if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
-            t.split('#').filter(Boolean).forEach(part => set.add(part));
+            t.split('#').filter(Boolean).forEach((part: string) => set.add(part));
           } else {
             set.add(t);
           }
@@ -1252,13 +1253,22 @@ function EditorView({
         const errMsg = err.message || '';
         if (errMsg.includes('ENOENT') || errMsg.includes('no such file')) {
           const noteName = openedFile.split(/[/\\]/).pop()?.replace('.md', '') || '';
-          const template = `---\ntags:\n  - ${noteName}\n---\n# ${noteName}\n\n`;
+          let draftTags = [noteName];
+          let draftTitle = noteName;
+          if (noteName.startsWith('#')) {
+            const parsed = noteName.split('#').map(t => t.trim()).filter(Boolean);
+            if (parsed.length > 0) {
+              draftTags = parsed;
+              draftTitle = noteName;
+            }
+          }
+          const template = `---\ntags:\n${draftTags.map(t => `  - ${t}`).join('\n')}\n---\n# ${draftTitle}\n\n`;
           if (template === contentRef.current) return;
           lastSavedContentRef.current = template;
-          setTags([noteName]);
+          setTags(draftTags);
           setContent(template);
           setCurrentFile(openedFile);
-          setStatusMessage(`Draft Note: ${noteName} (Unsaved)`);
+          setStatusMessage(`Draft Note: ${draftTitle} (Unsaved)`);
           setIsPreviewMode(false);
         } else {
           setStatusMessage(`Error loading note file.`);

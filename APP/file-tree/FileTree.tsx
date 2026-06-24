@@ -291,7 +291,7 @@ function FileTreeView({
       if (Array.isArray(fileTags)) {
         fileTags.forEach(t => {
           if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
-            t.split('#').filter(Boolean).forEach(part => set.add(part));
+            t.split('#').filter(Boolean).forEach((part: string) => set.add(part));
           } else {
             set.add(t);
           }
@@ -303,7 +303,7 @@ function FileTreeView({
       if (Array.isArray(fileTags)) {
         fileTags.forEach(t => {
           if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
-            t.split('#').filter(Boolean).forEach(part => set.add(part));
+            t.split('#').filter(Boolean).forEach((part: string) => set.add(part));
           } else {
             set.add(t);
           }

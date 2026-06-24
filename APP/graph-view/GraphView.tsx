@@ -209,72 +209,12 @@ function GraphView({
 
         const currentResolvedTags = state[BC.system.resolvedTags] || {};
         const rawNodes: { id: string; tags: string[]; label: string; isVirtual?: boolean }[] = [];
-        const allUniqueDecomposedTags = new Set<string>();
-        const originalTagsSet = new Set<string>();
 
+        // Step 1: 所有笔记节点使用 flat 标签，不做路径拆解
         for (const file of mdFiles) {
-          let tags = currentResolvedTags[file.path] || [];
-          // Keep track of original tags before decomposition
-          tags.forEach((t: string) => originalTagsSet.add(t));
-
-          if (isHierarchicalMode) {
-            const decomposed = new Set<string>();
-            tags.forEach((tag: string) => {
-              const parts = tag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
-              let path = '';
-              parts.forEach((part, index) => {
-                path = index === 0 ? part : `${path}#${part}`;
-                decomposed.add(path);
-                decomposed.add(part);
-              });
-              decomposed.add(tag);
-            });
-            tags = Array.from(decomposed);
-            tags.forEach((t: string) => allUniqueDecomposedTags.add(t));
-          }
+          const tags: string[] = currentResolvedTags[file.path] || [];
           const noteTitle = file.name.substring(0, file.name.lastIndexOf('.md'));
           rawNodes.push({ id: file.path, tags, label: noteTitle });
-        }
-
-        // Count frequencies of each sub-part across the original tags to identify shared tags
-        const partCounts = new Map<string, number>();
-        originalTagsSet.forEach((originalTag) => {
-          const parts = originalTag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
-          new Set(parts).forEach((part) => {
-            partCounts.set(part, (partCounts.get(part) || 0) + 1);
-          });
-        });
-
-        // Add virtual nodes for tags that are not represented by explicit notes
-        if (isHierarchicalMode) {
-          allUniqueDecomposedTags.forEach((tag) => {
-            const isRepresented = originalTagsSet.has(tag) || rawNodes.some(rn => rn.label === tag || rn.id.endsWith(`/${tag}.md`) || rn.id.endsWith(`\\${tag}.md`));
-            if (!isRepresented) {
-              // Rendering simplification: Only render sub-paths (contain # or /) OR flat parts that are shared across multiple original tags (frequency > 1)
-              const isPath = tag.includes('#') || tag.includes('/');
-              const isShared = (partCounts.get(tag) || 0) > 1;
-              if (!isPath && !isShared) {
-                return; // Skip rendering this unshared flat tag virtual node!
-              }
-
-              const decomposed = new Set<string>();
-              const parts = tag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
-              let path = '';
-              parts.forEach((part, index) => {
-                path = index === 0 ? part : `${path}#${part}`;
-                decomposed.add(path);
-                decomposed.add(part);
-              });
-              decomposed.add(tag);
-
-              rawNodes.push({
-                id: `tag:${tag}`,
-                tags: Array.from(decomposed),
-                label: `#${tag}`,
-                isVirtual: true
-              });
-            }
-          });
         }
 
         if (rawNodes.length === 0) {
@@ -284,10 +224,10 @@ function GraphView({
           return;
         }
 
-        // Call Python lattice.py via generic runScript IPC
-        // lattice.py 位于 APP/graph-view/services/ 目录下
+        // Call Python lattice.py — 传入 { nodes, showVirtual }，由 Python 侧做 FCA 虚节点计算
         const scriptPath = await (window as any).electronAPI.getServiceScriptPath('graph-view', 'lattice.py');
-        const result = await (window as any).electronAPI.runScript(scriptPath, JSON.stringify(rawNodes), projectPath);
+        const latticePayload = JSON.stringify({ nodes: rawNodes, showVirtual: isHierarchicalMode });
+        const result = await (window as any).electronAPI.runScript(scriptPath, latticePayload, projectPath);
 
         if (result.stderr && result.stderr.trim()) {
           updateBloodKey(BC.events.scriptError('graphView'), { message: result.stderr.trim(), ts: Date.now() });
@@ -295,7 +235,16 @@ function GraphView({
 
         let calculatedEdges: Link[] = [];
         try {
-          calculatedEdges = JSON.parse(result.stdout || '[]');
+          const latticeResult = JSON.parse(result.stdout || '{"nodes":[],"edges":[]}');
+          // lattice.py 返回 FCA 生成的虚节点（合并进 rawNodes 用于渲染）
+          const returnedVirtualNodes: { id: string; tags: string[]; label: string; isVirtual: boolean }[] =
+            latticeResult.nodes || [];
+          returnedVirtualNodes.forEach((vn) => {
+            if (!rawNodes.find((rn) => rn.id === vn.id)) {
+              rawNodes.push(vn);
+            }
+          });
+          calculatedEdges = latticeResult.edges || [];
         } catch (parseErr) {
           updateBloodKey(BC.events.scriptError('graphView'), { message: `lattice.py JSON parse error: ${result.stdout}`, ts: Date.now() });
         }
@@ -536,7 +485,10 @@ function GraphView({
 
   const handleNodeDoubleClick = (nodeId: string) => {
     let targetPath = nodeId;
-    if (nodeId.startsWith('tag:')) {
+    if (nodeId.startsWith('virtual:')) {
+      const tags = nodeId.substring(8).split('|');
+      targetPath = `${projectPath}/#${tags.join('#')}.md`;
+    } else if (nodeId.startsWith('tag:')) {
       const tagName = nodeId.substring(4);
       targetPath = `${projectPath}/${tagName}.md`;
     }
@@ -660,7 +612,17 @@ function GraphView({
               const dTarget = target.degree || 0;
               const fsTarget = 8 + 3 * (dTarget / (dTarget + 3.0));
               const wTarget = getPillWidth(target.label, fsTarget);
-              targetRadius = isTargetHovered ? (wTarget / 2) + 2.5 : (wTarget / 2);
+              const hTarget = 14 + 8 * (dTarget / (dTarget + 3.0));
+              
+              const absDx = Math.abs(dx);
+              const absDy = Math.abs(dy);
+              if (absDx === 0 && absDy === 0) {
+                targetRadius = hTarget / 2;
+              } else {
+                const tx = (wTarget / 2) / (absDx / len);
+                const ty = (hTarget / 2) / (absDy / len);
+                targetRadius = Math.min(tx, ty);
+              }
             } else {
               const dTarget = target.degree || 0;
               const rTarget = 6 + 10 * (dTarget / (dTarget + 3.0));
