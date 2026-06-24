@@ -1,5 +1,6 @@
 import defaultLight from './default-light.css?inline';
 import defaultDark from './default-dark.css?inline';
+import lavender from './lavender.css?inline';
 
 export const themes: Record<string, { name: string; css: string }> = {
   'default-light': {
@@ -9,6 +10,10 @@ export const themes: Record<string, { name: string; css: string }> = {
   'default-dark': {
     name: '深空极夜 (Dark)',
     css: defaultDark,
+  },
+  'lavender': {
+    name: '雪青紫罗 (Lavender)',
+    css: lavender,
   },
 };
 
