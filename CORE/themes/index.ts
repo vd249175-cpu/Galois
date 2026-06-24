@@ -1,6 +1,7 @@
 import defaultLight from './default-light.css?inline';
 import defaultDark from './default-dark.css?inline';
 import lavender from './lavender.css?inline';
+import yuebai from './yuebai.css?inline';
 
 export const themes: Record<string, { name: string; css: string }> = {
   'default-light': {
@@ -14,6 +15,10 @@ export const themes: Record<string, { name: string; css: string }> = {
   'lavender': {
     name: '雪青紫罗 (Lavender)',
     css: lavender,
+  },
+  'yuebai': {
+    name: '月白缥青 (Azure)',
+    css: yuebai,
   },
 };
 
