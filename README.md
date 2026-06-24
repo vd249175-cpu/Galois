@@ -6,6 +6,30 @@ DNOTE 是一个基于 **TypeScript / Electron / Vite / React** 打造的现代�
 
 ---
 
+## 🚀 启动与开发 (Get Started)
+
+### 安装依赖
+```bash
+npm install
+```
+
+### 启动本地热重载开发服务器 (Concurrent Electron & Vite)
+```bash
+npm run dev
+```
+
+### 静态类型检查
+```bash
+npx tsc --noEmit
+```
+
+### 生产打包构建
+```bash
+npm run build
+```
+
+---
+
 ## 🧮 核心技术特性 (Core Technical Features)
 
 ### 1. 🕸️ 概念格与形式概念分析 (Formal Concept Analysis & Relation Discovery)
@@ -117,30 +141,6 @@ DNOTE/
 
 ---
 
-## 🚀 启动与开发 (Get Started)
-
-### 安装依赖
-```bash
-npm install
-```
-
-### 启动本地热重载开发服务器 (Concurrent Electron & Vite)
-```bash
-npm run dev
-```
-
-### 静态类型检查
-```bash
-npx tsc --noEmit
-```
-
-### 生产打包构建
-```bash
-npm run build
-```
-
----
-
 ## 🔌 独立开发与拓展自定义插件 (Organ Plugin Development)
 
 DNOTE 采用了高度松耦合的**器官 (Organ) 插件机制**。任何开发者在本地拉取代码后，均可自由在 `APP/` 下新建或修改插件，无需重新打包：
@@ -185,4 +185,3 @@ DNOTE 采用了高度松耦合的**器官 (Organ) 插件机制**。任何开发�
    ```
 4. **实时热重载调试**：
    在终端运行 `npm run dev`。Vite 拥有自动发现机制（`import.meta.glob`），它会自动扫描、注册并加载您的新插件。您可以在编辑器右上角的网格布局菜单中选择切换为您刚才新加的 `我的自定义插件`，编写 TSX 时界面会实时热重载更新。
-
