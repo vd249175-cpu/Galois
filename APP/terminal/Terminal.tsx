@@ -104,14 +104,16 @@ function TerminalView({
 
   // ─── Create a brand-new xterm + PTY tab ──────────────────────────────────
 
-  const spawnTab = useCallback((tabId: string, tabName: string, notesProject: string) => {
+  const spawnTab = useCallback((tabId: string, tabName: string, notesProject: string, skipBloodUpdate = false) => {
     const wrapper = xtermWrapperRef.current;
     if (!wrapper) return;
 
     // If instance already exists (component remounted), just re-attach container
     if (xtermInstances.has(tabId)) {
       const inst = xtermInstances.get(tabId)!;
-      wrapper.appendChild(inst.container);
+      if (!wrapper.contains(inst.container)) {
+        wrapper.appendChild(inst.container);
+      }
       return;
     }
 
@@ -148,32 +150,32 @@ function TerminalView({
     setTimeout(() => { fit.fit(); term.focus(); }, 30);
 
     // ── PTY output → xterm ──
-    const unsubOutput = (window as any).electronAPI.onTerminalOutput(tabId, (data: string) => {
+    const unsubOutput = window.electronAPI.onTerminalOutput(tabId, (data: string) => {
       term.write(data);
     });
-    const unsubExit = (window as any).electronAPI.onTerminalExit(tabId, () => {
+    const unsubExit = window.electronAPI.onTerminalExit(tabId, () => {
       term.write('\r\n\x1b[33m[进程已退出]\x1b[0m\r\n');
     });
 
     // ── xterm input → PTY ──
     term.onData((data) => {
-      (window as any).electronAPI.writeTerminal(tabId, data);
+      window.electronAPI.writeTerminal(tabId, data);
     });
 
     xtermInstances.set(tabId, { term, fit, container, unsubOutput, unsubExit });
 
     // ── Spawn PTY (cwd = DNOTE app dir) ──
     const dir = appDirRef.current;
-    (window as any).electronAPI
+    window.electronAPI
       .spawnTerminal(tabId, dir, term.cols || 80, term.rows || 24)
       .then(() => {
         // Only send auto-start once per tab ID, ever
         if (!startedTabIds.has(tabId)) {
           startedTabIds.add(tabId);
-          (window as any).electronAPI.writeTerminal(tabId, 'agy\r');
+          window.electronAPI.writeTerminal(tabId, 'agy\r');
           if (notesProject) {
             setTimeout(() => {
-              (window as any).electronAPI.writeTerminal(tabId, `/add-dir ${notesProject}\r`);
+              window.electronAPI.writeTerminal(tabId, `/add-dir ${notesProject}\r`);
             }, 1500);
           }
         }
@@ -182,12 +184,14 @@ function TerminalView({
         term.write(`\r\n\x1b[31m[错误] PTY 启动失败: ${err.message}\x1b[0m\r\n`);
       });
 
-    // Update tabs state
-    const currentTabs = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []);
-    const newTab: TerminalTab = { id: tabId, name: tabName, projectPath: notesProject };
-    const newTabs = [...currentTabs, newTab];
-    applyTabs(newTabs);
-    applyActiveTabId(tabId);
+    if (!skipBloodUpdate) {
+      // Update tabs state
+      const currentTabs = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []);
+      const newTab: TerminalTab = { id: tabId, name: tabName, projectPath: notesProject };
+      const newTabs = [...currentTabs, newTab];
+      applyTabs(newTabs);
+      applyActiveTabId(tabId);
+    }
   }, [applyTabs, applyActiveTabId]);
 
   // ─── On appDir ready: restore from Blood or bootstrap ────────────────────
@@ -205,7 +209,12 @@ function TerminalView({
       for (const tab of savedTabs) {
         const inst = xtermInstances.get(tab.id);
         if (inst) {
-          wrapper.appendChild(inst.container);
+          if (!wrapper.contains(inst.container)) {
+            wrapper.appendChild(inst.container);
+          }
+        } else {
+          // Re-create the lost instance
+          spawnTab(tab.id, tab.name, tab.projectPath, true);
         }
       }
       setTabs(savedTabs);
@@ -227,7 +236,7 @@ function TerminalView({
   // ─── Fetch app root dir once on mount ────────────────────────────────────
 
   useEffect(() => {
-    (window as any).electronAPI.getAppPath().then((dir: string) => {
+    window.electronAPI.getAppPath().then((dir: string) => {
       setAppDir(dir);
     });
   }, []);
@@ -242,7 +251,7 @@ function TerminalView({
     if (inst) {
       requestAnimationFrame(() => {
         inst.fit.fit();
-        (window as any).electronAPI
+        window.electronAPI
           .resizeTerminal(activeTabId, inst.term.cols, inst.term.rows)
           .catch(() => {});
         inst.term.focus();
@@ -260,7 +269,7 @@ function TerminalView({
       const inst = xtermInstances.get(id);
       if (!inst) return;
       inst.fit.fit();
-      (window as any).electronAPI.resizeTerminal(id, inst.term.cols, inst.term.rows).catch(() => {});
+      window.electronAPI.resizeTerminal(id, inst.term.cols, inst.term.rows).catch(() => {});
     });
     ro.observe(wrapper);
     return () => ro.disconnect();
@@ -298,7 +307,7 @@ function TerminalView({
       const inst = xtermInstances.get(activeTabId);
       if (inst) {
         inst.term.clear();
-        (window as any).electronAPI.writeTerminal(activeTabId, 'clear\r');
+        window.electronAPI.writeTerminal(activeTabId, 'clear\r');
       }
     }
   }, [lastAction, activeTabId]);
@@ -310,7 +319,7 @@ function TerminalView({
     const currentTabs = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []);
     if (currentTabs.length === 1) return;
 
-    (window as any).electronAPI.killTerminal(tabId);
+    window.electronAPI.killTerminal(tabId);
     startedTabIds.delete(tabId);
 
     const inst = xtermInstances.get(tabId);
