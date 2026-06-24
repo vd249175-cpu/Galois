@@ -459,7 +459,7 @@ body {
   border-radius: 8px;
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: var(--text-main);
   cursor: pointer;
   display: flex;
   align-items: center;
