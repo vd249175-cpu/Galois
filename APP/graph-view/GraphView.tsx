@@ -236,11 +236,27 @@ function GraphView({
           rawNodes.push({ id: file.path, tags, label: noteTitle });
         }
 
+        // Count frequencies of each sub-part across the original tags to identify shared tags
+        const partCounts = new Map<string, number>();
+        originalTagsSet.forEach((originalTag) => {
+          const parts = originalTag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
+          new Set(parts).forEach((part) => {
+            partCounts.set(part, (partCounts.get(part) || 0) + 1);
+          });
+        });
+
         // Add virtual nodes for tags that are not represented by explicit notes
         if (isHierarchicalMode) {
           allUniqueDecomposedTags.forEach((tag) => {
             const isRepresented = originalTagsSet.has(tag) || rawNodes.some(rn => rn.label === tag || rn.id.endsWith(`/${tag}.md`) || rn.id.endsWith(`\\${tag}.md`));
             if (!isRepresented) {
+              // Rendering simplification: Only render sub-paths (contain # or /) OR flat parts that are shared across multiple original tags (frequency > 1)
+              const isPath = tag.includes('#') || tag.includes('/');
+              const isShared = (partCounts.get(tag) || 0) > 1;
+              if (!isPath && !isShared) {
+                return; // Skip rendering this unshared flat tag virtual node!
+              }
+
               const decomposed = new Set<string>();
               const parts = tag.split(/[#/]/).map(p => p.trim()).filter(Boolean);
               let path = '';
