@@ -39,4 +39,12 @@
   --shadow-file-card-inset: rgba(255, 255, 255, 0.01);
   --bg-file-card-hover: rgba(255, 255, 255, 0.07);
   --shadow-file-card-inset-hover: rgba(255, 255, 255, 0.03);
+
+  /* Area Buttons Dark Theme Variables */
+  --bg-area-btn: rgba(255, 255, 255, 0.06);
+  --border-area-btn: rgba(255, 255, 255, 0.08);
+  --shadow-area-btn-inset: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.03);
+  --bg-area-btn-hover: rgba(255, 255, 255, 0.12);
+  --border-area-btn-hover: rgba(255, 255, 255, 0.18);
+  --shadow-area-btn-inset-hover: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.08);
 }

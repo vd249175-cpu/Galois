@@ -1762,7 +1762,7 @@ function EditorView({
     >
       {/* Editor Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px' }}>
-        <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span>{isPreviewMode ? '✨ 笔记预览' : '✍️ 笔记编辑器'}</span>
           {currentFile && (
             <>
@@ -1796,7 +1796,7 @@ function EditorView({
           <button
             className="area-btn"
             onClick={() => setIsTagGroupsOpen(true)}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
@@ -1806,7 +1806,7 @@ function EditorView({
           <button
             className="area-btn"
             onClick={() => setIsCustomCommandsOpen(true)}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="8" cy="8" r="2.5" />
@@ -1818,7 +1818,7 @@ function EditorView({
             className="area-btn"
             title="切换编辑/预览 (meta+e)"
             onClick={togglePreviewMode}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '11px' }}
           >
             {isPreviewMode ? '编辑笔记' : '预览'}
           </button>
