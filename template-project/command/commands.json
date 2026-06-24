@@ -1,0 +1,9 @@
+[
+  {
+    "id": "custom.rainbow",
+    "label": "Rainbow Text (项目级彩虹上色)",
+    "desc": "Colors the paragraph below using rainbow colors",
+    "content": "{{rainbow.json:status?run=rainbow.py&isolate=execution}}",
+    "defaultShortcut": "meta+l"
+  }
+]

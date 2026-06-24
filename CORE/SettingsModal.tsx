@@ -93,7 +93,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const formatCombo = (combo: string | undefined): string => {
-    if (!combo) return 'None';
+    if (!combo) return '无';
     return combo
       .split('+')
       .map((part) => {
@@ -112,7 +112,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     <div className="settings-modal-overlay" onClick={onClose}>
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
-          <h3>⚙️ Workspace Preferences</h3>
+          <h3>⚙️ 工作区偏好设置</h3>
           <button className="settings-modal-close" onClick={onClose}>
             &times;
           </button>
@@ -120,7 +120,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
         <div className="settings-modal-body">
           <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-            Configure shortcuts for global actions and the focused page.
+            为全局操作和当前聚焦的页面配置快捷键。
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -140,16 +140,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       className={`shortcut-key-btn ${isListening ? 'listening' : ''}`}
                       onClick={() => setEditingActionId(act.id)}
                     >
-                      {isListening ? 'Press keys...' : formatCombo(currentCombo)}
+                      {isListening ? '请按下按键...' : formatCombo(currentCombo)}
                     </button>
 
                     {currentCombo !== act.defaultShortcut && (
                       <button
                         className="shortcut-reset-btn"
                         onClick={() => handleReset(act.id, act.defaultShortcut)}
-                        title="Reset to Default"
+                        title="重置为默认值"
                       >
-                        Reset
+                        重置
                       </button>
                     )}
                   </div>

@@ -27,6 +27,9 @@ export const BC = {
     /** 所有文件的已解析标签 map。Writer: fileTree(tagResolver) → Reader: editor, graphView */
     resolvedTags: 'system.resolvedTags' as const,
 
+    /** 所有文件的原始/静态标签 map。Writer: fileTree(tagResolver) → Reader: editor */
+    staticTags: 'system.staticTags' as const,
+
     /** tag 解析的最大迭代次数（可通过 settings 修改）。Writer: settings → Reader: fileTree */
     maxIterations: 'system.maxIterations' as const,
 

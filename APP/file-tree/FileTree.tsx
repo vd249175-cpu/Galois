@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { calculateAllResolvedTags } from './tagResolver';
 import { useProjectLifecycle } from './useProjectLifecycle';
 import { fileTreeActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { updateYamlFrontmatterIcon } from '../utils';
 
 interface FileInfo {
   name: string;
@@ -10,12 +11,13 @@ interface FileInfo {
   isDir: boolean;
   size: number;
   tags: string[];
+  icon?: string;
 }
 
 // ── Tag expression tokenizer and boolean evaluator helpers ──────────────────
 
 function tokenizeQuery(query: string) {
-  const regex = /(\(|\)|#\/[^\/]+\/[a-z]*|#[^\s()#]+|and|add|or|not|&&|\|\||!|\S+)/gi;
+  const regex = /(#re:\S+|re:\S+|\(|\)|#\/[^\/]+\/[a-z]*|#[^\s()#]+|and|add|or|not|&&|\|\||!|\S+)/gi;
   const rawTokens = query.match(regex) || [];
   
   const tokens: { type: 'tag' | 'operator' | 'filename'; value: string }[] = [];
@@ -31,7 +33,7 @@ function tokenizeQuery(query: string) {
     } else if (lower === 'not' || lower === '!') {
       tokens.push({ type: 'operator', value: '!' });
     } else if (token.startsWith('#')) {
-      if (token.startsWith('#/')) {
+      if (token.startsWith('#/') || token.startsWith('#re:')) {
         tokens.push({ type: 'tag', value: token });
       } else {
         const parts = token.split('#').filter(Boolean);
@@ -113,20 +115,39 @@ function evaluateBoolean(tokens: string[]): boolean {
 }
 
 function checkSingleTagMatch(fileTags: string[], tagQuery: string): boolean {
-  if (tagQuery.startsWith('#/')) {
+  let isRegex = false;
+  let pattern = '';
+  let flags = 'i';
+
+  if (tagQuery.startsWith('#re:')) {
+    isRegex = true;
+    pattern = tagQuery.slice(4);
+  } else if (tagQuery.startsWith('#/')) {
     const lastSlash = tagQuery.lastIndexOf('/');
-    const pattern = tagQuery.slice(2, lastSlash);
-    const flags = tagQuery.slice(lastSlash + 1) || 'i';
+    pattern = tagQuery.slice(2, lastSlash);
+    flags = tagQuery.slice(lastSlash + 1) || 'i';
+    isRegex = true;
+  } else {
+    // Auto-detect regex if common metacharacters are present (excluding ? and . to prevent false positives)
+    const plainTag = tagQuery.slice(1); // strip '#'
+    const regexMetachars = /[\^$()\[\]{}*+|\\]/;
+    if (regexMetachars.test(plainTag)) {
+      isRegex = true;
+      pattern = plainTag;
+    } else {
+      pattern = plainTag;
+    }
+  }
+
+  if (isRegex) {
     try {
       const re = new RegExp(pattern, flags.includes('i') ? flags : flags + 'i');
       return fileTags.some(t => re.test(t));
     } catch {
-      const plain = tagQuery.slice(2).toLowerCase();
-      return fileTags.some(t => t.toLowerCase().includes(plain));
+      return fileTags.some(t => t.toLowerCase().includes(pattern.toLowerCase()));
     }
   } else {
-    const plain = tagQuery.slice(1).toLowerCase();
-    return fileTags.some(t => t.toLowerCase().includes(plain));
+    return fileTags.some(t => t.toLowerCase().includes(pattern.toLowerCase()));
   }
 }
 
@@ -158,17 +179,36 @@ function matchesTagQuery(fileTags: string[], tagTokens: { type: 'tag' | 'operato
 
 function matchesFilename(filename: string, filenameTokens: string[]): boolean {
   if (filenameTokens.length === 0) return true;
-  const nameLower = filename.toLowerCase();
+  const displayName = filename.endsWith('.md') ? filename.substring(0, filename.lastIndexOf('.md')) : filename;
+  const nameLower = displayName.toLowerCase();
   return filenameTokens.every(token => {
-    if (/^\/.*\/\w*$/.test(token)) {
+    let isRegex = false;
+    let pattern = '';
+    let flags = 'i';
+
+    if (token.startsWith('re:')) {
+      isRegex = true;
+      pattern = token.slice(3);
+    } else if (/^\/.*\/\w*$/.test(token)) {
       const lastSlash = token.lastIndexOf('/');
-      const pattern = token.slice(1, lastSlash);
-      const flags = token.slice(lastSlash + 1) || 'i';
+      pattern = token.slice(1, lastSlash);
+      flags = token.slice(lastSlash + 1) || 'i';
+      isRegex = true;
+    } else {
+      // Auto-detect regex if common metacharacters are present (excluding ? and . to prevent false positives)
+      const regexMetachars = /[\^$()\[\]{}*+|\\]/;
+      if (regexMetachars.test(token)) {
+        isRegex = true;
+        pattern = token;
+      }
+    }
+
+    if (isRegex) {
       try {
         const re = new RegExp(pattern, flags.includes('i') ? flags : flags + 'i');
-        return re.test(filename);
+        return re.test(displayName);
       } catch {
-        return nameLower.includes(token.toLowerCase());
+        return nameLower.includes(pattern.toLowerCase());
       }
     }
     return nameLower.includes(token.toLowerCase());
@@ -187,7 +227,7 @@ function matchesFilename(filename: string, filenameTokens: string[]): boolean {
  */
 export const FileTreeComponent = {
   typeId: 'fileTree',
-  displayName: 'Lattice Explorer',
+  displayName: '文本浏览器',
   iconName: 'folder',
   component: FileTreeView,
   actions: fileTreeActions,
@@ -239,6 +279,66 @@ function FileTreeView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPath, setSelectedPath] = useState('');
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteIndex, setAutocompleteIndex] = useState(0);
+
+  const allProjectTags = useMemo(() => {
+    const resolved = state[BC.system.resolvedTags] || {};
+    const staticTags = state[BC.system.staticTags] || {};
+    const set = new Set<string>();
+
+    for (const fileTags of Object.values(resolved)) {
+      if (Array.isArray(fileTags)) {
+        fileTags.forEach(t => {
+          if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
+            t.split('#').filter(Boolean).forEach(part => set.add(part));
+          } else {
+            set.add(t);
+          }
+        });
+      }
+    }
+
+    for (const fileTags of Object.values(staticTags)) {
+      if (Array.isArray(fileTags)) {
+        fileTags.forEach(t => {
+          if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
+            t.split('#').filter(Boolean).forEach(part => set.add(part));
+          } else {
+            set.add(t);
+          }
+        });
+      }
+    }
+
+    return Array.from(set).sort();
+  }, [state[BC.system.resolvedTags], state[BC.system.staticTags]]);
+
+  const filteredSuggestions = useMemo(() => {
+    const match = searchQuery.match(/#([^\s#()]*)$/);
+    if (!match) return [];
+    const query = match[1].toLowerCase();
+    
+    const getSuggestionDisplay = (suggestion: string) => {
+      if (suggestion.startsWith('re:')) return suggestion.substring(3);
+      if (suggestion.startsWith('run:')) return suggestion.substring(4);
+      return suggestion;
+    };
+
+    return allProjectTags.filter((t) => {
+      const display = getSuggestionDisplay(t).toLowerCase();
+      return display.includes(query) || t.toLowerCase().includes(query);
+    });
+  }, [searchQuery, allProjectTags]);
+
+  const handleSelectSuggestion = (suggestion: string) => {
+    const match = searchQuery.match(/(.*)#([^\s#()]*)$/);
+    if (!match) return;
+    const prefix = match[1];
+    const replacement = `#${suggestion}`;
+    setSearchQuery(prefix + replacement + ' ');
+    setShowAutocomplete(false);
+  };
   const [templateFiles, setTemplateFiles] = useState<{ name: string; path: string; content: string }[]>([]);
   const [promptConfig, setPromptConfig] = useState<{
     show: boolean;
@@ -249,6 +349,20 @@ function FileTreeView({
 
   const showPrompt = (title: string, defaultValue: string, onConfirm: (val: string) => void) => {
     setPromptConfig({ show: true, title, defaultValue, onConfirm });
+  };
+
+  const [iconPickerFile, setIconPickerFile] = useState<FileInfo | null>(null);
+
+  const handleSaveIcon = async (file: FileInfo, newIcon: string) => {
+    try {
+      const content = await (window as any).electronAPI.readFile(file.path);
+      const updated = updateYamlFrontmatterIcon(content, newIcon);
+      await (window as any).electronAPI.writeFile(file.path, updated);
+      setIconPickerFile(null);
+      updateBloodKey(BC.events.fileSaved(file.path), Date.now());
+    } catch (err: any) {
+      alert(`保存图标失败: ${err.message}`);
+    }
   };
 
   // Project lifecycle scripts (on_project_open.py, on_project_run.py, on_project_close.py)
@@ -403,7 +517,7 @@ function FileTreeView({
         const mdFiles = list.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
         const maxIterations = state[BC.system.maxIterations] || 3;
 
-        const { resolved: allResolved, staticTags: allStaticTags } = await calculateAllResolvedTags(
+        const { resolved: allResolved, staticTags: allStaticTags, icons: allIcons } = await calculateAllResolvedTags(
           projectPath,
           mdFiles,
           maxIterations,
@@ -414,6 +528,7 @@ function FileTreeView({
         );
 
         updateBloodKey(BC.system.resolvedTags, allResolved);
+        updateBloodKey(BC.system.staticTags, allStaticTags);
 
         const parsedFiles: FileInfo[] = mdFiles.map((file: any) => ({
           name: file.name,
@@ -421,6 +536,7 @@ function FileTreeView({
           isDir: false,
           size: file.size,
           tags: allStaticTags[file.path] || [],
+          icon: allIcons[file.path] || '',
         }));
         parsedFiles.sort((a, b) => a.name.localeCompare(b.name));
         setFiles(parsedFiles);
@@ -545,15 +661,15 @@ function FileTreeView({
   if (!projectPath) {
     return (
       <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center' }}>
-        <svg width="36" height="36" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
+        <svg width="36" height="36" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
           <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
         </svg>
-        <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Welcome to TLKS</h4>
+        <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>欢迎使用 TLKS</h4>
         <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
-          Open a notebook directory to start managing Tag Lattice notes.
+          打开一个笔记本目录以开始管理标签格子笔记。
         </p>
         <button className="right-sidebar-btn" onClick={handleOpenFolder} style={{ width: 'auto', height: '30px', padding: '0 16px', fontSize: '11px', fontWeight: 600 }}>
-          Open Folder
+          打开文件夹
         </button>
       </div>
     );
@@ -565,15 +681,15 @@ function FileTreeView({
     <div className="file-list" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 10px 8px 10px', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
-          <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px' }}>Notebook</span>
+          <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px' }}>笔记本</span>
           <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }} title={projectPath}>{folderName}</span>
         </div>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <button className="area-btn" onClick={handleCreateFile} title="New Note File">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 3v10M3 8h10" /></svg>
+          <button className="area-btn" onClick={handleCreateFile} title="新建笔记">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
           </button>
-          <button className="area-btn" onClick={handleOpenFolder} title="Switch Directory">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <button className="area-btn" onClick={handleOpenFolder} title="切换目录">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
               <path d="M4 10.5h8" />
             </svg>
@@ -581,108 +697,243 @@ function FileTreeView({
         </div>
       </div>
 
-      <div style={{ marginBottom: '10px' }}>
+      <div style={{ marginBottom: '10px', position: 'relative' }}>
         <input
           type="text"
-          placeholder="Search... #tag #/regex/ and or not title"
+          placeholder="搜索... #标签 #正则(如 #^cal) 标题(如 ^标题) and or not"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setAutocompleteIndex(0);
+            setShowAutocomplete(true);
+          }}
+          onFocus={() => setShowAutocomplete(true)}
+          onBlur={() => {
+            setTimeout(() => setShowAutocomplete(false), 200);
+          }}
+          onKeyDown={(e) => {
+            if (showAutocomplete && filteredSuggestions.length > 0) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setAutocompleteIndex((prev) => (prev + 1) % filteredSuggestions.length);
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setAutocompleteIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
+              } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const selected = filteredSuggestions[autocompleteIndex];
+                if (selected) {
+                  handleSelectSuggestion(selected);
+                }
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowAutocomplete(false);
+              }
+            }
+          }}
           style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '5px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none' }}
         />
+
+        {showAutocomplete && filteredSuggestions.length > 0 && (
+          <div style={{
+            position: 'absolute',
+            top: '28px',
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            maxHeight: '160px',
+            overflowY: 'auto',
+            backgroundColor: 'var(--bg-main)',
+            border: '1.2px solid rgba(0, 0, 0, 0.12)',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '2px',
+          }}>
+            {filteredSuggestions.map((suggestion, index) => {
+              const isSelected = index === autocompleteIndex;
+              const isRegex = suggestion.startsWith('re:');
+              const isScript = suggestion.startsWith('run:');
+              
+              const getSuggestionDisplay = (s: string) => {
+                if (s.startsWith('re:')) return s.substring(3);
+                if (s.startsWith('run:')) return s.substring(4);
+                return s;
+              };
+              const display = getSuggestionDisplay(suggestion);
+
+              return (
+                <div
+                  key={suggestion}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSelectSuggestion(suggestion);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
+                    color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  <span style={{ fontSize: '9px', opacity: 0.7 }}>
+                    {isRegex ? '⚡ 正则' : isScript ? '⚡ 脚本' : '#'}
+                  </span>
+                  <span style={{ fontWeight: isSelected ? 700 : 500 }}>{display}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <div style={{ flexGrow: 1, overflowY: 'auto' }}>
         {filteredFiles.length === 0 ? (
-          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>No notes found.</div>
+          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>没有找到任何笔记。</div>
         ) : (
-          filteredFiles.map((file) => {
-            const isSelected = selectedPath === file.path;
-            const displayName = file.name.substring(0, file.name.lastIndexOf('.md'));
-            return (
-              <div
-                key={file.path}
-                onClick={() => handleFileClick(file)}
-                style={{ display: 'flex', flexDirection: 'column', gap: '4px', backgroundColor: isSelected ? 'var(--highlight-color)' : 'rgba(0,0,0,0.015)', color: isSelected ? 'var(--accent-color)' : 'var(--text-main)', border: isSelected ? '1px solid var(--accent-color)' : '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 8px', cursor: 'pointer', transition: 'background-color 0.15s, border-color 0.15s' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexGrow: 1 }}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)', flexShrink: 0 }}>
-                      <path d="M3 1.5h7.5L13 4v10.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-14z" />
-                      <path d="M10 1.5V4h3.5" />
-                    </svg>
-                    <span style={{ fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
-                  </div>
+          <div className="file-grid-container">
+            {filteredFiles.map((file) => {
+              const isSelected = selectedPath === file.path;
+              const displayName = file.name.substring(0, file.name.lastIndexOf('.md'));
+              return (
+                <div
+                  key={file.path}
+                  onClick={() => handleFileClick(file)}
+                  className="file-card-item"
+                  style={{
+                    backgroundColor: isSelected ? 'var(--highlight-color)' : 'rgba(255,255,255,0.45)',
+                    color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
+                    border: isSelected ? '1.5px solid var(--accent-color)' : '1px solid rgba(255,255,255,0.65)',
+                  }}
+                >
+                  {/* 右上角悬浮删除按钮 */}
                   <button
                     className="file-delete-btn"
                     onClick={(e) => handleDeleteFile(e, file)}
-                    title="Delete Note"
+                    title="删除笔记"
                     style={{
-                      background: 'none',
+                      position: 'absolute',
+                      top: '6px',
+                      right: '6px',
+                      background: 'rgba(0,0,0,0.05)',
                       border: 'none',
                       color: 'var(--text-muted)',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: '2px',
-                      borderRadius: '4px',
-                      opacity: 0.5,
-                      transition: 'opacity 0.15s, color 0.15s',
+                      padding: '4px',
+                      borderRadius: '50%',
+                      zIndex: 10,
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--accent-color)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.5'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                   >
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M2 4h12M4 4v10a1 1 0 001 1h6a1 1 0 001-1V4M5.5 4V2.5a1 1 0 011-1h3a1 1 0 011-1V4M6.5 7.5v4.5M9.5 7.5v4.5" />
                     </svg>
                   </button>
-                </div>
-                 {file.tags && file.tags.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                    {file.tags.map((t) => {
-                      const isRule = t.startsWith('re:') || t.startsWith('run:');
-                      return (
-                        <span
-                          key={t}
-                          style={{
-                            fontSize: '8.5px',
-                            fontWeight: 600,
-                            backgroundColor: isSelected
-                              ? (isRule ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 59, 48, 0.12)')
-                              : (isRule ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.04)'),
-                            padding: '1px 3.5px',
-                            borderRadius: '3px',
-                            color: isSelected
-                              ? 'var(--accent-color)'
-                              : (isRule ? 'var(--accent-color)' : 'var(--text-muted)'),
-                            border: isRule
-                              ? `1px dashed ${isSelected ? 'var(--accent-color)' : 'var(--border-color)'}`
-                              : 'none',
-                          }}
-                        >
-                          {isRule ? `⚡️ ${t}` : `#${t}`}
-                        </span>
-                      );
-                    })}
+
+                  {/* 文件头：图标 + 文件名 */}
+                  <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '4.5px', position: 'relative' }}>
+                    {/* Notion-style Icon Button */}
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIconPickerFile(file);
+                      }}
+                      style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        backgroundColor: isSelected ? 'rgba(255,59,48,0.1)' : 'rgba(0,0,0,0.03)',
+                        marginRight: '6px',
+                        fontSize: '11px',
+                        transition: 'background-color 0.12s, transform 0.12s',
+                        flexShrink: 0
+                      }}
+                      className="note-icon-btn"
+                      title="修改此笔记的图标"
+                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
+                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                      {file.icon || '📄'}
+                    </div>
+
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      textAlign: 'left',
+                      flexGrow: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      marginRight: '18px', // Leave space for delete button
+                    }} title={displayName}>
+                      {displayName}
+                    </span>
                   </div>
-                )}
-              </div>
-            );
-          })
+
+                  {/* 标签列表 */}
+                  {file.tags && file.tags.length > 0 && (
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '4px',
+                      width: '100%',
+                      marginTop: '2px'
+                    }}>
+                      {file.tags.map((t) => {
+                        const labelText = t.startsWith('re:') || t.startsWith('run:') ? `⚡️ ${t.split(':').pop()}` : `#${t}`;
+                        return (
+                          <span
+                            key={`${file.path}_tag_${t}`}
+                            style={{
+                              fontSize: '8.5px',
+                              fontWeight: 700,
+                              backgroundColor: isSelected ? 'rgba(255, 59, 48, 0.15)' : 'rgba(0, 0, 0, 0.05)',
+                              color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {labelText}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
       {showTemplateModal && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: '85%', maxHeight: '80%', borderRadius: 12, background: 'var(--bg-panel)', border: '1px solid var(--border-color)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>Templates</span>
+        <div className="pane-modal-overlay">
+          <div className="pane-modal-content" style={{ width: '85%', maxHeight: '80%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>模板选择</span>
               <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
             </div>
-            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, flexGrow: 1 }}>
+            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, flexGrow: 1, marginBottom: 12 }}>
               {templateFiles.length === 0 ? (
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0', lineHeight: 1.5 }}>
-                  No templates found in temple/ directory.<br/>Use "Set as Template" in the editor to create one.
+                  在 temple/ 目录下没有找到模板。<br/>在编辑器中使用“设为模板”来创建模板。
                 </div>
               ) : (
                 templateFiles.map((t) => (
@@ -703,7 +954,7 @@ function FileTreeView({
                 onClick={handleOpenTempleFolder}
                 style={{ background: 'none', border: 'none', color: 'var(--accent-color)', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}
               >
-                Open temple/ folder
+                打开 temple/ 文件夹
               </button>
             </div>
           </div>
@@ -711,9 +962,9 @@ function FileTreeView({
       )}
 
       {promptConfig.show && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: '85%', borderRadius: 12, background: 'var(--bg-panel)', border: '1px solid var(--border-color)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-main)' }}>{promptConfig.title}</span>
+        <div className="pane-modal-overlay">
+          <div className="pane-modal-content" style={{ width: '85%' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-main)', marginBottom: 12 }}>{promptConfig.title === 'Enter file name:' ? '新建笔记名称:' : promptConfig.title}</span>
             <input
               type="text"
               id="prompt-modal-input-tree"
@@ -728,18 +979,18 @@ function FileTreeView({
                   setPromptConfig(prev => ({ ...prev, show: false }));
                 }
               }}
-              style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none' }}
+              style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none', marginBottom: 12 }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
               <button
-                className="area-btn"
+                className="area-btn text-btn"
                 onClick={() => setPromptConfig(prev => ({ ...prev, show: false }))}
                 style={{ height: '24px', fontSize: '10px', padding: '0 10px' }}
               >
-                Cancel
+                取消
               </button>
               <button
-                className="area-btn"
+                className="area-btn text-btn"
                 onClick={() => {
                   const input = document.getElementById('prompt-modal-input-tree') as HTMLInputElement;
                   if (input) {
@@ -749,8 +1000,108 @@ function FileTreeView({
                 }}
                 style={{ height: '24px', fontSize: '10px', padding: '0 10px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none' }}
               >
-                Confirm
+                确定
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Icon Picker Modal */}
+      {iconPickerFile && (
+        <div className="pane-modal-overlay" onClick={() => setIconPickerFile(null)}>
+          <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '280px', maxHeight: '280px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>
+              <span style={{ fontWeight: 700, fontSize: '11px' }}>选择笔记图标</span>
+              <button
+                onClick={() => setIconPickerFile(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '12px' }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Quick Emojis Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, 1fr)',
+              gap: '6px',
+              padding: '4px 0',
+              maxHeight: '120px',
+              overflowY: 'auto'
+            }}>
+              {['📝', '🚀', '💡', '📅', '🌟', '🛠️', '📂', '🎨', '📓', '💻', '⚡', '🔍', '🎯', '🔥', '📌', '🎉', '💬', '❤️', '✅', '❌', '🔑', '🏷️', '📚', '🗺️'].map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleSaveIcon(iconPickerFile, emoji)}
+                  style={{
+                    fontSize: '16px',
+                    padding: '6px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(0,0,0,0.03)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background-color 0.15s, transform 0.1s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--highlight-color)';
+                    e.currentTarget.style.transform = 'scale(1.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.03)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+            
+            {/* Custom Emoji input & Clear button */}
+            <div style={{ display: 'flex', gap: '6px', marginTop: '4px', alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="输入任意 Emoji..."
+                maxLength={2}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  if (val) {
+                    handleSaveIcon(iconPickerFile, val);
+                  }
+                }}
+                style={{
+                  flexGrow: 1,
+                  backgroundColor: 'var(--bg-input)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-main)',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  outline: 'none'
+                }}
+              />
+              {iconPickerFile.icon && (
+                <button
+                  className="area-btn text-btn"
+                  onClick={() => handleSaveIcon(iconPickerFile, '')}
+                  style={{
+                    height: '24px',
+                    padding: '0 8px',
+                    fontSize: '10px',
+                    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+                    color: 'var(--accent-color)',
+                    border: '1px solid var(--accent-color)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  移除图标
+                </button>
+              )}
             </div>
           </div>
         </div>

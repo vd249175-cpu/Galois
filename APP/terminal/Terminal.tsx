@@ -1,23 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { terminalActions } from './actions';
+import { Blood, useBloodChannel } from '../../CORE/Blood';
 
 export interface TerminalTab {
   id: string;
   name: string;
-  history: string;
-  inputVal: string;
+  cwd: string;
+  autoStarted: boolean;
 }
 
 export const TerminalComponent = {
   typeId: 'terminal',
-  displayName: 'Terminal Console',
+  displayName: '终端控制台',
   iconName: 'terminal',
   component: TerminalView,
   actions: terminalActions,
-  bloodChannels: [],
+  bloodChannels: ['system.projectPath'],
   manifest: {
-    description: '终端模拟器，支持执行本地 shell 命令',
-    reads: [],
+    description: '终端模拟器，后台持久化运行，进入时自动启动 agy 助手',
+    reads: ['system.projectPath'],
     writes: [],
     dependsOn: [],
   },
@@ -29,103 +30,169 @@ function TerminalView({
   areaId: string;
   lastAction: { id: string; timestamp: number } | null;
 }) {
-  const [tabs, setTabs] = useState<TerminalTab[]>([
-    {
-      id: 'tab-default',
-      name: 'Terminal 1',
-      history: 'dnote-macOS ~ % npm run dev\n[info] Server listening on port 5173\n[ready] React compilation active.\n',
-      inputVal: '',
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string>('tab-default');
+  const projectPath = useBloodChannel(['system.projectPath'], () =>
+    Blood.getValue<string>('system.projectPath', '')
+  );
+
+  const tabs = useBloodChannel(['system.terminalTabs'], () =>
+    Blood.getValue<TerminalTab[]>('system.terminalTabs', [])
+  );
+
+  const activeTabId = useBloodChannel(['system.terminalActiveTabId'], () =>
+    Blood.getValue<string>('system.terminalActiveTabId', 'tab-default')
+  );
+
+  const history = useBloodChannel(
+    activeTabId ? [`system.terminalHistory.${activeTabId}`] : [],
+    () => activeTabId ? Blood.getValue<string>(`system.terminalHistory.${activeTabId}`, '') : ''
+  );
+
+  const [inputVal, setInputVal] = useState('');
   const terminalEndRef = useRef<HTMLDivElement>(null);
+  const listenersRef = useRef<Map<string, () => void>>(new Map());
 
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const inputVal = activeTab.inputVal;
-  const history = activeTab.history;
+  // Initialize tabs if none exist
+  useEffect(() => {
+    if (tabs.length === 0) {
+      const defaultTab: TerminalTab = {
+        id: 'tab-default',
+        name: '终端 1',
+        cwd: projectPath || '.',
+        autoStarted: false,
+      };
+      Blood.update({
+        'system.terminalTabs': [defaultTab],
+        'system.terminalActiveTabId': 'tab-default',
+        'system.terminalHistory.tab-default': '连接中...\n',
+      });
+    }
+  }, [tabs.length, projectPath]);
 
-  const setInputVal = (val: string) => {
-    setTabs((prev) =>
-      prev.map((t) => (t.id === activeTabId ? { ...t, inputVal: val } : t))
-    );
-  };
+  // Keep processes spawned and listen for output changes stably
+  useEffect(() => {
+    if (tabs.length === 0) return;
 
-  const setHistory = (updater: string | ((prev: string) => string)) => {
-    setTabs((prev) =>
-      prev.map((t) => {
-        if (t.id === activeTabId) {
-          const nextHist = typeof updater === 'function' ? updater(t.history) : updater;
-          return { ...t, history: nextHist };
-        }
-        return t;
-      })
-    );
-  };
+    // 1. Remove listeners for tabs that no longer exist
+    const tabIds = new Set(tabs.map(t => t.id));
+    for (const [id, unsub] of listenersRef.current.entries()) {
+      if (!tabIds.has(id)) {
+        unsub();
+        listenersRef.current.delete(id);
+      }
+    }
+
+    // 2. Add spawn and listeners for new/unregistered tabs
+    tabs.forEach((tab) => {
+      if (listenersRef.current.has(tab.id)) return;
+
+      // Spawn process
+      (window as any).electronAPI.spawnTerminal(tab.id, tab.cwd)
+        .then(() => {
+          if (!tab.autoStarted) {
+            tab.autoStarted = true;
+            // Update tabs array
+            const currentTabs = Blood.getValue<TerminalTab[]>('system.terminalTabs', []);
+            const updated = currentTabs.map(t => t.id === tab.id ? { ...t, autoStarted: true } : t);
+            Blood.updateKey('system.terminalTabs', updated);
+
+            // Execute agy directly
+            const startCommands = process.platform === 'win32'
+              ? 'cls && agy\n'
+              : 'clear && agy\n';
+            (window as any).electronAPI.writeTerminal(tab.id, startCommands);
+
+            if (projectPath) {
+              setTimeout(() => {
+                (window as any).electronAPI.writeTerminal(tab.id, `/add-dir ${projectPath}\n`);
+              }, 1200);
+            }
+          }
+        })
+        .catch((err: any) => console.error('[Terminal] Spawn failed:', err));
+
+      // Listen for output streaming
+      const unsub = (window as any).electronAPI.onTerminalOutput(tab.id, (data: string) => {
+        const currentHist = Blood.getValue<string>(`system.terminalHistory.${tab.id}`, '');
+        Blood.updateKey(`system.terminalHistory.${tab.id}`, currentHist + data);
+      });
+
+      listenersRef.current.set(tab.id, unsub);
+    });
+  }, [tabs, projectPath]);
+
+  // Clean up all output listeners on unmount
+  useEffect(() => {
+    return () => {
+      for (const unsub of listenersRef.current.values()) {
+        unsub();
+      }
+      listenersRef.current.clear();
+    };
+  }, []);
+
+  // Scroll to bottom on output updates
+  useEffect(() => {
+    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [history]);
+
+  // Listen for toolbar commands like clear
+  useEffect(() => {
+    if (!lastAction) return;
+
+    if (lastAction.id === 'terminal.clear') {
+      // Clear output history
+      Blood.updateKey(`system.terminalHistory.${activeTabId}`, '');
+      // Write system clear command to clean terminal stdout
+      const clearCmd = process.platform === 'win32' ? 'cls\n' : 'clear\n';
+      (window as any).electronAPI.writeTerminal(activeTabId, clearCmd);
+    } else if (lastAction.id === 'terminal.openNative') {
+      (window as any).electronAPI.openTerminal(projectPath || '.');
+    }
+  }, [lastAction, activeTabId, projectPath]);
 
   const addNewTab = () => {
     const nextIndex = tabs.length + 1;
     const newTabId = `tab-${Date.now()}`;
     const newTab: TerminalTab = {
       id: newTabId,
-      name: `Terminal ${nextIndex}`,
-      history: `dnote-macOS ~ % # New terminal shell active\n`,
-      inputVal: '',
+      name: `终端 ${nextIndex}`,
+      cwd: projectPath || '.',
+      autoStarted: false,
     };
-    setTabs([...tabs, newTab]);
-    setActiveTabId(newTabId);
+
+    Blood.update({
+      [`system.terminalHistory.${newTabId}`]: '连接中...\n',
+      'system.terminalTabs': [...tabs, newTab],
+      'system.terminalActiveTabId': newTabId,
+    });
   };
 
   const closeTab = (tabIdToClose: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (tabs.length === 1) return;
 
+    (window as any).electronAPI.killTerminal(tabIdToClose);
+
     const index = tabs.findIndex((t) => t.id === tabIdToClose);
     const updated = tabs.filter((t) => t.id !== tabIdToClose);
-    setTabs(updated);
+
+    Blood.updateKey('system.terminalTabs', updated);
+    Blood.updateKey(`system.terminalHistory.${tabIdToClose}`, undefined);
 
     if (activeTabId === tabIdToClose) {
       const nextActiveIndex = Math.max(0, index - 1);
-      setActiveTabId(updated[nextActiveIndex].id);
+      Blood.updateKey('system.terminalActiveTabId', updated[nextActiveIndex].id);
     }
   };
 
-  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      const command = inputVal.trim();
-      if (!command) return;
-
-      setHistory((prev) => prev + `dnote-macOS ~ % ${command}\n`);
+      const command = inputVal;
+      // Write directly to standard input stream of shell
+      (window as any).electronAPI.writeTerminal(activeTabId, command + '\n');
       setInputVal('');
-
-      if (command === 'clear') {
-        setHistory('');
-        return;
-      }
-
-      try {
-        const result = await (window as any).electronAPI.execCommand(command, '.');
-        if (result.stdout) {
-          setHistory((prev) => prev + result.stdout);
-        }
-        if (result.stderr) {
-          setHistory((prev) => prev + `Error: ${result.stderr}`);
-        }
-      } catch (err: any) {
-        setHistory((prev) => prev + `Error: ${err.message}\n`);
-      }
     }
   };
-
-  useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history]);
-
-  // Listen for clear triggers carried by lastAction prop
-  useEffect(() => {
-    if (lastAction && lastAction.id === 'terminal.clear') {
-      setHistory('');
-    }
-  }, [lastAction]);
 
   return (
     <div
@@ -133,7 +200,7 @@ function TerminalView({
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
-        backgroundColor: 'transparent',
+        backgroundColor: 'var(--bg-panel)',
       }}
     >
       {/* Dynamic Tab Bar Navigation */}
@@ -142,10 +209,10 @@ function TerminalView({
           <div
             key={tab.id}
             className={`terminal-tab-item ${tab.id === activeTabId ? 'active' : ''}`}
-            onClick={() => setActiveTabId(tab.id)}
+            onClick={() => Blood.updateKey('system.terminalActiveTabId', tab.id)}
             style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
           >
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
               <path d="M4 6.5l2 1.5-2 1.5" />
               <line x1="7.5" y1="9.5" x2="10.5" y2="9.5" />
@@ -158,16 +225,29 @@ function TerminalView({
             )}
           </div>
         ))}
-        <button className="terminal-tab-add" onClick={addNewTab} title="Add New Tab">
+        <button className="terminal-tab-add" onClick={addNewTab} title="添加新标签页">
           +
         </button>
       </div>
 
-      <div className="terminal-view" style={{ flexGrow: 1, padding: '10px' }}>
+      {/* Terminal History Display */}
+      <div
+        className="terminal-view"
+        style={{
+          flexGrow: 1,
+          padding: '12px',
+          overflowY: 'auto',
+          whiteSpace: 'pre-wrap',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '12px',
+          lineHeight: '1.4',
+        }}
+      >
         {history}
         <div ref={terminalEndRef} />
       </div>
 
+      {/* Input Prompt Box */}
       <div
         style={{
           display: 'flex',
@@ -177,10 +257,10 @@ function TerminalView({
           padding: '6px 8px',
           fontFamily: 'var(--font-mono)',
           fontSize: '12px',
-          color: 'var(--terminal-green)',
+          backgroundColor: 'rgba(0, 0, 0, 0.05)',
         }}
       >
-        <span>dnote-macOS ~ %</span>
+        <span style={{ color: 'var(--terminal-green)' }}>dnote-macOS ~ %</span>
         <input
           type="text"
           value={inputVal}
@@ -191,7 +271,7 @@ function TerminalView({
             background: 'transparent',
             border: 'none',
             outline: 'none',
-            color: 'var(--terminal-green)',
+            color: 'var(--text-normal)',
             fontFamily: 'var(--font-mono)',
             fontSize: '12px',
           }}

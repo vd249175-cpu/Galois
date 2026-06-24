@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   /** 执行任意 shell 命令（用于生命周期脚本等） */
   execCommand: (command: string, cwd: string) =>
     ipcRenderer.invoke('shell:exec', command, cwd),
+  openTerminal: (dirPath: string) =>
+    ipcRenderer.invoke('shell:openTerminal', dirPath),
+  openAgentTerminal: (dirPath: string) =>
+    ipcRenderer.invoke('shell:openAgentTerminal', dirPath),
 
   /**
    * 通用脚本运行器 — 用 uv 运行 Python 脚本
@@ -62,5 +66,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event: any, values: Record<string, any>) => callback(values);
     ipcRenderer.on('blood:stateChanged', listener);
     return () => { ipcRenderer.removeListener('blood:stateChanged', listener); };
+  },
+
+  // ── Persistent Terminal Process Management ──────────────────────────────────
+  spawnTerminal: (id: string, cwd: string) =>
+    ipcRenderer.invoke('terminal:spawn', id, cwd),
+  writeTerminal: (id: string, data: string) =>
+    ipcRenderer.invoke('terminal:write', id, data),
+  killTerminal: (id: string) =>
+    ipcRenderer.invoke('terminal:kill', id),
+  onTerminalOutput: (id: string, callback: (data: string) => void) => {
+    const listener = (_event: any, data: string) => callback(data);
+    ipcRenderer.on(`terminal:output:${id}`, listener);
+    return () => { ipcRenderer.removeListener(`terminal:output:${id}`, listener); };
+  },
+  onTerminalExit: (id: string, callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on(`terminal:exit:${id}`, listener);
+    return () => { ipcRenderer.removeListener(`terminal:exit:${id}`, listener); };
   },
 });

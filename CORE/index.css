@@ -118,15 +118,15 @@ body {
   display: flex;
   flex-direction: column;
   background-color: var(--bg-panel);
-  border: 1px solid var(--border-color);
-  border-radius: 8px; /* Elegant slightly rounded corners */
-  backdrop-filter: url(#liquid-glass-refraction-global) blur(24px) saturate(125%) contrast(95%);
-  -webkit-backdrop-filter: url(#liquid-glass-refraction-global) blur(24px) saturate(125%) contrast(95%);
-  /* Thick glass beveled edge highlights using double inset shadows */
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 14px; /* Organic slightly rounded corners */
+  backdrop-filter: url(#liquid-glass-refraction-global) blur(28px) saturate(140%) contrast(95%);
+  -webkit-backdrop-filter: url(#liquid-glass-refraction-global) blur(28px) saturate(140%) contrast(95%);
+  /* Thick glass bulging beveled edge highlights using double inset shadows */
   box-shadow: 
-    inset 1px 1px 0px rgba(255, 255, 255, 0.55), 
-    inset -1px -1px 0px rgba(0, 0, 0, 0.03), 
-    0 8px 32px rgba(0, 0, 0, 0.03);
+    inset 2px 2px 0px rgba(255, 255, 255, 0.75), 
+    inset -2px -2px 0px rgba(0, 0, 0, 0.04), 
+    0 10px 32px rgba(0, 0, 0, 0.05);
   overflow: hidden;
   height: 100%;
   width: 100%;
@@ -138,7 +138,7 @@ body {
   position: absolute;
   inset: 0;
   /* Regular Frosted Dot Pattern (Xperia 1 V style dot matrix) */
-  background-image: radial-gradient(rgba(0, 0, 0, 0.035) 0.5px, transparent 0.5px);
+  background-image: radial-gradient(rgba(0, 0, 0, 0.03) 0.5px, transparent 0.5px);
   background-size: 3px 3px;
   pointer-events: none;
   z-index: 0;
@@ -147,10 +147,10 @@ body {
 .area-shell.focused {
   border-color: var(--accent-color);
   box-shadow: 
-    inset 1px 1px 0px rgba(255, 255, 255, 0.65), 
-    inset -1px -1px 0px rgba(0, 0, 0, 0.03), 
-    0 0 0 1.2px var(--accent-color),
-    0 8px 32px rgba(0, 0, 0, 0.05);
+    inset 2px 2px 0px rgba(255, 255, 255, 0.85), 
+    inset -2px -2px 0px rgba(0, 0, 0, 0.04), 
+    0 0 0 1.5px var(--accent-color),
+    0 12px 36px rgba(0, 0, 0, 0.08);
 }
 
 /* Header bar styling */
@@ -231,6 +231,14 @@ body {
 .area-btn.danger:hover {
   color: var(--error-color);
   background-color: rgba(248, 81, 73, 0.1);
+}
+
+/* Allow text buttons to auto-size dynamically */
+.area-btn.text-btn {
+  width: auto !important;
+  min-width: 60px;
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 /* Dropdown styling */
@@ -768,9 +776,9 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(43, 43, 47, 0.45);
-  backdrop-filter: blur(12px) saturate(115%);
-  -webkit-backdrop-filter: blur(12px) saturate(115%);
+  background-color: rgba(30, 30, 32, 0.65);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -781,18 +789,19 @@ body {
 .settings-modal {
   width: 480px;
   max-width: 90vw;
-  background-color: rgba(255, 255, 255, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 12px;
+  background-color: rgba(250, 247, 242, 0.97); /* Bulging waterdrop thickness: opaque base */
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 20px; /* Waterdrop bulging roundness */
   box-shadow: 
-    inset 1px 1px 0px rgba(255, 255, 255, 0.8),
-    0 16px 40px rgba(0, 0, 0, 0.12);
+    inset 2.5px 2.5px 0px rgba(255, 255, 255, 0.95),
+    inset -2.5px -2.5px 0px rgba(0, 0, 0, 0.05),
+    0 24px 50px rgba(0, 0, 0, 0.18);
   display: flex;
   flex-direction: column;
   max-height: 80vh;
   overflow: hidden;
-  backdrop-filter: blur(32px);
-  -webkit-backdrop-filter: blur(32px);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
   animation: modal-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -920,4 +929,89 @@ body {
 
 .shortcut-reset-btn:hover {
   color: var(--error-color);
+}
+
+/* Thicker Glass Bulging Waterdrop Overlay and Modal styling for panels */
+.pane-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(20, 20, 22, 0.75); /* Lowered transparency to avoid background text interference */
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  animation: modal-fade-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pane-modal-content {
+  background-color: rgba(250, 247, 242, 0.97); /* Low transparency, matching settings layout format */
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-radius: 20px; /* Bulging waterdrop roundness */
+  box-shadow: 
+    inset 2.5px 2.5px 0px rgba(255, 255, 255, 0.95),
+    inset -2.5px -2.5px 0px rgba(0, 0, 0, 0.05),
+    0 20px 45px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(50px) saturate(200%);
+  -webkit-backdrop-filter: blur(50px) saturate(200%);
+  padding: 16px;
+  animation: modal-scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Lattice Explorer Document Block Flex Auto-Sizing View Styles */
+.file-grid-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px;
+}
+
+.file-card-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+  border-radius: 10px;
+  padding: 6px 12px;
+  cursor: pointer;
+  background-color: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+              box-shadow 0.2s ease, 
+              border-color 0.15s ease,
+              background-color 0.15s ease;
+  box-shadow: inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.85), inset -1px -1px 0px rgba(0, 0, 0, 0.03), 0 2px 4px rgba(0,0,0,0.03);
+  overflow: hidden;
+  flex: 1 1 auto; /* Grow to fill row spaces, shrink if needed */
+  min-width: 80px; /* Minimum width threshold */
+  max-width: 100%;
+}
+
+/* Bulging waterdrop lift effect on hover */
+.file-card-item:hover {
+  transform: translateY(-2px) scale(1.03);
+  background-color: rgba(255, 255, 255, 0.88);
+  border-color: var(--accent-color);
+  box-shadow: 
+    inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.95),
+    0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+/* File Delete Button in card view: hidden by default, shown on hover */
+.file-card-item .file-delete-btn {
+  opacity: 0;
+  transition: opacity 0.18s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.file-card-item:hover .file-delete-btn {
+  opacity: 1;
+}
+
+.file-card-item .file-delete-btn:hover {
+  background-color: var(--error-color) !important;
+  color: #ffffff !important;
 }

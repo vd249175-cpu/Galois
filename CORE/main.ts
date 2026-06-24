@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { exec } from 'child_process';
+import { exec, spawn, ChildProcess } from 'child_process';
 import { pathToFileURL } from 'url';
 
 // Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
@@ -271,6 +271,41 @@ ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
   });
 });
 
+ipcMain.handle('shell:openTerminal', async (_, dirPath: string) => {
+  try {
+    if (process.platform === 'darwin') {
+      exec(`open -a Terminal "${dirPath}"`);
+    } else if (process.platform === 'win32') {
+      exec(`start cmd`, { cwd: dirPath });
+    } else {
+      exec(`x-terminal-emulator`, { cwd: dirPath });
+    }
+    return true;
+  } catch (err: any) {
+    throw new Error(`Failed to open terminal: ${err.message}`);
+  }
+});
+
+ipcMain.handle('shell:openAgentTerminal', async (_, dirPath: string) => {
+  try {
+    if (process.platform === 'darwin') {
+      const escapedPath = dirPath.replace(/"/g, '\\"');
+      const applescript = `tell application "Terminal"
+        activate
+        do script "cd \\"${escapedPath}\\" && clear && agy"
+      end tell`;
+      exec(`osascript -e '${applescript}'`);
+    } else if (process.platform === 'win32') {
+      exec(`start cmd /k "cd /d "${dirPath}" && agy"`);
+    } else {
+      exec(`x-terminal-emulator -e "bash -c 'cd \\"${dirPath}\\" && agy; exec bash'"`);
+    }
+    return true;
+  } catch (err: any) {
+    throw new Error(`Failed to open agent terminal: ${err.message}`);
+  }
+});
+
 // Generic script runner — replaces plugin-specific calculateLattice IPC
 // Plugins pass their own scriptPath; CORE stays business-logic-free
 ipcMain.handle('shell:runScript', async (_, scriptPath: string, stdinPayload: string, cwd: string) => {
@@ -365,3 +400,68 @@ ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
     broadcast(win);
   }
 });
+
+const terminalProcesses = new Map<string, ChildProcess>();
+
+ipcMain.handle('terminal:spawn', (event, id: string, cwd: string) => {
+  if (terminalProcesses.has(id)) {
+    return true;
+  }
+
+  const shell = process.platform === 'win32' ? 'cmd.exe' : 'zsh';
+  const shellArgs = process.platform === 'darwin' ? ['-l', '-i'] : (process.platform === 'linux' ? ['-i'] : []);
+
+  try {
+    const child = spawn(shell, shellArgs, {
+      cwd: cwd || os.homedir(),
+      env: getSecureEnv(),
+      shell: false
+    });
+
+    child.stdout?.on('data', (data) => {
+      event.sender.send(`terminal:output:${id}`, data.toString());
+    });
+
+    child.stderr?.on('data', (data) => {
+      event.sender.send(`terminal:output:${id}`, data.toString());
+    });
+
+    child.on('close', () => {
+      terminalProcesses.delete(id);
+      event.sender.send(`terminal:exit:${id}`);
+    });
+
+    terminalProcesses.set(id, child);
+    return true;
+  } catch (err: any) {
+    console.error('[terminal:spawn error]', err);
+    throw err;
+  }
+});
+
+ipcMain.handle('terminal:write', (_, id: string, data: string) => {
+  const child = terminalProcesses.get(id);
+  if (child && child.stdin && !child.stdin.destroyed) {
+    child.stdin.write(data);
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('terminal:kill', (_, id: string) => {
+  const child = terminalProcesses.get(id);
+  if (child) {
+    child.kill();
+    terminalProcesses.delete(id);
+    return true;
+  }
+  return false;
+});
+
+app.on('will-quit', () => {
+  for (const [_, child] of terminalProcesses) {
+    child.kill();
+  }
+  terminalProcesses.clear();
+});
+

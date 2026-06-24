@@ -33,7 +33,7 @@ interface Link {
  */
 export const GraphViewComponent = {
   typeId: 'graphView',
-  displayName: 'Lattice Graph',
+  displayName: '标签拓扑图',
   iconName: 'git-branch',
   component: GraphView,
   actions: graphViewActions,
@@ -559,12 +559,12 @@ function GraphView({
   if (!projectPath) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '20px', color: 'var(--text-muted)' }}>
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '10px' }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginBottom: '10px' }}>
           <circle cx="12" cy="12" r="10" />
           <path d="M12 8v4M12 16h.01" />
         </svg>
-        <div style={{ fontSize: '13px', fontWeight: 600 }}>No Project Folder Opened</div>
-        <div style={{ fontSize: '11px', marginTop: '4px' }}>Select a folder in Lattices Explorer to compute the Tag Lattice relationship graph.</div>
+        <div style={{ fontSize: '13px', fontWeight: 600 }}>未打开项目文件夹</div>
+        <div style={{ fontSize: '11px', marginTop: '4px' }}>请在左侧笔记本中打开文件夹以计算标签格子关系图。</div>
       </div>
     );
   }
@@ -799,32 +799,17 @@ function GraphView({
 
       {/* Frosted Glass Overlay for Color Palette Manager */}
       {isPaletteEditorOpen && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.45)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
+        <div className="pane-modal-overlay" onClick={() => { setIsPaletteEditorOpen(false); setEditingPaletteName(null); }}>
+          <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{
             width: '320px',
             maxHeight: '400px',
-            backgroundColor: 'var(--bg-panel)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
             color: 'var(--text-main)',
             fontSize: '12px',
             fontFamily: 'var(--font-sans)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
+            padding: 0
           }}>
             {/* Modal Header */}
             <div style={{
@@ -836,7 +821,7 @@ function GraphView({
               backgroundColor: 'rgba(0,0,0,0.02)'
             }}>
               <span style={{ fontWeight: 600 }}>
-                {editingPaletteName ? `Edit Palette: ${editingPaletteName}` : 'Theme Palettes (色组管理)'}
+                {editingPaletteName ? `编辑色板: ${editingPaletteName}` : '色板主题管理'}
               </span>
               <button
                 onClick={() => {
@@ -925,7 +910,7 @@ function GraphView({
                                 fontWeight: 600,
                               }}
                             >
-                              Delete
+                              删除
                             </button>
                           </div>
                         ))}
@@ -951,7 +936,7 @@ function GraphView({
                             fontSize: '11px'
                           }}
                         >
-                          + Add Color
+                          + 添加颜色
                         </button>
                         <button
                           onClick={() => setEditingPaletteName(null)}
@@ -966,7 +951,7 @@ function GraphView({
                             fontSize: '11px'
                           }}
                         >
-                          Back
+                          返回
                         </button>
                       </div>
                     </div>
@@ -1021,7 +1006,7 @@ function GraphView({
                                 fontWeight: 600,
                               }}
                             >
-                              Edit
+                              编辑
                             </button>
                             <button
                               onClick={() => {
@@ -1054,7 +1039,7 @@ function GraphView({
                   <div style={{ display: 'flex', gap: '4px', borderTop: '1px solid var(--border-color)', paddingTop: '8px', marginTop: '4px' }}>
                     <input
                       type="text"
-                      placeholder="New palette name..."
+                      placeholder="新建色板名称..."
                       value={newPaletteName}
                       onChange={(e) => setNewPaletteName(e.target.value)}
                       style={{
@@ -1092,7 +1077,7 @@ function GraphView({
                         fontSize: '11px'
                       }}
                     >
-                      + Add
+                      + 新增
                     </button>
                   </div>
                 </div>

@@ -1,12 +1,13 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { parseFrontmatterTags, parseMarkdownBody } from '../utils';
-import { updateYamlFrontmatterTags } from './editorUtils';
+import { updateYamlFrontmatterTags, parseExpression } from './editorUtils';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TagToolbar } from './TagToolbar';
 import { editorActions } from './actions';
 import { useMediaDrop } from './hooks/useMediaDrop';
 import { useLinkNavigator } from './hooks/useLinkNavigator';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { ActionRegistry } from '../../CORE/ActionRegistry';
 
 /**
  * EditorComponent — 插件注册对象（完整契约）
@@ -14,13 +15,14 @@ import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
  */
 export const EditorComponent = {
   typeId: 'editor',
-  displayName: 'Lattice Editor',
+  displayName: '文本编辑器',
   iconName: 'document',
   component: EditorView,
   actions: editorActions,
   bloodChannels: (areaId: string) => [
     BC.system.projectPath,
     BC.system.resolvedTags,
+    BC.system.staticTags,
     BC.events.openFile(areaId),
     BC.system.focusedAreaId,
     BC.system.activeEditors,
@@ -33,6 +35,7 @@ export const EditorComponent = {
     reads: [
       BC.system.projectPath,        // 项目根目录（由 fileTree 写入）
       BC.system.resolvedTags,       // 解析后的全局标签 map（由 fileTree 写入）
+      BC.system.staticTags,         // 所有文件的原始/静态标签 map（由 fileTree 写入）
       BC.events.openFile('*'),      // 打开文件请求（由 fileTree/graphView 写入）
       BC_PREFIX.fileSavedAll,       // 读取外部脚本修改文件的保存事件
       BC.system.focusedAreaId,
@@ -81,7 +84,82 @@ function EditorView({
   tagsRef.current = tags;
   const lastSavedContentRef = useRef<string>('');
   const slashMenuRef = useRef<HTMLDivElement>(null);
+  const triggeredImmediateRefs = useRef<Set<string>>(new Set());
 
+  useEffect(() => {
+    triggeredImmediateRefs.current.clear();
+  }, [currentFile]);
+
+  // Undo/Redo stacks
+  interface HistoryState {
+    content: string;
+    selectionStart: number;
+    selectionEnd: number;
+  }
+  const undoStackRef = useRef<HistoryState[]>([]);
+  const redoStackRef = useRef<HistoryState[]>([]);
+  const lastHistoryContentRef = useRef<string>('');
+  const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    lastHistoryContentRef.current = content;
+    if (historyTimerRef.current) {
+      clearTimeout(historyTimerRef.current);
+      historyTimerRef.current = null;
+    }
+  }, [currentFile]);
+
+  useEffect(() => {
+    return () => {
+      if (historyTimerRef.current) {
+        clearTimeout(historyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const pushStateToUndoStack = (txt: string, selStart: number, selEnd: number) => {
+    const last = undoStackRef.current[undoStackRef.current.length - 1];
+    if (last && last.content === txt) return;
+    undoStackRef.current.push({
+      content: txt,
+      selectionStart: selStart,
+      selectionEnd: selEnd
+    });
+    if (undoStackRef.current.length > 100) {
+      undoStackRef.current.shift();
+    }
+    redoStackRef.current = [];
+  };
+
+  const projectPath = state[BC.system.projectPath] || '';
+  const openedFile = state[BC.events.openFile(areaId)] || '';
+  const isFocused = state[BC.system.focusedAreaId] === areaId;
+
+  const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc: string; content: string; defaultShortcut?: string }>>([]);
+
+  useEffect(() => {
+    if (!projectPath) {
+      setProjectCommands([]);
+      return;
+    }
+    const loadProjectCommands = async () => {
+      const configPath = `${projectPath}/command/commands.json`;
+      try {
+        const content = await (window as any).electronAPI.readFile(configPath);
+        if (content) {
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            setProjectCommands(parsed);
+          }
+        }
+      } catch (e) {
+        setProjectCommands([]);
+      }
+    };
+    loadProjectCommands();
+  }, [projectPath]);
 
   // ── Keyboard Shortcuts & Prompt Modal States ─────────────────────────────
   const [editorShortcuts, setEditorShortcuts] = useState<Record<string, string>>(() => {
@@ -122,15 +200,146 @@ function EditorView({
   const [recordingActionId, setRecordingActionId] = useState<string | null>(null);
 
   // Custom Commands & Tag Groups States
-  const [customCommands, setCustomCommands] = useState<Array<{ id: string; label: string; desc: string; content: string }>>(() => {
+  const [customCommands, setCustomCommands] = useState<Array<{ id: string; label: string; desc: string; content: string; defaultShortcut?: string }>>(() => {
+    const defaultRainbow = {
+      id: 'custom.rainbow',
+      label: 'Rainbow Text (彩虹渐变文字)',
+      desc: 'Colors the paragraph below using rainbow colors',
+      content: '{{rainbow.json:status?run=rainbow.py&isolate=execution}}',
+      defaultShortcut: 'meta+l'
+    };
+
     const saved = localStorage.getItem('dnote_custom_commands');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const hasRainbow = parsed.some(c => c.id === 'custom.rainbow');
+          if (!hasRainbow) {
+            const updated = [...parsed, defaultRainbow];
+            localStorage.setItem('dnote_custom_commands', JSON.stringify(updated));
+            return updated;
+          }
+          return parsed;
+        }
       } catch (_) {}
     }
-    return [];
+    localStorage.setItem('dnote_custom_commands', JSON.stringify([defaultRainbow]));
+    return [defaultRainbow];
   });
+
+  useEffect(() => {
+    // 1. Gather all currently occupied shortcuts (Core & Global Builtins)
+    const occupied = new Map<string, string>();
+    for (const [id, combo] of Object.entries(editorShortcuts)) {
+      if (combo) {
+        occupied.set(combo.toLowerCase().trim(), `editor.${id}`);
+      }
+    }
+    ActionRegistry.getAllActions().forEach(act => {
+      if (act.id.startsWith('custom.') || act.id.startsWith('project.')) return;
+      const combo = ActionRegistry.getShortcutForAction(act.id);
+      if (combo) {
+        occupied.set(combo.toLowerCase().trim(), act.id);
+      }
+    });
+
+    const conflictsToWarn: string[] = [];
+
+    // 2. Register Global User Custom commands (Priority: User Global > Project)
+    customCommands.forEach((cmd) => {
+      ActionRegistry.register({
+        id: cmd.id,
+        label: cmd.label,
+        sourceType: 'editor',
+        run: (context) => {
+          Blood.updateKey(`actions.${cmd.id}.${context.areaId}`, Date.now());
+        }
+      });
+
+      const userCombo = editorShortcuts[cmd.id];
+      const defaultShortcut = (cmd as any).defaultShortcut?.toLowerCase().trim();
+      const activeCombo = userCombo !== undefined ? userCombo : defaultShortcut;
+
+      if (activeCombo) {
+        const occupant = occupied.get(activeCombo);
+        if (occupant && occupant !== `editor.${cmd.id}`) {
+          conflictsToWarn.push(`Global custom command "${cmd.label}" shortcut "${activeCombo}" conflicts with "${occupant}".`);
+        } else {
+          ActionRegistry.registerShortcut(activeCombo, cmd.id);
+          occupied.set(activeCombo, cmd.id);
+        }
+      }
+    });
+
+    // 3. Register Project-level commands (Priority: User Global > Project)
+    projectCommands.forEach((cmd) => {
+      // ID collision: skip project command if a global custom command has the same ID
+      const hasGlobalOverride = customCommands.some(c => c.id === cmd.id);
+      if (hasGlobalOverride) {
+        console.warn(`[Editor] Project command "${cmd.id}" overridden by global custom command.`);
+        
+        // Inherit default shortcut if the global command doesn't have one
+        const globalCmd = customCommands.find(c => c.id === cmd.id);
+        if (globalCmd && !(globalCmd as any).defaultShortcut && cmd.defaultShortcut) {
+          (globalCmd as any).defaultShortcut = cmd.defaultShortcut;
+          
+          const userCombo = editorShortcuts[cmd.id];
+          const activeCombo = userCombo !== undefined ? userCombo : cmd.defaultShortcut.toLowerCase().trim();
+          if (activeCombo) {
+            const occupant = occupied.get(activeCombo);
+            if (!occupant || occupant === `editor.${cmd.id}`) {
+              ActionRegistry.registerShortcut(activeCombo, cmd.id);
+              occupied.set(activeCombo, cmd.id);
+            }
+          }
+        }
+        return;
+      }
+
+      ActionRegistry.register({
+        id: cmd.id,
+        label: cmd.label,
+        sourceType: 'editor',
+        run: (context) => {
+          Blood.updateKey(`actions.${cmd.id}.${context.areaId}`, Date.now());
+        }
+      });
+
+      const userCombo = editorShortcuts[cmd.id];
+      const defaultShortcut = cmd.defaultShortcut?.toLowerCase().trim();
+      const activeCombo = userCombo !== undefined ? userCombo : defaultShortcut;
+
+      if (activeCombo) {
+        const occupant = occupied.get(activeCombo);
+        if (occupant && occupant !== `editor.${cmd.id}`) {
+          conflictsToWarn.push(`Project command "${cmd.label}" shortcut "${activeCombo}" conflicts with "${occupant}". Please reconfigure.`);
+        } else {
+          ActionRegistry.registerShortcut(activeCombo, cmd.id);
+          occupied.set(activeCombo, cmd.id);
+        }
+      }
+    });
+
+    if (conflictsToWarn.length > 0) {
+      const msg = `Shortcut Conflict: ${conflictsToWarn.join(' | ')}`;
+      console.warn(msg);
+      setStatusMessage(`Shortcut Conflict! Check settings or logs for details.`);
+      // Also show an alert to user to let them know explicitly
+      alert(`Shortcut Conflict Detected:\n${conflictsToWarn.join('\n')}\n\nPlease reconfigure your shortcuts in Settings.`);
+    }
+
+    return () => {
+      // Cleanup registered shortcuts for custom and project actions on re-runs or unmount
+      customCommands.forEach((cmd) => {
+        ActionRegistry.removeShortcutForAction(cmd.id);
+      });
+      projectCommands.forEach((cmd) => {
+        ActionRegistry.removeShortcutForAction(cmd.id);
+      });
+    };
+  }, [customCommands, projectCommands, editorShortcuts]);
+
   const [isCustomCommandsOpen, setIsCustomCommandsOpen] = useState(false);
   const [isTagGroupsOpen, setIsTagGroupsOpen] = useState(false);
 
@@ -150,14 +359,37 @@ function EditorView({
 
   const allProjectTags = useMemo(() => {
     const resolved = state[BC.system.resolvedTags] || {};
+    const staticTags = state[BC.system.staticTags] || {};
     const set = new Set<string>();
+
+    // 1. Gather tags from resolvedTags (individual matched values)
     for (const fileTags of Object.values(resolved)) {
       if (Array.isArray(fileTags)) {
-        fileTags.forEach(t => set.add(t));
+        fileTags.forEach(t => {
+          if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
+            t.split('#').filter(Boolean).forEach(part => set.add(part));
+          } else {
+            set.add(t);
+          }
+        });
       }
     }
+
+    // 2. Gather tags from staticTags (raw tag strings including re: and run:)
+    for (const fileTags of Object.values(staticTags)) {
+      if (Array.isArray(fileTags)) {
+        fileTags.forEach(t => {
+          if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
+            t.split('#').filter(Boolean).forEach(part => set.add(part));
+          } else {
+            set.add(t);
+          }
+        });
+      }
+    }
+
     return Array.from(set).sort();
-  }, [state[BC.system.resolvedTags]]);
+  }, [state[BC.system.resolvedTags], state[BC.system.staticTags]]);
 
   const [newCmdLabel, setNewCmdLabel] = useState('');
   const [newCmdTrigger, setNewCmdTrigger] = useState('');
@@ -292,15 +524,56 @@ function EditorView({
       id: cmd.id,
       label: cmd.label,
       desc: cmd.desc,
-      icon: '⚙️',
+      icon: React.createElement(
+        'svg',
+        { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+        React.createElement('circle', { cx: 8, cy: 8, r: 2.5 }),
+        React.createElement('path', { d: 'M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4' })
+      ),
       content: cmd.content
     }));
+
+    const projectList = projectCommands
+      .filter(cmd => !customCommands.some(c => c.id === cmd.id))
+      .map((cmd) => ({
+        id: cmd.id,
+        label: cmd.label,
+        desc: `${cmd.desc} (Project)`,
+        icon: React.createElement(
+          'svg',
+          { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+          React.createElement('path', { d: 'M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z' })
+        ),
+        content: cmd.content
+      }));
+
     const helperCmds = [
-      { id: 'custom.add_new', label: 'Create Custom Command (新增自定义命令)', desc: 'Define your own text snippet slash command', icon: '➕', content: '' },
-      { id: 'custom.manage', label: 'Manage Custom Commands (管理自定义命令)', desc: 'View, edit or delete custom slash commands', icon: '⚙️', content: '' }
+      {
+        id: 'custom.add_new',
+        label: 'Create Custom Command (新增自定义命令)',
+        desc: 'Define your own text snippet slash command',
+        icon: React.createElement(
+          'svg',
+          { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+          React.createElement('path', { d: 'M8 3v10M3 8h10' })
+        ),
+        content: ''
+      },
+      {
+        id: 'custom.manage',
+        label: 'Manage Custom Commands (管理自定义命令)',
+        desc: 'View, edit or delete custom slash commands',
+        icon: React.createElement(
+          'svg',
+          { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
+          React.createElement('circle', { cx: 8, cy: 8, r: 2.5 }),
+          React.createElement('path', { d: 'M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4' })
+        ),
+        content: ''
+      }
     ];
-    return [...SLASH_COMMANDS, ...customList, ...helperCmds];
-  }, [customCommands]);
+    return [...SLASH_COMMANDS, ...customList, ...projectList, ...helperCmds];
+  }, [customCommands, projectCommands]);
 
   const filteredCommands = allCommands.filter((cmd: { id: string; label: string; desc: string; icon: string; content?: string }) => 
     cmd.label.toLowerCase().includes(slashMenuQuery.toLowerCase()) ||
@@ -418,48 +691,53 @@ function EditorView({
     };
   };
 
-  const handleExecuteCommand = (cmd: { id: string; label: string; desc: string; icon: string }) => {
+  const handleExecuteCommand = (cmd: { id: string; label: string; desc: string; icon: string; content?: string }) => {
     if (!textareaRef.current) return;
-    const start = slashIndex;
-    const end = textareaRef.current.selectionEnd;
 
-    const before = content.substring(0, start);
-    const after = content.substring(end);
-    const baseContent = before + after;
-
-    if (cmd.id === 'custom.add_new') {
-      setShowSlashMenu(false);
-      setIsCustomCommandsOpen(true);
-      return;
-    }
-
-    if (cmd.id === 'custom.manage') {
+    if (cmd.id === 'custom.add_new' || cmd.id === 'custom.manage') {
       setShowSlashMenu(false);
       setIsCustomCommandsOpen(true);
       return;
     }
 
     if (cmd.id.startsWith('custom.')) {
-      const snippet = (cmd as any).content || '';
+      const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
+      const end = textareaRef.current.selectionEnd;
+      
+      pushStateToUndoStack(content, actualStart, end);
+      
+      const before = content.substring(0, actualStart);
+      const after = content.substring(end);
+      
+      const snippet = cmd.content || '';
       const textAfterInsert = before + snippet + after;
       setContent(textAfterInsert);
+      lastHistoryContentRef.current = textAfterInsert;
       saveNodeFile(textAfterInsert);
       setShowSlashMenu(false);
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
-          textareaRef.current.setSelectionRange(start + snippet.length, start + snippet.length);
+          textareaRef.current.setSelectionRange(actualStart + snippet.length, actualStart + snippet.length);
         }
       }, 0);
       return;
     }
 
+    const start = slashIndex;
+    const end = textareaRef.current.selectionEnd;
+    const before = content.substring(0, start);
+    const after = content.substring(end);
+    const baseContent = before + after;
+
     if (cmd.id === 'link') {
       setShowSlashMenu(false);
-      showPrompt('Enter Hyperlink URL:', 'https://', (url) => {
+      showPrompt('输入超链接 URL:', 'https://', (url) => {
         if (!url) return;
+        pushStateToUndoStack(content, start, start);
         const res = applyFormatting('link', baseContent, start, start, url);
         setContent(res.text);
+        lastHistoryContentRef.current = res.text;
         saveNodeFile(res.text);
         
         setTimeout(() => {
@@ -472,8 +750,10 @@ function EditorView({
       return;
     }
 
+    pushStateToUndoStack(content, start, start);
     const res = applyFormatting(cmd.id, baseContent, start, start);
     setContent(res.text);
+    lastHistoryContentRef.current = res.text;
     saveNodeFile(res.text);
 
     setShowSlashMenu(false);
@@ -500,6 +780,31 @@ function EditorView({
     { id: 'quote', label: 'Blockquote (引用块)', defaultCombo: '' },
     { id: 'code-block', label: 'Code Block (代码块)', defaultCombo: '' }
   ];
+
+  const allManageableActions = useMemo(() => {
+    const list = [...MARKDOWN_ACTIONS];
+
+    customCommands.forEach((cmd) => {
+      const projCmd = projectCommands.find(p => p.id === cmd.id);
+      const defShortcut = cmd.defaultShortcut || projCmd?.defaultShortcut || '';
+      list.push({
+        id: cmd.id,
+        label: `${cmd.label} (自定义)`,
+        defaultCombo: defShortcut
+      });
+    });
+
+    projectCommands.forEach((cmd) => {
+      if (customCommands.some(c => c.id === cmd.id)) return;
+      list.push({
+        id: cmd.id,
+        label: `${cmd.label} (项目)`,
+        defaultCombo: cmd.defaultShortcut || ''
+      });
+    });
+
+    return list;
+  }, [customCommands, projectCommands]);
 
   const handleResetShortcut = (id: string, defaultCombo: string) => {
     setEditorShortcuts((prev) => {
@@ -546,28 +851,224 @@ function EditorView({
     );
   };
 
-  const projectPath = state[BC.system.projectPath] || '';
-  const openedFile = state[BC.events.openFile(areaId)] || '';
-  const isFocused = state[BC.system.focusedAreaId] === areaId;
+
 
   // ── saveNodeFile ──────────────────────────────────────────────────────────
   const saveNodeFile = async (customContent?: string) => {
-    if (!currentFile) { setStatusMessage('No file open to save'); return; }
+    if (!currentFile) { setStatusMessage('无打开的笔记可保存'); return; }
     const fullContent = customContent !== undefined ? customContent : contentRef.current;
     if (fullContent === lastSavedContentRef.current) return;
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
-      setStatusMessage(`Saved at ${new Date().toLocaleTimeString()}`);
+      setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
       updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+      
+      // If we are not in preview mode, detect and run any immediate scripts matching {{...}}
+      if (!isPreviewMode) {
+        triggerImmediateScripts(fullContent);
+      }
     } catch (err: any) {
       console.error('[Editor] Save failed:', err);
-      setStatusMessage(`Error saving: ${err.message}`);
+      setStatusMessage(`保存失败: ${err.message}`);
       updateBloodKey(BC.events.scriptError('editor'), { message: err.message, ts: Date.now() });
     }
   };
 
+  const handleUndo = () => {
+    if (!textareaRef.current) return;
+
+    // Clear any pending autocomplete/debounce history timers and force push
+    if (historyTimerRef.current) {
+      clearTimeout(historyTimerRef.current);
+      historyTimerRef.current = null;
+    }
+
+    const currentText = contentRef.current;
+    const currentStart = textareaRef.current.selectionStart;
+    const currentEnd = textareaRef.current.selectionEnd;
+
+    if (currentText !== lastHistoryContentRef.current) {
+      pushStateToUndoStack(lastHistoryContentRef.current, currentStart, currentEnd);
+      lastHistoryContentRef.current = currentText;
+    }
+
+    const previousState = undoStackRef.current.pop();
+    if (!previousState) {
+      setStatusMessage('已是最旧版本');
+      return;
+    }
+
+    redoStackRef.current.push({
+      content: currentText,
+      selectionStart: currentStart,
+      selectionEnd: currentEnd
+    });
+
+    setContent(previousState.content);
+    lastHistoryContentRef.current = previousState.content;
+    saveNodeFile(previousState.content);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(previousState.selectionStart, previousState.selectionEnd);
+      }
+    }, 0);
+    setStatusMessage('已撤销');
+  };
+
+  const handleRedo = () => {
+    if (!textareaRef.current) return;
+
+    if (historyTimerRef.current) {
+      clearTimeout(historyTimerRef.current);
+      historyTimerRef.current = null;
+    }
+
+    const currentText = contentRef.current;
+    const currentStart = textareaRef.current.selectionStart;
+    const currentEnd = textareaRef.current.selectionEnd;
+
+    const nextState = redoStackRef.current.pop();
+    if (!nextState) {
+      setStatusMessage('已最新版本');
+      return;
+    }
+
+    undoStackRef.current.push({
+      content: currentText,
+      selectionStart: currentStart,
+      selectionEnd: currentEnd
+    });
+
+    setContent(nextState.content);
+    lastHistoryContentRef.current = nextState.content;
+    saveNodeFile(nextState.content);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(nextState.selectionStart, nextState.selectionEnd);
+      }
+    }, 0);
+    setStatusMessage('已重做');
+  };
+
+  // ── Immediate Script execution in edit mode ──────────────────────────────
+  const triggerImmediateScripts = async (fileContent: string) => {
+    if (!projectPath || !currentFile) return;
+
+    const exprRegex = /\{\{([\s\S]*?)\}\}/g;
+    const lines = fileContent.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      let match;
+      exprRegex.lastIndex = 0;
+
+      while ((match = exprRegex.exec(line)) !== null) {
+        const rawExpr = match[0];
+        const exprInner = match[1];
+
+        if (triggeredImmediateRefs.current.has(rawExpr)) {
+          continue;
+        }
+
+        const parsed = parseExpression(exprInner);
+        if (!parsed || !parsed.run) continue;
+
+        // Skip periodic scheduled scripts
+        if (parsed.interval && parsed.interval > 0) continue;
+
+        triggeredImmediateRefs.current.add(rawExpr);
+        executeImmediateScript(parsed, i, rawExpr);
+      }
+    }
+  };
+
+  const executeImmediateScript = async (
+    parsed: { jsonPath: string; keyPath: string; run: string; isolate: string | null },
+    lineIndex: number,
+    rawExpr: string
+  ) => {
+    const { jsonPath, run, isolate } = parsed;
+    const uniqueId = 'exec_' + Math.random().toString(36).substring(2, 9);
+
+    let resolvedRelativeJsonPath = jsonPath;
+    let threadId = 'project';
+
+    const isIsolatedWindow = isolate === 'window' || isolate === 'true';
+    const isIsolatedExecution = isolate === 'execution' || isolate === 'single';
+
+    if (isIsolatedWindow) {
+      threadId = areaId;
+      const extIndex = jsonPath.lastIndexOf('.json');
+      if (extIndex !== -1) {
+        resolvedRelativeJsonPath = jsonPath.substring(0, extIndex) + `_${areaId}.json`;
+      } else {
+        resolvedRelativeJsonPath = jsonPath + `_${areaId}`;
+      }
+    } else if (isIsolatedExecution) {
+      threadId = uniqueId;
+      const extIndex = jsonPath.lastIndexOf('.json');
+      if (extIndex !== -1) {
+        resolvedRelativeJsonPath = jsonPath.substring(0, extIndex) + `_${uniqueId}.json`;
+      } else {
+        resolvedRelativeJsonPath = jsonPath + `_${uniqueId}`;
+      }
+    }
+
+    const absoluteOutputPath = `${projectPath}/script/${resolvedRelativeJsonPath}`;
+    setStatusMessage(`Running immediate script: ${run}...`);
+
+    try {
+      try {
+        await (window as any).electronAPI.readFile(absoluteOutputPath);
+      } catch (e) {
+        await (window as any).electronAPI.writeFile(absoluteOutputPath, '{}');
+      }
+
+      const workingDir = `${projectPath}/script`;
+      const cmd = `DNOTE_THREAD_ID="${threadId}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_NOTE_PATH="${currentFile}" DNOTE_NOTE_LINE="${lineIndex}" uv run "${run}"`;
+
+      await (window as any).electronAPI.execCommand(cmd, workingDir);
+
+      try {
+        const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
+        if (updatedContent) {
+          const parsedData = JSON.parse(updatedContent);
+          updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+        }
+      } catch (e) {}
+
+      setStatusMessage(`Script ${run} executed successfully.`);
+      // Force reload editor state
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+
+      if (isIsolatedExecution) {
+        setTimeout(() => {
+          (window as any).electronAPI.deleteFile(absoluteOutputPath).catch(() => {});
+        }, 1000);
+      }
+    } catch (err: any) {
+      console.error('[Editor] Immediate script run failed:', err);
+      setStatusMessage(`Immediate script failed: ${err.message}`);
+    }
+  };
+
   // ── MediaDrop ─────────────────────────────────────────────────────────────
+  const setContentFromDrop = (val: string | ((prev: string) => string)) => {
+    const resolvedVal = typeof val === 'function' ? val(contentRef.current) : val;
+    if (textareaRef.current) {
+      pushStateToUndoStack(contentRef.current, textareaRef.current.selectionStart, textareaRef.current.selectionEnd);
+    } else {
+      pushStateToUndoStack(contentRef.current, 0, 0);
+    }
+    setContent(resolvedVal);
+    lastHistoryContentRef.current = resolvedVal;
+  };
+
   const {
     isDraggingFile,
     hoveredLineIndex,
@@ -582,7 +1083,7 @@ function EditorView({
     currentFile,
     isPreviewMode,
     contentRef,
-    setContent,
+    setContent: setContentFromDrop,
     saveNodeFile,
     setStatusMessage,
   });
@@ -752,7 +1253,7 @@ function EditorView({
   // ── 5. Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {
     if (!currentFile || isPreviewMode || content === '' || content === lastSavedContentRef.current) return;
-    const timer = setTimeout(() => { saveNodeFile(content); }, 1200);
+    const timer = setTimeout(() => { saveNodeFile(content); }, 600);
     return () => clearTimeout(timer);
   }, [content, currentFile, isPreviewMode]);
 
@@ -763,15 +1264,23 @@ function EditorView({
     setTags(cleanTags);
     const fullContent = updateYamlFrontmatterTags(contentRef.current, cleanTags);
     if (fullContent === lastSavedContentRef.current) return;
+    
+    if (textareaRef.current) {
+      pushStateToUndoStack(contentRef.current, textareaRef.current.selectionStart, textareaRef.current.selectionEnd);
+    } else {
+      pushStateToUndoStack(contentRef.current, 0, 0);
+    }
+    
     setContent(fullContent);
+    lastHistoryContentRef.current = fullContent;
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
-      setStatusMessage('Tags updated inline.');
+      setStatusMessage('标签已更新。');
       updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
     } catch (err: any) {
       console.error('[Editor] Tag update failed:', err);
-      alert(`Failed to save tag updates: ${err.message}`);
+      alert(`更新标签失败: ${err.message}`);
     }
   };
 
@@ -862,16 +1371,63 @@ function EditorView({
     else if (lastAction.id === 'editor.delete') handleDeleteCurrentFile();
     else if (lastAction.id === 'editor.setAsTemplate') handleSetAsTemplate();
     else if (lastAction.id === 'editor.editShortcuts') setIsShortcutsModalOpen(true);
-  }, [lastAction]);
+    else if (lastAction.id.startsWith('custom.')) {
+      const cmd = customCommands.find(c => c.id === lastAction.id) || projectCommands.find(c => c.id === lastAction.id);
+      if (cmd) {
+        handleExecuteCommand(cmd as any);
+      }
+    }
+  }, [lastAction, customCommands, projectCommands]);
+
+  const updateCursorState = (overrideContent?: string) => {
+    if (!textareaRef.current) return;
+    const { selectionStart, selectionEnd } = textareaRef.current;
+    const currentVal = overrideContent !== undefined ? overrideContent : (contentRef.current || '');
+    const subStr = currentVal.substring(0, selectionStart);
+    const lines = subStr.split('\n');
+    const line = lines.length;
+    const column = lines[lines.length - 1].length + 1;
+    const selectedText = currentVal.substring(selectionStart, selectionEnd);
+    
+    updateBloodKey(`system.editorCursor.${areaId}`, {
+      line,
+      column,
+      selectedText,
+      filePath: currentFile
+    });
+  };
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      updateCursorState();
+    }
+  }, [currentFile]);
 
   const handleFocus = () => {
     updateBloodKey(BC.system.focusedAreaId, areaId);
+    updateCursorState();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const textarea = e.currentTarget;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
+
+    // Undo / Redo keybind interception
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        handleRedo();
+      } else {
+        handleUndo();
+      }
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
 
     // Formatting keyboard shortcuts matching user configuration
     const pressedComboParts: string[] = [];
@@ -895,13 +1451,27 @@ function EditorView({
       }
     }
 
+    // Also check ActionRegistry for custom/project commands shortcuts
+    if (!matchedType) {
+      const actionId = ActionRegistry.getActionIdByShortcut(pressedCombo, 'editor');
+      if (actionId && (actionId.startsWith('custom.') || actionId.startsWith('project.'))) {
+        matchedType = actionId;
+      }
+    }
+
     if (matchedType) {
       e.preventDefault();
-      if (matchedType === 'link') {
-        showPrompt('Enter Hyperlink URL:', 'https://', (url) => {
+      if (matchedType.startsWith('custom.') || matchedType.startsWith('project.')) {
+        // Trigger custom/project command immediately via Blood signal
+        const editorId = state[BC.system.lastFocusedEditorId] || 'global';
+        Blood.updateKey(`actions.${matchedType}.${editorId}`, Date.now());
+      } else if (matchedType === 'link') {
+        showPrompt('输入链接 URL:', 'https://', (url) => {
           if (!url) return;
+          pushStateToUndoStack(content, start, end);
           const res = applyFormatting('link', content, start, end, url);
           setContent(res.text);
+          lastHistoryContentRef.current = res.text;
           saveNodeFile(res.text);
           
           setTimeout(() => {
@@ -912,8 +1482,10 @@ function EditorView({
           }, 0);
         });
       } else {
+        pushStateToUndoStack(content, start, end);
         const res = applyFormatting(matchedType, content, start, end);
         setContent(res.text);
+        lastHistoryContentRef.current = res.text;
         saveNodeFile(res.text);
         
         setTimeout(() => {
@@ -978,30 +1550,37 @@ function EditorView({
       {/* Editor Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px' }}>
         <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>
-          {isPreviewMode ? '✨ NOTE PREVIEW' : '✍️ NOTE EDITOR'}
+          {isPreviewMode ? '✨ 笔记预览' : '✍️ 笔记编辑器'}
         </span>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
             className="area-btn"
             onClick={() => setIsTagGroupsOpen(true)}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
-            📁 Tag Groups (标签组)
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
+            </svg>
+            标签组模板
           </button>
           <button
             className="area-btn"
             onClick={() => setIsCustomCommandsOpen(true)}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
-            ⚙️ Commands (自定义命令)
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="8" cy="8" r="2.5" />
+              <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
+            </svg>
+            自定义命令
           </button>
           <button
             className="area-btn"
-            title="Toggle mode (meta+e)"
+            title="切换编辑/预览 (meta+e)"
             onClick={togglePreviewMode}
             style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '10px' }}
           >
-            {isPreviewMode ? 'Edit Note' : 'Preview'}
+            {isPreviewMode ? '编辑笔记' : '预览'}
           </button>
         </div>
       </div>
@@ -1044,6 +1623,28 @@ function EditorView({
           value={content}
           onChange={(e) => {
             const nextVal = e.target.value;
+            const start = e.target.selectionStart;
+
+            // Clear any pending debounced history push
+            if (historyTimerRef.current) {
+              clearTimeout(historyTimerRef.current);
+            }
+
+            // Capture milestones (space, newline, or a jump of characters) for undo history
+            const diffLen = Math.abs(nextVal.length - lastHistoryContentRef.current.length);
+            const lastChar = nextVal.charAt(start - 1);
+            if (diffLen > 6 || lastChar === ' ' || lastChar === '\n') {
+              pushStateToUndoStack(lastHistoryContentRef.current, start, start);
+              lastHistoryContentRef.current = nextVal;
+            } else {
+              // Debounce pushing history state if user stops typing for 500ms
+              const prevVal = lastHistoryContentRef.current;
+              historyTimerRef.current = setTimeout(() => {
+                pushStateToUndoStack(prevVal, start, start);
+                lastHistoryContentRef.current = nextVal;
+              }, 500);
+            }
+
             setContent(nextVal);
             try {
               const parsed = parseFrontmatterTags(nextVal);
@@ -1068,9 +1669,13 @@ function EditorView({
                 }
               }
             }
+            updateCursorState(nextVal);
           }}
           onKeyDown={handleKeyDown}
           onFocus={handleFocus}
+          onKeyUp={() => updateCursorState()}
+          onMouseUp={() => updateCursorState()}
+          onClick={() => updateCursorState()}
           placeholder="Start writing note..."
           spellCheck={false}
           style={{ border: 'none', resize: 'none', overflowY: 'auto' }}
@@ -1153,7 +1758,7 @@ function EditorView({
       {/* Status Bar */}
       <div className="editor-statusbar">
         <span style={{ flexGrow: 1 }}>{statusMessage}</span>
-        <span>{activeTags.length} tags</span>
+        <span>{activeTags.length} 个标签</span>
       </div>
 
       {isDraggingFile && (
@@ -1165,70 +1770,38 @@ function EditorView({
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
           </div>
-          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>Drop media to import</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Supports Image, Audio, and Video files</span>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>拖放媒体文件以导入</span>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>支持图片、音频和视频文件</span>
         </div>
       )}
 
       {isShortcutsModalOpen && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.45)',
-          backdropFilter: 'blur(6px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-        }}>
-          <div style={{
-            width: '320px',
-            maxHeight: '400px',
-            backgroundColor: 'var(--bg-panel)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '8px',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
-            color: 'var(--text-main)',
-            fontSize: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
+        <div className="pane-modal-overlay" onClick={() => { setIsShortcutsModalOpen(false); setRecordingActionId(null); }}>
+          <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '340px', maxHeight: '420px' }}>
             {/* Modal Header */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 14px',
-              borderBottom: '1px solid var(--border-color)',
-              backgroundColor: 'rgba(0,0,0,0.02)'
-            }}>
-              <span style={{ fontWeight: 600 }}>Markdown Shortcuts (快捷键管理)</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)' }}>
+              <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.8 }}>
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
+                </svg>
+                Markdown 快捷键管理
+              </span>
               <button
                 onClick={() => {
                   setIsShortcutsModalOpen(false);
                   setRecordingActionId(null);
                 }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: '13px',
-                  fontWeight: 600
-                }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
               >
                 ✕
               </button>
             </div>
 
             {/* Modal Body */}
-            <div style={{ padding: '14px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {MARKDOWN_ACTIONS.map((act) => {
-                const currentCombo = editorShortcuts[act.id];
+            <div style={{ paddingTop: '10px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {allManageableActions.map((act) => {
+                const currentCombo = editorShortcuts[act.id] !== undefined ? editorShortcuts[act.id] : act.defaultCombo;
                 const isListening = recordingActionId === act.id;
                 return (
                   <div
@@ -1268,7 +1841,7 @@ function EditorView({
                         }}
                       >
                         {isListening ? (
-                          <span style={{ animation: 'pulse 1.2s infinite', fontSize: '9px' }}>Press key...</span>
+                          <span style={{ animation: 'pulse 1.2s infinite', fontSize: '9px' }}>录入中...</span>
                         ) : (
                           formatComboVisual(currentCombo)
                         )}
@@ -1276,16 +1849,9 @@ function EditorView({
                       {currentCombo !== act.defaultCombo && (
                         <button
                           onClick={() => handleResetShortcut(act.id, act.defaultCombo)}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--text-muted)',
-                            cursor: 'pointer',
-                            fontSize: '10px',
-                            fontWeight: 600,
-                          }}
+                          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
                         >
-                          Reset
+                          重置
                         </button>
                       )}
                     </div>
@@ -1298,9 +1864,9 @@ function EditorView({
       )}
 
       {promptConfig.show && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 1200, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: '85%', borderRadius: 12, background: 'var(--bg-panel)', border: '1px solid var(--border-color)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-main)' }}>{promptConfig.title}</span>
+        <div className="pane-modal-overlay">
+          <div className="pane-modal-content" style={{ width: '85%' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-main)', marginBottom: 12 }}>{promptConfig.title === 'Enter Hyperlink URL:' ? '输入超链接 URL:' : promptConfig.title}</span>
             <input
               type="text"
               id="prompt-modal-input-editor"
@@ -1315,18 +1881,18 @@ function EditorView({
                   setPromptConfig(prev => ({ ...prev, show: false }));
                 }
               }}
-              style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none' }}
+              style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none', marginBottom: 12 }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
               <button
-                className="area-btn"
+                className="area-btn text-btn"
                 onClick={() => setPromptConfig(prev => ({ ...prev, show: false }))}
                 style={{ height: '24px', fontSize: '10px', padding: '0 10px' }}
               >
-                Cancel
+                取消
               </button>
               <button
-                className="area-btn"
+                className="area-btn text-btn"
                 onClick={() => {
                   const input = document.getElementById('prompt-modal-input-editor') as HTMLInputElement;
                   if (input) {
@@ -1336,7 +1902,7 @@ function EditorView({
                 }}
                 style={{ height: '24px', fontSize: '10px', padding: '0 10px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none' }}
               >
-                Confirm
+                确定
               </button>
             </div>
           </div>
@@ -1344,23 +1910,17 @@ function EditorView({
       )}
 
       {isCustomCommandsOpen && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 1100, backgroundColor: 'rgba(0, 0, 0, 0.45)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{
-            width: '560px',
-            maxHeight: '460px',
-            backgroundColor: 'var(--bg-panel)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '12px',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
-            color: 'var(--text-main)',
-            fontSize: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
+        <div className="pane-modal-overlay">
+          <div className="pane-modal-content" style={{ width: '560px', maxHeight: '460px', padding: 0 }}>
             {/* Modal Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.02)' }}>
-              <span style={{ fontWeight: 700, fontSize: '13px' }}>⚙️ Custom Commands Manager (自定义命令管理)</span>
+              <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.8 }}>
+                  <circle cx="8" cy="8" r="2.5" />
+                  <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
+                </svg>
+                自定义命令管理器
+              </span>
               <button
                 onClick={() => setIsCustomCommandsOpen(false)}
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
@@ -1373,9 +1933,9 @@ function EditorView({
             <div style={{ padding: '16px', overflowY: 'auto', flex: 1, display: 'flex', gap: '16px' }}>
               {/* Left Side: List */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>EXISTING COMMANDS ({customCommands.length})</span>
+                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>已有命令 ({customCommands.length})</span>
                 {customCommands.length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>No custom commands created yet. Use the form to add one!</div>
+                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>尚未创建任何自定义命令。请在右侧表单添加！</div>
                 ) : (
                   customCommands.map(cmd => (
                     <div key={cmd.id} style={{ padding: '8px', border: '1.2px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)', display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
@@ -1385,7 +1945,7 @@ function EditorView({
                           onClick={() => handleDeleteCustomCommand(cmd.id)}
                           style={{ border: 'none', background: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
                         >
-                          Delete
+                          删除
                         </button>
                       </div>
                       <span style={{ fontWeight: 600, fontSize: '10.5px' }}>{cmd.label}</span>
@@ -1398,41 +1958,41 @@ function EditorView({
 
               {/* Right Side: Add Form */}
               <form onSubmit={handleAddCustomCommand} style={{ width: '220px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>CREATE NEW COMMAND</span>
+                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>新建自定义命令</span>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>Command Name (Label)</label>
+                  <label style={{ fontSize: '10px', fontWeight: 600 }}>命令名称</label>
                   <input
                     type="text"
-                    placeholder="e.g. Signature"
+                    placeholder="例如: 签名"
                     value={newCmdLabel}
                     onChange={e => setNewCmdLabel(e.target.value)}
                     style={{ padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>Trigger Word (e.g. /sig)</label>
+                  <label style={{ fontSize: '10px', fontWeight: 600 }}>触发词 (例如 sig, 无前导斜杠)</label>
                   <input
                     type="text"
-                    placeholder="e.g. sig (no slashes)"
+                    placeholder="例如: sig"
                     value={newCmdTrigger}
                     onChange={e => setNewCmdTrigger(e.target.value)}
                     style={{ padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>Description</label>
+                  <label style={{ fontSize: '10px', fontWeight: 600 }}>描述</label>
                   <input
                     type="text"
-                    placeholder="Brief description"
+                    placeholder="简短描述该命令"
                     value={newCmdDesc}
                     onChange={e => setNewCmdDesc(e.target.value)}
                     style={{ padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>Content to Insert</label>
+                  <label style={{ fontSize: '10px', fontWeight: 600 }}>要插入的内容</label>
                   <textarea
-                    placeholder="Text snippet content..."
+                    placeholder="在此输入要插入的文本片段内容..."
                     value={newCmdContent}
                     onChange={e => setNewCmdContent(e.target.value)}
                     style={{ flex: 1, minHeight: '80px', padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none', resize: 'none' }}
@@ -1440,10 +2000,10 @@ function EditorView({
                 </div>
                 <button
                   type="submit"
-                  className="area-btn"
-                  style={{ height: '26px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none', fontWeight: 700 }}
+                  className="area-btn text-btn"
+                  style={{ height: '28px', padding: '4px 12px', fontSize: '11px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none', fontWeight: 700, borderRadius: '4px', cursor: 'pointer' }}
                 >
-                  Create Command
+                  创建命令
                 </button>
               </form>
             </div>
@@ -1452,23 +2012,16 @@ function EditorView({
       )}
 
       {isTagGroupsOpen && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 1100, backgroundColor: 'rgba(0, 0, 0, 0.45)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{
-            width: '460px',
-            maxHeight: '400px',
-            backgroundColor: 'var(--bg-panel)',
-            border: '1px solid var(--border-color)',
-            borderRadius: '12px',
-            boxShadow: '0 12px 32px rgba(0,0,0,0.25)',
-            color: 'var(--text-main)',
-            fontSize: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}>
+        <div className="pane-modal-overlay">
+          <div className="pane-modal-content" style={{ width: '460px', maxHeight: '400px', padding: 0 }}>
             {/* Modal Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.02)' }}>
-              <span style={{ fontWeight: 700, fontSize: '13px' }}>📁 Tag Templates / Groups (标签组模板)</span>
+              <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.8 }}>
+                  <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
+                </svg>
+                标签组模板
+              </span>
               <button
                 onClick={() => setIsTagGroupsOpen(false)}
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
@@ -1481,11 +2034,11 @@ function EditorView({
             <div style={{ padding: '16px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Save Current Tags Form */}
               <form onSubmit={handleSaveTagGroup} style={{ padding: '10px', border: '1.2px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.015)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px' }}>Save Current note tags as group</span>
+                <span style={{ fontWeight: 700, fontSize: '11px' }}>保存当前笔记标签为组</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '4px 0' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Tags to save:</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>要保存的标签:</span>
                   {tags.length === 0 ? (
-                    <span style={{ fontSize: '10px', fontStyle: 'italic', color: 'var(--text-muted)' }}>No tags on current note. Add some tags first.</span>
+                    <span style={{ fontSize: '10px', fontStyle: 'italic', color: 'var(--text-muted)' }}>当前笔记没有标签。请先添加一些标签。</span>
                   ) : (
                     tags.map(t => (
                       <span key={`group_save_pill_${t}`} style={{ fontSize: '9px', fontWeight: 600, backgroundColor: 'rgba(0,0,0,0.05)', color: 'var(--text-main)', padding: '1px 5px', borderRadius: '4px' }}>#{t}</span>
@@ -1495,7 +2048,7 @@ function EditorView({
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <input
                     type="text"
-                    placeholder="Group name (e.g. Daily Review)"
+                    placeholder="标签组名称 (例如: 每日回顾)"
                     value={newGroupName}
                     onChange={e => setNewGroupName(e.target.value)}
                     disabled={tags.length === 0}
@@ -1503,20 +2056,20 @@ function EditorView({
                   />
                   <button
                     type="submit"
-                    className="area-btn"
+                    className="area-btn text-btn"
                     disabled={tags.length === 0}
                     style={{ height: '24px', fontSize: '10.5px', padding: '0 12px', whiteSpace: 'nowrap' }}
                   >
-                    Save Group
+                    保存标签组
                   </button>
                 </div>
               </form>
 
               {/* Groups List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, overflowY: 'auto' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>SAVED TAG GROUPS</span>
+                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>已保存的标签组</span>
                 {Object.keys(tagGroups).length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>No tag groups saved. Create one above!</div>
+                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>尚未保存任何标签组。请在上方创建！</div>
                 ) : (
                   Object.entries(tagGroups).map(([name, groupTags]) => (
                     <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', border: '1.2px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }}>
@@ -1534,10 +2087,10 @@ function EditorView({
                             // Incremental add tags
                             handleUpdateTags([...tags, ...groupTags]);
                           }}
-                          className="area-btn"
+                          className="area-btn text-btn"
                           style={{ height: '22px', fontSize: '10px', padding: '0 8px' }}
                         >
-                          Add (增量)
+                          添加 (增量)
                         </button>
                         <button
                           onClick={() => handleDeleteTagGroup(name)}

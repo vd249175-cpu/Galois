@@ -73,7 +73,7 @@ export function GraphControls({
           <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M2 3h12M2 8h12M2 13h12" />
           </svg>
-          {!isCollapsed && 'Graph Config'}
+          {!isCollapsed && '拓扑配置'}
         </div>
         <svg 
           width="10" 
@@ -97,7 +97,7 @@ export function GraphControls({
           {/* Repulsion Slider */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
-              <span>Repulsion (斥力)</span>
+              <span>斥力大小</span>
               <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{repulsion}</span>
             </div>
             <input
@@ -119,7 +119,7 @@ export function GraphControls({
           {/* Arrow Size Slider */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
-              <span>Arrow Size (箭头)</span>
+              <span>箭头尺寸</span>
               <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{arrowSize}</span>
             </div>
             <input
@@ -141,7 +141,7 @@ export function GraphControls({
           {/* Node Spacing Slider */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
-              <span>Spacing (节点间距)</span>
+              <span>节点间距</span>
               <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{spacing}</span>
             </div>
             <input
@@ -162,7 +162,7 @@ export function GraphControls({
 
           {/* Hierarchical Decomposition Mode Toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
-            <span style={{ color: 'var(--text-main)' }}>Implicit Deconstruct</span>
+            <span style={{ color: 'var(--text-main)' }}>级数拆解模式</span>
             <button
               onClick={() => setIsHierarchicalMode(!isHierarchicalMode)}
               style={{

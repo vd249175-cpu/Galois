@@ -1,4 +1,4 @@
-import { parseFrontmatterTags, resolveTagsSync } from '../utils';
+import { parseFrontmatterTags, resolveTagsSync, parseFrontmatterIcon } from '../utils';
 
 /**
  * calculateAllResolvedTags — 计算所有笔记文件的已解析标签
@@ -16,10 +16,12 @@ export async function calculateAllResolvedTags(
 ): Promise<{
   resolved: Record<string, string[]>;
   staticTags: Record<string, string[]>;
+  icons: Record<string, string>;
 }> {
   const initialTagsMap: Record<string, string[]> = {};
   const fileRawTags: Record<string, string[]> = {};
   const staticTagsMap: Record<string, string[]> = {};
+  const fileIconsMap: Record<string, string> = {};
 
   for (const file of mdFiles) {
     try {
@@ -29,11 +31,14 @@ export async function calculateAllResolvedTags(
       initialTagsMap[file.path] = tags;
       fileRawTags[file.path] = rawTags;
       staticTagsMap[file.path] = rawTags;
+      const icon = parseFrontmatterIcon(rawContent);
+      fileIconsMap[file.path] = icon;
     } catch (e) {
       console.error('[tagResolver] Failed to read/parse:', file.path, e);
       initialTagsMap[file.path] = [];
       fileRawTags[file.path] = [];
       staticTagsMap[file.path] = [];
+      fileIconsMap[file.path] = '';
     }
   }
 
@@ -99,5 +104,6 @@ export async function calculateAllResolvedTags(
   return {
     resolved: resolvedTagsMap,
     staticTags: staticTagsMap,
+    icons: fileIconsMap,
   };
 }

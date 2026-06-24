@@ -305,7 +305,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     Blood.updateKey(`layout.poppedAreas.${areaId}`, componentType);
     Blood.updateKey(`layout.removeArea.${areaId}`, true);
 
-    const title = ComponentRegistry.getComponent(componentType)?.displayName || 'Workspace Pane';
+    const title = ComponentRegistry.getComponent(componentType)?.displayName || '工作区面板';
     (window as any).electronAPI.openSecondaryWindow(areaId, componentType, title);
   };
   // Keep ref in sync so the stable Blood subscriber above can call the latest popOut
@@ -362,22 +362,22 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
       >
         <span className="area-header-icon" style={{ display: 'flex', alignItems: 'center' }}>
           {currentComponent?.typeId === 'editor' ? (
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 1.5h7.5L13 4v10.5a1 1 0 01-1 1H4a1 1 0 01-1-1v-14z" />
             </svg>
           ) : currentComponent?.typeId === 'terminal' ? (
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
               <path d="M4 6.5l2 1.5-2 1.5" />
               <line x1="7.5" y1="9.5" x2="10.5" y2="9.5" />
             </svg>
           ) : currentComponent?.typeId === 'settings' ? (
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="8" cy="8" r="2.5" />
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
             </svg>
           ) : (
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
             </svg>
           )}
@@ -400,27 +400,27 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
 
         {!isPopped && (
           <>
-            <button className="area-btn" title="Split Horizontally" onClick={splitHorizontally}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <button className="area-btn" title="水平分栏" onClick={splitHorizontally}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="2" y="2" width="12" height="12" rx="1" />
                 <line x1="8" y1="2" x2="8" y2="14" />
               </svg>
             </button>
-            <button className="area-btn" title="Split Vertically" onClick={splitVertically}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <button className="area-btn" title="垂直分栏" onClick={splitVertically}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="2" y="2" width="12" height="12" rx="1" />
                 <line x1="2" y1="8" x2="14" y2="8" />
               </svg>
             </button>
-            <button className="area-btn" title="Pop out Window" onClick={popOut}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <button className="area-btn" title="弹出窗口" onClick={popOut}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="2" y="5" width="9" height="9" rx="1" />
                 <path d="M6.5 2.5H13.5V9.5" />
                 <line x1="13.5" y1="2.5" x2="7.5" y2="8.5" />
               </svg>
             </button>
-            <button className="area-btn danger" title="Close Panel" onClick={closePanel}>
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <button className="area-btn danger" title="关闭面板" onClick={closePanel}>
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" />
               </svg>
             </button>
@@ -428,8 +428,8 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
         )}
 
         {isPopped && (
-          <button className="area-btn" title="Merge Back" onClick={mergeBack}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <button className="area-btn" title="合并回主窗口" onClick={mergeBack}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="5" y="2" width="9" height="9" rx="1" />
               <path d="M11 13.5H2.5V5" />
               <line x1="2.5" y1="13.5" x2="8.5" y2="7.5" />
@@ -444,7 +444,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
           <ComponentWrapper areaId={areaId} currentComponent={currentComponent} />
         ) : (
           <div style={{ padding: '20px', color: 'var(--text-muted)' }}>
-            Select Component in Header Dropdown
+            请在顶部下拉菜单选择组件
           </div>
         )}
       </div>

@@ -1,5 +1,7 @@
-export { clearAction } from './ClearAction';
-
 import { clearAction } from './ClearAction';
+import { openTerminalAction } from './OpenTerminalAction';
 
-export const terminalActions = [clearAction];
+export { clearAction } from './ClearAction';
+export { openTerminalAction } from './OpenTerminalAction';
+
+export const terminalActions = [clearAction, openTerminalAction];

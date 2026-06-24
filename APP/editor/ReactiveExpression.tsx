@@ -136,11 +136,10 @@ export function ReactiveExpression({
 
   // 6. Trigger run on mount
   useEffect(() => {
-    // Only run automatically on mount if an interval (time-based scheduling) is set
-    if (run && interval && interval > 0) {
+    if (run) {
       runScript();
     }
-  }, [run, interval]);
+  }, [run]);
 
   // 7. Interval scheduler
   useEffect(() => {
@@ -225,7 +224,7 @@ export function ReactiveExpression({
             transition: 'opacity 0.15s',
             outline: 'none',
           }}
-          title="Run script manually"
+          title="手动运行脚本"
         >
           {isRunning ? (
             <svg

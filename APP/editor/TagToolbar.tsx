@@ -34,19 +34,31 @@ export function TagToolbar({
   const [showAutocomplete, setShowAutocomplete] = React.useState(false);
   const [autocompleteIndex, setAutocompleteIndex] = React.useState(0);
 
+  const getSuggestionDisplay = (suggestion: string) => {
+    if (suggestion.startsWith('re:')) {
+      return suggestion.substring(3);
+    }
+    if (suggestion.startsWith('run:')) {
+      return suggestion.substring(4);
+    }
+    return suggestion;
+  };
+
   const filteredSuggestions = React.useMemo(() => {
     const query = newTagInput.trim().toLowerCase();
     if (!query) return [];
-    return allProjectTags.filter(
-      (t) => t.toLowerCase().includes(query) && !tags.includes(t)
-    );
+    return allProjectTags.filter((t) => {
+      if (tags.includes(t)) return false;
+      const display = getSuggestionDisplay(t).toLowerCase();
+      return display.includes(query) || t.toLowerCase().includes(query);
+    });
   }, [newTagInput, allProjectTags, tags]);
   if (!currentFile) return null;
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.005)', flexWrap: 'wrap' }}>
       <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginRight: '4px' }}>
-        Note Tags (YAML):
+        笔记标签 (YAML):
       </span>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' }}>
         {/* Static Tags (Deletable) */}
@@ -82,7 +94,7 @@ export function TagToolbar({
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
-              title="Remove tag"
+              title="移除标签"
             >
               &times;
             </button>
@@ -94,6 +106,9 @@ export function TagToolbar({
           const matches = ruleMatches[rule] || [];
           const count = matches.length;
           const isExpanded = expandedRule === rule;
+
+          // Strip protocol prefixes for clean display
+          const displayRule = rule.startsWith('re:') ? rule.substring(3) : rule.startsWith('run:') ? rule.substring(4) : rule;
 
           return (
             <span
@@ -115,9 +130,9 @@ export function TagToolbar({
                 userSelect: 'none',
                 transition: 'all 0.15s ease',
               }}
-              title={`Click to ${isExpanded ? 'collapse' : 'expand'} matched tags for this rule`}
+              title={`点击${isExpanded ? '折叠' : '展开'}此规则匹配的标签`}
             >
-              ⚡️ {rule}
+              ⚡️ {displayRule}
               <span style={{
                 fontSize: '9.5px',
                 backgroundColor: isExpanded ? 'var(--accent-color)' : 'rgba(255, 59, 48, 0.15)',
@@ -129,6 +144,28 @@ export function TagToolbar({
               }}>
                 {count}
               </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent toggling expansion drawer
+                  handleRemoveTag(rule);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--accent-color)',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  padding: 0,
+                  marginLeft: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+                title="移除此规则"
+              >
+                &times;
+              </button>
             </span>
           );
         })}
@@ -153,7 +190,7 @@ export function TagToolbar({
           >
             <input
               type="text"
-              placeholder="+ Add tag..."
+              placeholder="+ 添加标签..."
               value={newTagInput}
               onChange={(e) => {
                 setNewTagInput(e.target.value);
@@ -212,7 +249,9 @@ export function TagToolbar({
             }}>
               {filteredSuggestions.map((suggestion, index) => {
                 const isSelected = index === autocompleteIndex;
-                const isRegex = suggestion.startsWith('re:') || suggestion.startsWith('run:');
+                const isRegex = suggestion.startsWith('re:');
+                const isScript = suggestion.startsWith('run:');
+                const display = getSuggestionDisplay(suggestion);
                 return (
                   <div
                     key={suggestion}
@@ -238,8 +277,10 @@ export function TagToolbar({
                       textOverflow: 'ellipsis',
                     }}
                   >
-                    <span>{isRegex ? '⚡' : '#'}</span>
-                    <span style={{ fontWeight: isSelected ? 700 : 500 }}>{suggestion}</span>
+                    <span style={{ fontSize: '9px', opacity: 0.7 }}>
+                      {isRegex ? '⚡ 正则' : isScript ? '⚡ 脚本' : '#'}
+                    </span>
+                    <span style={{ fontWeight: isSelected ? 700 : 500 }}>{display}</span>
                   </div>
                 );
               })}
@@ -250,7 +291,7 @@ export function TagToolbar({
       </div>
 
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)' }}>
-        <span>Iteration Limit:</span>
+        <span>迭代上限:</span>
         <select
           value={maxIterations}
           onChange={(e) => updateBloodKey('system.maxIterations', Number(e.target.value))}
@@ -264,11 +305,11 @@ export function TagToolbar({
             outline: 'none',
             cursor: 'pointer'
           }}
-          title="Set max iteration depth for dynamic tag propagation"
+          title="设置动态标签传播的最大迭代深度"
         >
-          <option value={1}>1 (No Propagation)</option>
+          <option value={1}>1 (不进行传递)</option>
           <option value={2}>2</option>
-          <option value={3}>3 (Default)</option>
+          <option value={3}>3 (默认)</option>
           <option value={4}>4</option>
           <option value={5}>5</option>
           <option value={10}>10</option>
@@ -291,12 +332,12 @@ export function TagToolbar({
           boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.05)',
         }}>
           <div style={{ width: '100%', fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-            <span>⚡️ TAGS MATCHED BY "{expandedRule}" ({ruleMatches[expandedRule].length})</span>
-            <span onClick={() => setExpandedRule(null)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>Collapse ×</span>
+            <span>⚡️ 被规则 "{expandedRule}" 匹配的标签 ({ruleMatches[expandedRule].length})</span>
+            <span onClick={() => setExpandedRule(null)} style={{ cursor: 'pointer', textDecoration: 'underline' }}>折叠 ×</span>
           </div>
           {ruleMatches[expandedRule].length === 0 ? (
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic', padding: '4px 0' }}>
-              No matches found for this rule in the current document.
+              当前文档中未找到符合该规则的匹配。
             </div>
           ) : (
             ruleMatches[expandedRule].map((t) => (

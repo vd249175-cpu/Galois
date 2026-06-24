@@ -89,3 +89,63 @@ export function resolveTagsSync(rawTags: string[], content: string): string[] {
 
   return Array.from(resolved);
 }
+
+// Helper to parse YAML frontmatter icon from markdown content
+export function parseFrontmatterIcon(content: string): string {
+  const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+  const match = content.match(yamlRegex);
+  if (!match) return '';
+  
+  const yamlText = match[1];
+  const lines = yamlText.split('\n');
+  for (const line of lines) {
+    const trimLine = line.trim();
+    if (trimLine.startsWith('icon:')) {
+      return trimLine.substring(5).trim().replace(/['"]/g, '');
+    }
+  }
+  return '';
+}
+
+// Helper to add/update/remove YAML frontmatter icon in markdown content
+export function updateYamlFrontmatterIcon(content: string, nextIcon: string): string {
+  const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
+  const match = content.match(yamlRegex);
+  
+  if (!match) {
+    // No frontmatter. Create one!
+    if (nextIcon) {
+      return `---\nicon: ${nextIcon}\n---\n${content}`;
+    }
+    return content;
+  }
+  
+  const yamlText = match[1];
+  const bodyText = match[2];
+  
+  const lines = yamlText.split('\n');
+  const newYamlLines: string[] = [];
+  let iconUpdated = false;
+  
+  for (const line of lines) {
+    const trimLine = line.trim();
+    if (trimLine.startsWith('icon:')) {
+      if (nextIcon) {
+        // Keep spacing/indentation
+        const indent = line.substring(0, line.indexOf('icon:'));
+        newYamlLines.push(`${indent}icon: ${nextIcon}`);
+      }
+      iconUpdated = true;
+    } else {
+      newYamlLines.push(line);
+    }
+  }
+  
+  if (!iconUpdated && nextIcon) {
+    newYamlLines.push(`icon: ${nextIcon}`);
+  }
+  
+  // Reassemble content
+  const cleanYaml = newYamlLines.join('\n');
+  return `---\n${cleanYaml}\n---\n${bodyText}`;
+}

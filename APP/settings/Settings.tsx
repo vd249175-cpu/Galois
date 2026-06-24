@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 
 export const SettingsComponent = {
   typeId: 'settings',
-  displayName: 'Preferences',
+  displayName: '偏好设置',
   iconName: 'settings',
   component: SettingsView,
   bloodChannels: [
@@ -115,7 +115,7 @@ function SettingsView({
   };
 
   const formatComboElement = (combo: string | undefined) => {
-    if (!combo) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>None</span>;
+    if (!combo) return <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>无</span>;
     const parts = combo.split('+');
     return (
       <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
@@ -140,7 +140,7 @@ function SettingsView({
             onClick={() => setActiveCategory('shortcuts')}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <rect x="1.5" y="4.5" width="13" height="7" rx="1" />
               <line x1="4" y1="7" x2="4" y2="7.01" />
               <line x1="6.5" y1="7" x2="6.5" y2="7.01" />
@@ -148,29 +148,29 @@ function SettingsView({
               <line x1="12" y1="7" x2="12" y2="7.01" />
               <line x1="5.5" y1="9.5" x2="10.5" y2="9.5" />
             </svg>
-            <span>Shortcuts</span>
+            <span>快捷键</span>
           </div>
           <div
             className={`settings-sidebar-item ${activeCategory === 'appearance' ? 'active' : ''}`}
             onClick={() => setActiveCategory('appearance')}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 1.5a2.5 2.5 0 012.5 2.5c0 .7-.3 1.3-.7 1.7l-7.3 7.3a1 1 0 01-.7.3H3.5a1 1 0 01-1-1v-2.3a1 1 0 01.3-.7l7.3-7.3c.4-.4 1-.7 1.7-.7z" />
               <path d="M9.5 4.5l2 2" />
             </svg>
-            <span>Appearance</span>
+            <span>外观</span>
           </div>
           <div
             className={`settings-sidebar-item ${activeCategory === 'system' ? 'active' : ''}`}
             onClick={() => setActiveCategory('system')}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="8" cy="8" r="2.5" />
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
             </svg>
-            <span>System</span>
+            <span>系统</span>
           </div>
         </div>
 
@@ -179,11 +179,11 @@ function SettingsView({
           {activeCategory === 'shortcuts' && (
             <>
               <div className="settings-header">
-                <h2>Keyboard Shortcuts</h2>
+                <h2>键盘快捷键</h2>
                 <div className="settings-search-container">
                   <input
                     type="text"
-                    placeholder="Search actions..."
+                    placeholder="搜索操作..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="settings-search-input"
@@ -209,7 +209,7 @@ function SettingsView({
                           onClick={() => setEditingActionId(act.id)}
                         >
                           {isListening ? (
-                            <span className="recording-text">Press key combination... (ESC to cancel)</span>
+                            <span className="recording-text">按下按键组合... (ESC 取消)</span>
                           ) : (
                             formatComboElement(currentCombo)
                           )}
@@ -220,7 +220,7 @@ function SettingsView({
                             className="settings-reset-link"
                             onClick={() => handleReset(act.id, act.defaultShortcut)}
                           >
-                            Reset
+                            重置
                           </button>
                         )}
                       </div>
@@ -233,18 +233,18 @@ function SettingsView({
 
           {activeCategory === 'appearance' && (
             <div style={{ padding: '16px' }}>
-              <h2>Appearance Settings</h2>
+              <h2>外观设置</h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '12px' }}>
-                Theme: Warm Beige (Active)
+                主题：温暖米色 (已启用)
               </p>
             </div>
           )}
 
           {activeCategory === 'system' && (
             <div style={{ padding: '16px' }}>
-              <h2>System Preferences</h2>
+              <h2>系统偏好设置</h2>
               <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '12px' }}>
-                Workspace path: /Users/apexwave/Desktop/DNOTE
+                工作区路径：/Users/apexwave/Desktop/DNOTE
               </p>
             </div>
           )}
