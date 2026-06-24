@@ -1,25 +1,25 @@
 :root {
   /* Vibrant Bright Metallic Gold and Deep Dark Obsidian Charcoal color tokens */
   --clr-gold: #ffdf00;
-  --clr-charcoal: #08080a;
+  --clr-charcoal: #06060a;
   --clr-soft-gold: #fff5d1;
 
   --bg-main: var(--clr-charcoal);
   --bg-panel: rgba(16, 16, 20, 0.45);
   --bg-header: rgba(12, 12, 15, 0.85);
   --bg-input: rgba(255, 255, 255, 0.04);
-  --bg-terminal: rgba(8, 8, 10, 0.65);
+  --bg-terminal: rgba(6, 6, 10, 0.65);
   --border-color: rgba(255, 223, 0, 0.2);
-  
+
   --text-main: var(--clr-soft-gold);
   --text-muted: #968e7b;
-  
+
   --accent-color: var(--clr-gold);
   --accent-hover: #ffffff;
   --highlight-color: rgba(255, 223, 0, 0.18);
   --error-color: #ff453a;
   --terminal-green: #30d158;
-  
+
   --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 
@@ -50,122 +50,154 @@
   --shadow-area-btn-inset-hover: inset 0.5px 0.5px 0px rgba(255, 223, 0, 0.2);
 }
 
-/* --- Premium Metallic Shimmer & Irregular Glitter Overrides --- */
+/* =====================================================================
+   METALLIC GLITTER LAYER — fixed-position pseudo overlay
+   Uses body::before so it covers the full viewport behind all panels.
+   Each radial-gradient is a SEPARATE tile of a different pixel size,
+   which causes them to mis-align and appear irregularly scattered.
+   ===================================================================== */
 
-/* 1. Irregularly scattered colorful metallic flecks/powder background pattern */
-[data-theme="black-gold"] body,
+[data-theme="black-gold"] body {
+  background-color: #06060a !important;
+  position: relative;
+}
+
+/* The glitter dust lives in a fixed pseudo-element that won't scroll */
+[data-theme="black-gold"] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+
+  /* ── Each layer = one dot color, tiled at a unique prime-ish px size ──
+     The different tile sizes make dots land at different offsets → irregular scatter.
+     dot size format: "radial-gradient(circle, COLOR DOT_RADIUS, transparent DOT_RADIUS+1px)"
+     background-size:  "Wx Hx" — controls tile pitch (distance between dots)
+  */
+  background-image:
+    /* ── Gold flakes ── */
+    radial-gradient(circle, #ffdf00 1.5px, transparent 2px),
+    radial-gradient(circle, #ffd700 1px,   transparent 1.5px),
+    radial-gradient(circle, #ffe680 2px,   transparent 2.5px),
+
+    /* ── Copper / Rose-Gold ── */
+    radial-gradient(circle, #ff8c00 1.5px, transparent 2px),
+    radial-gradient(circle, #ff6b6b 1px,   transparent 1.5px),
+    radial-gradient(circle, #ff7f50 2px,   transparent 2.5px),
+
+    /* ── Electric Blue / Cyan ── */
+    radial-gradient(circle, #00e5ff 1.5px, transparent 2px),
+    radial-gradient(circle, #00bfff 1px,   transparent 1.5px),
+
+    /* ── Emerald / Lime ── */
+    radial-gradient(circle, #39ff14 1.5px, transparent 2px),
+    radial-gradient(circle, #adff2f 1px,   transparent 1.5px),
+
+    /* ── Neon Violet / Magenta ── */
+    radial-gradient(circle, #df00fe 1.5px, transparent 2px),
+    radial-gradient(circle, #da70d6 1px,   transparent 1.5px);
+
+  background-size:
+    /* Gold        */ 97px  113px,   /* pitch 1 */
+                      71px   83px,   /* pitch 2 */
+                      137px 157px,   /* pitch 3 */
+    /* Copper      */ 109px  79px,
+                      53px   97px,
+                      173px 131px,
+    /* Blue/Cyan   */ 89px  127px,
+                      61px   73px,
+    /* Emerald     */ 103px  67px,
+                      149px 107px,
+    /* Violet      */ 83px  119px,
+                      59px   89px;
+
+  background-position:
+    /* Gold        */  7px  11px,
+                      19px  37px,
+                      41px   5px,
+    /* Copper      */ 13px  29px,
+                      31px  53px,
+                      67px  19px,
+    /* Blue/Cyan   */  3px  43px,
+                      23px   7px,
+    /* Emerald     */ 47px  17px,
+                       9px  61px,
+    /* Violet      */ 37px  31px,
+                      11px  47px;
+
+  background-repeat: repeat;
+  opacity: 0.85;
+}
+
+/* Panels sit above the glitter layer */
 [data-theme="black-gold"] .layout-container {
-  background-color: #060608 !important;
-  background-image: 
-    /* Bright Gold Flakes */
-    radial-gradient(circle at 6% 14%, #ffeb85 3px, transparent 4px),
-    radial-gradient(circle at 45% 24%, #ffd700 2.2px, transparent 3.5px),
-    radial-gradient(circle at 86% 16%, #ffdf00 3.2px, transparent 4.5px),
-    radial-gradient(circle at 24% 67%, #ffd700 2px, transparent 3.2px),
-    radial-gradient(circle at 76% 74%, #ffeb85 2.5px, transparent 3.8px),
-    radial-gradient(circle at 53% 86%, #ffdf00 2.8px, transparent 4.2px),
-    
-    /* Iridescent Copper / Rose Gold Flakes */
-    radial-gradient(circle at 17% 48%, #ff8c00 2.2px, transparent 3.5px),
-    radial-gradient(circle at 63% 40%, #ff6b6b 2.5px, transparent 3.8px),
-    radial-gradient(circle at 37% 80%, #ff7f50 2.8px, transparent 4.2px),
-    radial-gradient(circle at 93% 56%, #ff6b6b 2px, transparent 3.2px),
-    
-    /* Emerald / Lime Gold Flakes */
-    radial-gradient(circle at 34% 17%, #adff2f 1.8px, transparent 3px),
-    radial-gradient(circle at 81% 83%, #00ff7f 2.2px, transparent 3.5px),
-    
-    /* Electric Cyan / Blue Steel Flakes */
-    radial-gradient(circle at 14% 76%, #00ffff 2.2px, transparent 3.5px),
-    radial-gradient(circle at 69% 19%, #00bfff 2.8px, transparent 4.2px),
-    radial-gradient(circle at 51% 54%, #00e5ff 2px, transparent 3.2px),
-    radial-gradient(circle at 87% 49%, #00bfff 2.2px, transparent 3.5px),
-    
-    /* Neon Magenta / Orchid Violet Flakes */
-    radial-gradient(circle at 29% 34%, #ff00ff 2.5px, transparent 3.8px),
-    radial-gradient(circle at 71% 60%, #da70d6 2.2px, transparent 3.5px) !important;
-  background-size: 100% 100% !important;
-  background-repeat: no-repeat !important;
-  background-attachment: fixed !important;
+  position: relative;
+  z-index: 1;
+  background-color: transparent !important;
 }
 
-/* 2. Custom bright gold metallic scrollbars */
-[data-theme="black-gold"] ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-[data-theme="black-gold"] ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.4);
-}
+/* ── Custom bright gold metallic scrollbars ── */
+[data-theme="black-gold"] ::-webkit-scrollbar { width: 6px; height: 6px; }
+[data-theme="black-gold"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.4); }
 [data-theme="black-gold"] ::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #ffdf00, #b8860b) !important;
+  background: linear-gradient(180deg, #ffdf00, #b8860b);
   border-radius: 3px;
-  box-shadow: inset 1px 1px 1px rgba(255, 255, 255, 0.2);
+  box-shadow: inset 1px 1px 1px rgba(255,255,255,0.2);
 }
 [data-theme="black-gold"] ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #fff5d1, #ffdf00) !important;
+  background: linear-gradient(180deg, #fff5d1, #ffdf00);
 }
 
-/* 3. Gold foil text rendering for headers and card titles */
-[data-theme="black-gold"] h3,
-[data-theme="black-gold"] .settings-modal h3,
+/* ── Gold foil text for card titles ── */
 [data-theme="black-gold"] .file-card-title {
-  background: linear-gradient(135deg, #fff5d1 0%, #ffdf00 45%, #b8860b 90%, #aa771c 100%) !important;
+  background: linear-gradient(135deg, #fff5d1 0%, #ffdf00 45%, #b8860b 90%) !important;
   -webkit-background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   font-weight: 800 !important;
-  text-shadow: 0px 1px 2px rgba(0,0,0,0.5);
 }
 
-/* 4. Active sidebar button with bright metallic gold gradient */
-[data-theme="black-gold"] .active-area-btn,
-[data-theme="black-gold"] .sidebar-btn.active,
-[data-theme="black-gold"] .right-sidebar-btn.active {
-  background: linear-gradient(135deg, #fff5d1 0%, #ffdf00 50%, #b8860b 100%) !important;
-  color: #060608 !important;
-  border-color: #ffdf00 !important;
-  box-shadow: 0 0 12px rgba(255, 223, 0, 0.5) !important;
-  font-weight: bold;
-}
-
-/* 5. Iridescent glowing metallic tags */
+/* ── Iridescent glowing metallic tags ── */
 [data-theme="black-gold"] .file-card-tag {
-  background: linear-gradient(135deg, rgba(255, 223, 0, 0.18) 0%, rgba(255, 140, 0, 0.12) 50%, rgba(0, 255, 255, 0.15) 100%) !important;
+  background: linear-gradient(135deg,
+    rgba(255,223,0,0.2)   0%,
+    rgba(255,100,0,0.15) 40%,
+    rgba(0,229,255,0.18) 100%) !important;
   color: #ffdf00 !important;
-  border: 1px solid rgba(255, 223, 0, 0.35) !important;
-  box-shadow: 0 0 4px rgba(255, 223, 0, 0.15);
+  border: 1px solid rgba(255,223,0,0.4) !important;
+  box-shadow: 0 0 5px rgba(255,223,0,0.18);
   font-weight: 800 !important;
 }
 
-/* 6. Selected file cards with thick gold border and glowing colorful aura */
+/* ── Selected card: thick gold border + colorful glow ── */
 [data-theme="black-gold"] .file-card-item.selected {
-  background-color: rgba(255, 223, 0, 0.15) !important;
+  background-color: rgba(255,223,0,0.14) !important;
   border: 2px solid #ffdf00 !important;
-  box-shadow: 
-    0 0 12px rgba(255, 223, 0, 0.35), 
-    0 0 20px rgba(255, 140, 0, 0.1),
-    0 0 20px rgba(0, 255, 255, 0.1) !important;
+  box-shadow:
+    0 0 14px rgba(255,223,0,0.4),
+    0 0 24px rgba(255,100,0,0.12),
+    0 0 24px rgba(0,229,255,0.12) !important;
 }
 
-/* 7. Hover file cards with metallic gold pop-out */
+/* ── Hover card: metallic pop-out ── */
 [data-theme="black-gold"] .file-card-item:hover {
   border-color: #ffdf00 !important;
-  box-shadow: 
-    0 6px 20px rgba(0, 0, 0, 0.5),
-    0 0 12px rgba(255, 223, 0, 0.25),
-    inset 1.5px 1.5px 0px rgba(255, 255, 255, 0.05) !important;
+  box-shadow:
+    0 6px 20px rgba(0,0,0,0.55),
+    0 0 14px rgba(255,223,0,0.28),
+    inset 1.5px 1.5px 0px rgba(255,255,255,0.05) !important;
 }
 
-/* 8. Input and select box gold glows */
+/* ── Input / select gold focus glow ── */
 [data-theme="black-gold"] input:focus,
 [data-theme="black-gold"] select:focus,
 [data-theme="black-gold"] textarea:focus {
   border-color: #ffdf00 !important;
-  box-shadow: 0 0 6px rgba(255, 223, 0, 0.45) !important;
+  box-shadow: 0 0 8px rgba(255,223,0,0.5) !important;
   outline: none;
 }
 
-/* 9. Settings modal metallic dividers */
+/* ── Settings modal gold divider ── */
 [data-theme="black-gold"] .settings-modal-header {
   border-bottom: 2px solid #ffdf00 !important;
 }
