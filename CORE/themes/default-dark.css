@@ -34,14 +34,14 @@
   --bg-shortcut-row: rgba(255, 255, 255, 0.03);
 
   /* File Card Dark Theme Variables */
-  --bg-file-card: #000000;
-  --border-file-card: rgba(255, 255, 255, 0.1);
+  --bg-file-card: #1c1c1e;
+  --border-file-card: rgba(255, 255, 255, 0.06);
   --text-file-card: #ffffff;
   --text-file-card-muted: #e2e4e9;
-  --bg-file-card-tag: rgba(255, 255, 255, 0.12);
-  --shadow-file-card-inset: rgba(255, 255, 255, 0.01);
-  --bg-file-card-hover: rgba(255, 255, 255, 0.07);
-  --shadow-file-card-inset-hover: rgba(255, 255, 255, 0.03);
+  --bg-file-card-tag: rgba(255, 255, 255, 0.08);
+  --shadow-file-card-inset: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.02);
+  --bg-file-card-hover: #26262a;
+  --shadow-file-card-inset-hover: inset 0.5px 0.5px 0px rgba(255, 255, 255, 0.04);
 
   /* Area Buttons Dark Theme Variables */
   --bg-area-btn: rgba(255, 255, 255, 0.06);
