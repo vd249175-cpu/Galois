@@ -111,6 +111,25 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
       }
     }
 
+    const buttonStyle: React.CSSProperties = displayMode === 'text' ? {
+      width: '84px',
+      height: '30px',
+      borderRadius: '8px',
+      padding: '0 8px',
+      fontSize: '11px',
+      fontWeight: 600,
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: '8px',
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+    } : {
+      width: '28px',
+      height: '28px',
+    };
+
     return (
       <button
         key={actionId}
@@ -118,21 +137,23 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
         title={title}
         onClick={() => runSidebarAction(actionId)}
         disabled={!focusedAreaId}
-        style={displayMode === 'text' ? {
-          width: 'calc(100% - 10px)',
-          height: '28px',
-          padding: '0 4px',
-          fontSize: '9px',
-          fontWeight: 700,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        } : {}}
+        style={buttonStyle}
       >
-        {displayMode === 'icon' ? renderActionIcon(actionId, icon) : displayText}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {renderActionIcon(actionId, icon)}
+        </div>
+        {displayMode === 'text' && (
+          <span style={{
+            fontSize: '11px',
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            userSelect: 'none'
+          }}>
+            {displayText}
+          </span>
+        )}
       </button>
     );
   };
@@ -141,7 +162,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
     <div
       className="right-sidebar"
       style={{
-        width: displayMode === 'text' ? '64px' : '40px',
+        width: displayMode === 'text' ? '96px' : '40px',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -179,17 +200,20 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
             title={contextCollapsed ? '显示页面操作' : '折叠页面操作'}
             onClick={() => setContextCollapsed((prev) => !prev)}
             style={displayMode === 'text' ? {
-              width: 'calc(100% - 10px)',
-              height: '28px',
-              padding: '0 4px',
-              fontSize: '9px',
-              fontWeight: 700,
+              width: '84px',
+              height: '30px',
+              borderRadius: '8px',
+              padding: '0 8px',
+              fontSize: '11px',
+              fontWeight: 600,
               display: 'flex',
+              flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'flex-start',
+              gap: '8px',
             } : {}}
           >
-            {displayMode === 'icon' ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 {contextCollapsed ? (
                   <path d="M5.5 3.5L10.5 8L5.5 12.5" />
@@ -197,8 +221,18 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
                   <path d="M10.5 3.5L5.5 8L10.5 12.5" />
                 )}
               </svg>
-            ) : (
-              contextCollapsed ? '展开' : '收起'
+            </div>
+            {displayMode === 'text' && (
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                userSelect: 'none'
+              }}>
+                {contextCollapsed ? '展开' : '收起'}
+              </span>
             )}
           </button>
 
@@ -221,24 +255,37 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
               localStorage.setItem('dnote_sidebar_mode', nextMode);
             }}
             style={displayMode === 'text' ? {
-              width: 'calc(100% - 10px)',
-              height: '28px',
-              padding: '0 4px',
-              fontSize: '9px',
-              fontWeight: 700,
+              width: '84px',
+              height: '30px',
+              borderRadius: '8px',
+              padding: '0 8px',
+              fontSize: '11px',
+              fontWeight: 600,
               display: 'flex',
+              flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'flex-start',
+              gap: '8px',
             } : {}}
           >
-            {displayMode === 'icon' ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="2" y1="4" x2="14" y2="4" />
                 <line x1="2" y1="8" x2="10" y2="8" />
                 <line x1="2" y1="12" x2="12" y2="12" />
               </svg>
-            ) : (
-              '图标'
+            </div>
+            {displayMode === 'text' && (
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                userSelect: 'none'
+              }}>
+                图标
+              </span>
             )}
           </button>
 
@@ -248,23 +295,36 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
             title="工作区偏好设置"
             onClick={onToggleSettings}
             style={displayMode === 'text' ? {
-              width: 'calc(100% - 10px)',
-              height: '28px',
-              padding: '0 4px',
-              fontSize: '9px',
-              fontWeight: 700,
+              width: '84px',
+              height: '30px',
+              borderRadius: '8px',
+              padding: '0 8px',
+              fontSize: '11px',
+              fontWeight: 600,
               display: 'flex',
+              flexDirection: 'row',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'flex-start',
+              gap: '8px',
             } : {}}
           >
-            {displayMode === 'icon' ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="8" cy="8" r="2.5" />
                 <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
               </svg>
-            ) : (
-              '设置'
+            </div>
+            {displayMode === 'text' && (
+              <span style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                userSelect: 'none'
+              }}>
+                设置
+              </span>
             )}
           </button>
       </div>
