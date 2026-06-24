@@ -21,6 +21,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [editorAutosaveDelay, setEditorAutosaveDelay] = useState<number>(500);
   const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
   const [terminalAutoStartAgy, setTerminalAutoStartAgy] = useState<boolean>(true);
+  const [sidebarIconSize, setSidebarIconSize] = useState<number>(14);
+  const [fileTreeTitleSize, setFileTreeTitleSize] = useState<number>(11);
+  const [fileTreeTagSize, setFileTreeTagSize] = useState<number>(8.5);
 
   const focusedAreaId = useBloodChannel(['system.focusedAreaId'], () =>
     Blood.getValue<string | null>('system.focusedAreaId', null)
@@ -47,6 +50,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             if (config.terminal.fontSize) setTerminalFontSize(config.terminal.fontSize);
             if (config.terminal.autoStartAgy !== undefined) setTerminalAutoStartAgy(config.terminal.autoStartAgy);
           }
+          if (config.appearance) {
+            if (config.appearance.sidebarIconSize) setSidebarIconSize(config.appearance.sidebarIconSize);
+            if (config.appearance.fileTreeTitleSize) setFileTreeTitleSize(config.appearance.fileTreeTitleSize);
+            if (config.appearance.fileTreeTagSize) setFileTreeTagSize(config.appearance.fileTreeTagSize);
+          }
         }
       } catch (err) {
         console.error('[Settings] Failed to load config:', err);
@@ -69,6 +77,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         terminal: {
           ...config.terminal,
           ...updatedFields.terminal,
+        },
+        appearance: {
+          ...config.appearance,
+          ...updatedFields.appearance,
         }
       };
       await window.electronAPI.setConfig(mergedConfig);
@@ -240,6 +252,87 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Appearance Settings */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>界面外观设置</span>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>侧栏图标大小 (px)</label>
+                  <input
+                    type="number"
+                    min="10"
+                    max="28"
+                    value={sidebarIconSize}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 14;
+                      setSidebarIconSize(val);
+                      saveConfig({ appearance: { sidebarIconSize: val } });
+                    }}
+                    style={{
+                      width: '60px',
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-input)',
+                      color: 'var(--text-main)',
+                      fontSize: '12px',
+                      textAlign: 'center'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>文件卡片标题大小 (px)</label>
+                  <input
+                    type="number"
+                    min="9"
+                    max="18"
+                    value={fileTreeTitleSize}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10) || 11;
+                      setFileTreeTitleSize(val);
+                      saveConfig({ appearance: { fileTreeTitleSize: val } });
+                    }}
+                    style={{
+                      width: '60px',
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-input)',
+                      color: 'var(--text-main)',
+                      fontSize: '12px',
+                      textAlign: 'center'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>文件卡片标签大小 (px)</label>
+                  <input
+                    type="number"
+                    min="7"
+                    max="14"
+                    step="0.5"
+                    value={fileTreeTagSize}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 8.5;
+                      setFileTreeTagSize(val);
+                      saveConfig({ appearance: { fileTreeTagSize: val } });
+                    }}
+                    style={{
+                      width: '60px',
+                      padding: '4px 6px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-input)',
+                      color: 'var(--text-main)',
+                      fontSize: '12px',
+                      textAlign: 'center'
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Editor Settings */}

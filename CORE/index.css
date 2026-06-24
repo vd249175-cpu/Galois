@@ -1010,3 +1010,19 @@ body {
   color: var(--text-muted);
   font-family: var(--font-sans);
 }
+
+/* Sidebar SVG Icon Scaling */
+.left-activity-bar svg,
+.right-sidebar svg {
+  width: var(--sidebar-icon-size, 14px) !important;
+  height: var(--sidebar-icon-size, 14px) !important;
+}
+
+/* File Tree Note Card Sizing overrides */
+.file-card-title {
+  font-size: var(--file-tree-title-size, 11px);
+}
+
+.file-card-tag {
+  font-size: var(--file-tree-tag-size, 8.5px) !important;
+}

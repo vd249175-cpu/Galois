@@ -1161,8 +1161,7 @@ function FileTreeView({
                       {file.icon || '📄'}
                     </div>
 
-                    <span style={{
-                      fontSize: '11px',
+                    <span className="file-card-title" style={{
                       fontWeight: 700,
                       textAlign: 'left',
                       flexGrow: 1,

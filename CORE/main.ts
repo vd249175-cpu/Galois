@@ -571,6 +571,11 @@ ipcMain.handle('app:getConfig', () => {
       shell: "",
       fontSize: 13,
       autoStartAgy: true
+    },
+    appearance: {
+      sidebarIconSize: 14,
+      fileTreeTitleSize: 11,
+      fileTreeTagSize: 8.5
     }
   };
 });

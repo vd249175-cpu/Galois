@@ -61,7 +61,7 @@ function LeftActivityBar() {
   const barWidth = isTextMode ? '96px' : '44px';
 
   return (
-    <div style={{
+    <div className="left-activity-bar" style={{
       width: barWidth,
       height: '100%',
       backgroundColor: 'var(--bg-header)',
@@ -218,13 +218,31 @@ export function App() {
   const poppedAreaId = getQueryParam('areaId');
   const poppedType = getQueryParam('type');
 
-  // Load theme on startup for all windows (including popped-out windows)
+  // Load theme and appearance configuration on startup for all windows
   useEffect(() => {
-    const loadTheme = async () => {
+    const applyConfigVars = (config: any) => {
+      if (!config) return;
+      const root = document.documentElement;
+      
+      const sidebarIconSize = config.appearance?.sidebarIconSize ?? 14;
+      const fileTreeTitleSize = config.appearance?.fileTreeTitleSize ?? 11;
+      const fileTreeTagSize = config.appearance?.fileTreeTagSize ?? 8.5;
+      
+      root.style.setProperty('--sidebar-icon-size', `${sidebarIconSize}px`);
+      root.style.setProperty('--file-tree-title-size', `${fileTreeTitleSize}px`);
+      root.style.setProperty('--file-tree-tag-size', `${fileTreeTagSize}px`);
+    };
+
+    const loadConfig = async () => {
       try {
         const config = await window.electronAPI.getConfig();
-        if (config && config.theme) {
-          applyTheme(config.theme);
+        if (config) {
+          if (config.theme) {
+            applyTheme(config.theme);
+          } else {
+            applyTheme('default-light');
+          }
+          applyConfigVars(config);
         } else {
           applyTheme('default-light');
         }
@@ -232,15 +250,17 @@ export function App() {
         applyTheme('default-light');
       }
     };
-    loadTheme();
-  }, []);
+    loadConfig();
 
-  // Listen for dynamic theme changes via Blood state sync
-  useEffect(() => {
+    // Listen for config and theme changes via Blood state sync
     const unsubscribe = Blood.subscribe((changedKeys) => {
       if (changedKeys.has('events.themeChanged')) {
         const newTheme = Blood.getValue<string>('events.themeChanged', 'default-light');
         applyTheme(newTheme);
+      }
+      if (changedKeys.has('system.config')) {
+        const config = Blood.getValue<any>('system.config', null);
+        applyConfigVars(config);
       }
     });
     return unsubscribe;
