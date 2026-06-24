@@ -10,7 +10,7 @@ result = {
     "status": "success",
     "message": "动态标签计算成功",
     "data": {
-        "tags": ["DNOTE/标签/脚本计算", "DNOTE/推荐"]
+        "tags": ["DNOTE#标签#脚本计算", "DNOTE#推荐"]
     },
     "timestamp": int(time.time())
 }
