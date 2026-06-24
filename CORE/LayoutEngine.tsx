@@ -57,7 +57,11 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
           const config = Blood.getValue<any>(channel, null);
           if (config && config.targetId && config.draggedId) {
             const { targetId, draggedId, direction, insertFirst } = config;
-            const componentType = Blood.getValue(`layout.poppedAreas.${draggedId}`, 'editor');
+            const wasPopped = config.draggedPopped || Blood.getValue(`layout.poppedAreas.${draggedId}`, null) !== null;
+            const componentType = config.draggedType || 
+              Blood.getValue(`system.areaComponentTypes.${draggedId}`, null) || 
+              Blood.getValue(`layout.poppedAreas.${draggedId}`, 'editor');
+
             const draggedNode: AreaLayout = {
               type: 'area',
               id: draggedId,
@@ -70,6 +74,12 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
             
             // Mark as restored in main window
             Blood.updateKey(`layout.removeArea.${draggedId}`, false);
+            
+            if (wasPopped) {
+              Blood.updateKey(`layout.poppedAreas.${draggedId}`, undefined);
+              (window as any).electronAPI.closeSecondaryWindow(draggedId);
+            }
+
             Blood.updateKey(channel, null);
             treeModified = true;
           }

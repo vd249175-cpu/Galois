@@ -223,81 +223,93 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     return { direction: 'vertical' as const, insertFirst: false };
   };
 
-  // Custom Mouse Drag merge/popout handler
-  const handleHeaderMouseDown = (e: React.MouseEvent) => {
-    if (isPopped) return;
-    if (e.button !== 0) return; // Only left click
-
-    // Don't drag if clicking interactive elements inside the header
+  // Cross-window HTML5 Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent) => {
     const target = e.target as HTMLElement;
     if (target.tagName === 'SELECT' || target.tagName === 'BUTTON' || target.closest('button') || target.closest('select')) {
+      e.preventDefault();
       return;
     }
 
-    e.preventDefault();
+    e.dataTransfer.setData('application/dnote-area', JSON.stringify({
+      draggedId: areaId,
+      componentType,
+      isPopped
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+
     Blood.updateKey('system.activeDraggedId', areaId);
+    Blood.updateKey('system.dragState', {
+      draggedId: areaId,
+      location: { x: e.clientX, y: e.clientY }
+    });
+  };
 
-    const onMouseMove = (moveEvt: MouseEvent) => {
-      const x = moveEvt.clientX;
-      const y = moveEvt.clientY;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    const activeDraggedId = Blood.getValue<string>('system.activeDraggedId', '');
+    if (!activeDraggedId || activeDraggedId === areaId) return;
 
-      // 1. Check if cursor left window boundaries to trigger popout
+    const rect = e.currentTarget.getBoundingClientRect();
+    Blood.updateKey('system.dragState', {
+      draggedId: activeDraggedId,
+      location: { x: e.clientX, y: e.clientY }
+    });
+  };
+
+  const handleDragLeave = () => {
+    const dragState = Blood.getValue<any>('system.dragState', null);
+    if (dragState && dragState.draggedId !== areaId) {
+      Blood.updateKey('system.dragState', {
+        draggedId: dragState.draggedId,
+        location: null
+      });
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const dataStr = e.dataTransfer.getData('application/dnote-area');
+    if (dataStr) {
+      try {
+        const { draggedId, componentType: draggedType, isPopped: draggedPopped } = JSON.parse(dataStr);
+        if (draggedId === areaId) return;
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const rx = e.clientX - rect.left;
+        const ry = e.clientY - rect.top;
+        const splitRegion = calculateSplitRegion(rx, ry, rect.width, rect.height);
+
+        Blood.updateKey('layout.dragMerge', {
+          targetId: areaId,
+          draggedId,
+          direction: splitRegion.direction,
+          insertFirst: splitRegion.insertFirst,
+          draggedType,
+          draggedPopped
+        });
+      } catch (err) {
+        console.error('Failed to parse drag merge payload:', err);
+      }
+    }
+
+    Blood.updateKey('system.dragState', null);
+    Blood.updateKey('system.activeDraggedId', '');
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    Blood.updateKey('system.dragState', null);
+    Blood.updateKey('system.activeDraggedId', '');
+
+    // Check if dropped outside window boundaries to trigger popOut (only if not already popped)
+    if (!isPopped) {
+      const x = e.clientX;
+      const y = e.clientY;
       const pad = 12;
       if (x < pad || x > window.innerWidth - pad || y < pad || y > window.innerHeight - pad) {
-        cleanup();
-        Blood.updateKey('system.dragState', null);
-        Blood.updateKey('system.activeDraggedId', '');
         popOut();
-        return;
       }
-
-      // 2. Update drag coordinates in state for overlay rendering
-      Blood.updateKey('system.dragState', {
-        draggedId: areaId,
-        location: { x, y }
-      });
-    };
-
-    const onMouseUp = (upEvt: MouseEvent) => {
-      cleanup();
-
-      const x = upEvt.clientX;
-      const y = upEvt.clientY;
-
-      // Check if dropped over another panel using registered boundaries
-      const frames = Blood.getValue<Record<string, any>>('system.areaFrames', {});
-
-      for (const [id, frame] of Object.entries(frames)) {
-        if (id === areaId || !frame) continue;
-        const { minX, maxX, minY, maxY } = frame;
-        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
-          const w = maxX - minX;
-          const h = maxY - minY;
-          const rx = x - minX;
-          const ry = y - minY;
-          const splitRegion = calculateSplitRegion(rx, ry, w, h);
-
-          Blood.updateKey('layout.dragMerge', {
-            targetId: id,
-            draggedId: areaId,
-            direction: splitRegion.direction,
-            insertFirst: splitRegion.insertFirst,
-          });
-          break;
-        }
-      }
-
-      Blood.updateKey('system.dragState', null);
-      Blood.updateKey('system.activeDraggedId', '');
-    };
-
-    const cleanup = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    }
   };
 
   // Actions
@@ -366,11 +378,16 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
       ref={ref}
       className={`area-shell ${isFocused ? 'focused' : ''}`}
       onClick={focusMe}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {/* Header controls bar */}
       <div
         className="area-header"
-        onMouseDown={handleHeaderMouseDown}
+        draggable={true}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
       >
         <span className="area-header-icon" style={{ display: 'flex', alignItems: 'center' }}>
           {currentComponent?.typeId === 'editor' ? (
