@@ -51,3 +51,15 @@ To support complex priority groupings, DNOTE compiles search queries using a **S
 
 * **Single Match**: Matches exact tag strings (e.g. `#dog` matches `dog`).
 * **Regex Match**: If tag search query starts with `#re:` or matching format (e.g. `#re:^Can.*$`), the resolver compiles it to a RegExp object and tests it against all registered note tags.
+
+---
+
+## 5. Offline Query Helper Script
+
+A Python implementation of this exact query parser is provided within this skill's `scripts/` directory:
+* **Path**: `scripts/query_engine.py` (relative to this skill directory)
+* **Usage**:
+  You can run this script to quickly search files matching complex boolean tag queries directly from the workspace terminal or using `run_command` tools:
+  ```bash
+  python3 scripts/query_engine.py --dir <project_dir> --query "#dog && !#温顺"
+  ```
