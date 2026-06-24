@@ -400,6 +400,82 @@ ipcMain.handle('window:closeSecondary', async (_, id: string) => {
 // Shared Blood state store across windows
 let sharedState: Record<string, any> = {};
 
+let projectWatcher: fs.FSWatcher | null = null;
+let currentWatchedPath: string | null = null;
+
+function updateSharedStateAndBroadcast(values: Record<string, any>) {
+  sharedState = { ...sharedState, ...values };
+  
+  const broadcast = (win: BrowserWindow) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send('blood:stateChanged', values);
+    }
+  };
+  
+  if (mainWindow) {
+    broadcast(mainWindow);
+  }
+  for (const [_, win] of secondaryWindows) {
+    broadcast(win);
+  }
+}
+
+function watchProjectPath(projectPath: string) {
+  if (currentWatchedPath === projectPath) return;
+  
+  if (projectWatcher) {
+    projectWatcher.close();
+    projectWatcher = null;
+  }
+  
+  if (!projectPath) {
+    currentWatchedPath = null;
+    return;
+  }
+  
+  try {
+    if (!fs.existsSync(projectPath)) return;
+    
+    currentWatchedPath = projectPath;
+    console.log(`[Watcher] Starting recursive watch on: ${projectPath}`);
+    
+    const debounceMap = new Map<string, NodeJS.Timeout>();
+    
+    projectWatcher = fs.watch(projectPath, { recursive: true }, (eventType, filename) => {
+      if (!filename) return;
+      
+      // Ignore git, venv, cache and temporary files
+      if (filename.includes('.git') || filename.includes('.venv') || filename.includes('.dnote_cache') || filename.includes('.DS_Store')) {
+        return;
+      }
+      
+      // Only watch for markdown files
+      if (!filename.endsWith('.md')) {
+        return;
+      }
+      
+      const absolutePath = path.resolve(projectPath, filename);
+      
+      if (debounceMap.has(absolutePath)) {
+        clearTimeout(debounceMap.get(absolutePath)!);
+      }
+      
+      const timeout = setTimeout(() => {
+        debounceMap.delete(absolutePath);
+        
+        console.log(`[Watcher] File change detected: ${absolutePath}`);
+        const key = `events.fileSaved.${absolutePath}`;
+        updateSharedStateAndBroadcast({ [key]: Date.now() });
+      }, 150);
+      
+      debounceMap.set(absolutePath, timeout);
+    });
+    
+  } catch (err) {
+    console.error(`[Watcher] Failed to start watch on ${projectPath}:`, err);
+  }
+}
+
 ipcMain.handle('blood:getInitialState', () => {
   return sharedState;
 });
@@ -407,6 +483,10 @@ ipcMain.handle('blood:getInitialState', () => {
 ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
   sharedState = { ...sharedState, ...values };
   console.log('[Blood Main Sync] State updated:', JSON.stringify(values));
+  
+  if (values['system.projectPath'] !== undefined) {
+    watchProjectPath(values['system.projectPath']);
+  }
   
   // Broadcast updates to all other open windows
   const senderWebContents = event.sender;
