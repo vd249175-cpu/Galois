@@ -8,25 +8,45 @@ DNOTE 是一个基于 **TypeScript / Electron / Vite / React** 打造的现代�
 
 ## 🚀 启动与开发 (Get Started)
 
-### 安装依赖
+### ⚡ 一键快捷启动 (One-Click Start Script)
+
+我们提供了一键自动化运行脚本 [run.sh](file:///Users/apexwave/Desktop/DNOTE/run.sh)，该脚本会自动检查 Node.js 环境，自动配置 Astral uv Python 环境管理器，自动拉取并安装 `node_modules` 依赖，并修复 macOS 系统下的 xterm `node-pty` 权限，最后自启热更新服务：
+
+```bash
+chmod +x run.sh
+./run.sh
+```
+
+### 🛠️ 手动分步运行 (Manual Steps)
+
+如果你希望分步安装和执行，可以使用以下标准开发命令：
+
+#### 1. 安装依赖
 ```bash
 npm install
 ```
 
-### 启动本地热重载开发服务器 (Concurrent Electron & Vite)
+#### 2. 启动本地热重载开发服务器 (Concurrent Electron & Vite)
 ```bash
 npm run dev
 ```
 
-### 静态类型检查
+#### 3. 静态类型检查
 ```bash
 npx tsc --noEmit
 ```
 
-### 生产打包构建
+#### 4. 生产打包构建
 ```bash
 npm run build
 ```
+
+### ⚠️ 平台适配与兼容性说明 (OS Compatibility Notice)
+
+> [!IMPORTANT]
+> **DNOTE 目前仅深度适配了 macOS 系统**。
+>
+> 核心部分（如 `node-pty` 终端权限修复、局部命令路径分隔符、部分底层 Shell 通道等）均针对 macOS 进行设计与优化。如果您在 **Windows** 或 **Linux** 系统下运行本软件，可能需要微调环境依赖及启动路径（例如对 `run.sh` 脚本和 `package.json` 中的构建配置进行平台微调），方能完美运行。
 
 ---
 
