@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { AreaLayout, SplitDirection } from './AreaLayout';
 import { AreaShell } from './AreaShell';
 import { Blood, useBloodChannel } from './Blood';
+import { BC, BC_PREFIX } from './BloodChannels';
 
 interface LayoutEngineProps {
   layout: AreaLayout;
@@ -10,7 +11,7 @@ interface LayoutEngineProps {
 
 export function isNodeCollapsed(node: AreaLayout): boolean {
   if (node.type === 'area') {
-    return Blood.getValue(`layout.removeArea.${node.id}`, false);
+    return Blood.getValue(BC.layout.removeArea(node.id), false);
   }
   return isNodeCollapsed(node.first) && isNodeCollapsed(node.second);
 }
@@ -23,28 +24,28 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
       let nextLayout = { ...layout };
 
       for (const channel of changedKeys) {
-        if (channel.startsWith('layout.changeAreaType.')) {
-          const areaId = channel.replace('layout.changeAreaType.', '');
+        if (channel.startsWith(BC_PREFIX.changeAreaType)) {
+          const areaId = channel.replace(BC_PREFIX.changeAreaType, '');
           const newType = Blood.getValue(channel, '');
           if (newType) {
             nextLayout = updateComponentType(nextLayout, areaId, newType);
             treeModified = true;
           }
-        } else if (channel.startsWith('layout.removeArea.')) {
-          const areaId = channel.replace('layout.removeArea.', '');
+        } else if (channel.startsWith(BC_PREFIX.removeArea)) {
+          const areaId = channel.replace(BC_PREFIX.removeArea, '');
           if (Blood.getValue(channel, false)) {
             const after = exciseNode(nextLayout, areaId);
             if (after === null) {
               // Last panel removed — signal the recovery screen
-              Blood.updateKey('layout.allClosed', Date.now());
+              Blood.updateKey(BC.layout.allClosed, Date.now());
               // Don't update nextLayout; App will handle the reset
             } else {
               nextLayout = after;
               treeModified = true;
             }
           }
-        } else if (channel.startsWith('layout.splitArea.')) {
-          const areaId = channel.replace('layout.splitArea.', '');
+        } else if (channel.startsWith(BC_PREFIX.splitArea)) {
+          const areaId = channel.replace(BC_PREFIX.splitArea, '');
           const dirStr = Blood.getValue(channel, '');
           if (dirStr) {
             const direction = dirStr as SplitDirection;
@@ -52,11 +53,11 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
             Blood.updateKey(channel, ''); // Clear trigger
             treeModified = true;
           }
-        } else if (channel.startsWith('layout.mergeBackArea.')) {
-          const areaId = channel.replace('layout.mergeBackArea.', '');
+        } else if (channel.startsWith(BC_PREFIX.mergeBackArea)) {
+          const areaId = channel.replace(BC_PREFIX.mergeBackArea, '');
           if (Blood.getValue(channel, false)) {
             // Restore hidden node inside the layout tree
-            Blood.updateKey(`layout.removeArea.${areaId}`, false);
+            Blood.updateKey(BC.layout.removeArea(areaId), false);
             Blood.updateKey(channel, false);
             treeModified = true;
           }

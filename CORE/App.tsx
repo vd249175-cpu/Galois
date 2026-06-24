@@ -505,7 +505,7 @@ export function App() {
   useEffect(() => {
     if (isPopped) return;
     return Blood.subscribe((changedKeys) => {
-      if (changedKeys.has('layout.allClosed')) {
+      if (changedKeys.has(BC.layout.allClosed)) {
         setIsAllClosed(true);
       }
     });
@@ -516,7 +516,7 @@ export function App() {
     setIsAllClosed(false);
     setLayout(defaultLayout);
     // Clear all removeArea flags so the new areas aren't immediately hidden
-    Blood.updateKey('layout.allClosed', 0);
+    Blood.updateKey(BC.layout.allClosed, 0);
     window.electronAPI.setLayout(defaultLayout).catch(() => {});
   };
 

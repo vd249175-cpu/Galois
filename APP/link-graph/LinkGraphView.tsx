@@ -583,7 +583,7 @@ function LinkGraphView({
               // Colors
               let fill = 'var(--accent-color, #ff453a)'; // Real node = theme accent
               if (!node.exists) {
-                fill = 'var(--error-color, #ff453a)'; // Phantom node = error color
+                fill = 'var(--phantom-color, var(--error-color, #ff453a))'; // Phantom node = theme phantom color
               }
 
               return (
@@ -608,7 +608,7 @@ function LinkGraphView({
                     opacity={node.exists ? (active ? 1 : 0.15) : (active ? 0.5 : 0.1)}
                     style={{
                       cursor: 'pointer',
-                      stroke: node.exists ? 'var(--border-color, rgba(255, 255, 255, 0.15))' : 'var(--error-color, rgba(239, 68, 68, 0.2))',
+                      stroke: node.exists ? 'var(--border-color, rgba(255, 255, 255, 0.15))' : 'var(--phantom-color, var(--error-color, rgba(239, 68, 68, 0.2)))',
                       strokeWidth: 1,
                       transition: 'opacity 0.25s, fill 0.2s',
                     }}
@@ -668,7 +668,7 @@ function LinkGraphView({
           • 拖拽背景：平移视角<br />
           • 滚轮缩放：聚焦至指针<br />
           • 双击节点：打开/创建对应笔记<br />
-          • 节点颜色：实体为主色，<span style={{ color: 'var(--error-color, #ff453a)' }}>红色/幻影色</span>为虚构引用
+          • 节点颜色：实体为<span style={{ color: 'var(--accent-color)' }}>主题色</span>，<span style={{ color: 'var(--phantom-color, var(--text-muted))' }}>幻影色</span>为虚构引用
         </div>
       </div>
 

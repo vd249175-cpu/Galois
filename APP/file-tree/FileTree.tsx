@@ -447,62 +447,7 @@ function FileTreeView({
   // Project lifecycle scripts (on_project_open.py, on_project_run.py, on_project_close.py)
   useProjectLifecycle(projectPath);
 
-  const stripRunTags = (content: string): string => {
-    const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
-    const match = content.match(yamlRegex);
-    if (!match) return content;
 
-    const yamlText = match[1];
-    const bodyText = match[2];
-    const lines = yamlText.split('\n');
-    const newYamlLines: string[] = [];
-    let inTagsList = false;
-
-    for (const line of lines) {
-      const trimLine = line.trim();
-      if (trimLine.startsWith('tags:')) {
-        const inlineValue = trimLine.substring(5).trim();
-        if (inlineValue) {
-          if (inlineValue.startsWith('[') && inlineValue.endsWith(']')) {
-            const cleanTags = inlineValue
-              .slice(1, -1)
-              .split(',')
-              .map(t => t.trim())
-              .filter(t => t && !t.replace(/['"]/g, '').startsWith('run:'))
-              .join(', ');
-            newYamlLines.push(`tags: [${cleanTags}]`);
-          } else if (inlineValue === '-') {
-            newYamlLines.push('tags:');
-            inTagsList = true;
-          } else {
-            if (!inlineValue.replace(/['"]/g, '').startsWith('run:')) {
-              newYamlLines.push(line);
-            } else {
-              newYamlLines.push('tags:');
-              inTagsList = true;
-            }
-          }
-        } else {
-          newYamlLines.push('tags:');
-          inTagsList = true;
-        }
-      } else if (inTagsList && trimLine.startsWith('-')) {
-        const val = trimLine.substring(1).trim().replace(/['"]/g, '');
-        if (val.startsWith('run:')) {
-          // Skip this tag
-        } else {
-          newYamlLines.push(line);
-        }
-      } else {
-        if (line.includes(':')) {
-          inTagsList = false;
-        }
-        newYamlLines.push(line);
-      }
-    }
-
-    return `---\n${newYamlLines.join('\n').trim()}\n---\n${bodyText}`;
-  };
 
   const handleOpenTemplateModal = async () => {
     if (!projectPath) {

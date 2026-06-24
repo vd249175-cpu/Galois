@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { parseExpression, getNestedValue } from './editorUtils';
-import { BC } from '../../CORE/BloodChannels';
+import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 
 interface ReactiveExpressionProps {
   rawExpression: string;
@@ -75,7 +75,7 @@ export function ReactiveExpression({
   const absoluteOutputPath = `${projectPath}/script/${resolvedRelativeJsonPath}`;
 
   // 3. Read JSON data from injected state prop instead of using useBloodChannel
-  const jsonData = state[`script_json:${resolvedRelativeJsonPath}`] || null;
+  const jsonData = state[`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`] || null;
 
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export function ReactiveExpression({
         const rawContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
         if (rawContent) {
           const parsedData = JSON.parse(rawContent);
-          updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+          updateBloodKey(`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`, parsedData);
         }
       } catch (e) {
         // File might not exist yet
@@ -104,7 +104,7 @@ export function ReactiveExpression({
       const rawContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
       if (rawContent) {
         const parsedData = JSON.parse(rawContent);
-        updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+        updateBloodKey(`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`, parsedData);
       }
     } catch (e) {
       // File might not exist yet
@@ -136,7 +136,7 @@ export function ReactiveExpression({
       const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
       if (updatedContent) {
         const parsedData = JSON.parse(updatedContent);
-        updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+        updateBloodKey(`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`, parsedData);
       }
       if (isMountedRef.current) {
         setStatus('success');

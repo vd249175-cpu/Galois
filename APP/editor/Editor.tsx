@@ -145,7 +145,7 @@ function EditorView({
   const configPath = projectPath ? `${projectPath}/command/commands.json` : '';
   const commandsSavedEvent = state[BC.events.fileSaved(configPath)] || 0;
 
-  const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc?: string; content?: string; defaultShortcut?: string; shortcut?: string; script?: string }>>([]);
+  const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc?: string; content?: string; defaultShortcut?: string; shortcut?: string; script?: string; scope?: string | boolean }>>([]);
 
   useEffect(() => {
     if (!projectPath) {
@@ -336,7 +336,7 @@ function EditorView({
         label: cmd.label,
         isGlobal: targetIsGlobal,
         sourceType: targetSourceType,
-        run: (context) => {
+        run: (_context) => {
           // Always route project command execution signals to the active Editor areaId
           const activeEditorId = Blood.getValue<string | null>('system.lastFocusedEditorId', null) || 'editor-root';
           Blood.updateKey(`actions.${cmd.id}.${activeEditorId}`, Date.now());
@@ -614,7 +614,7 @@ function EditorView({
     return [...SLASH_COMMANDS, ...customList, ...projectList, ...helperCmds];
   }, [customCommands, projectCommands]);
 
-  const filteredCommands = allCommands.filter((cmd: { id: string; label: string; desc: string; icon: string; content?: string }) => 
+  const filteredCommands = allCommands.filter((cmd: any) => 
     cmd.label.toLowerCase().includes(slashMenuQuery.toLowerCase()) ||
     cmd.id.includes(slashMenuQuery.toLowerCase())
   );
@@ -730,7 +730,7 @@ function EditorView({
     };
   };
 
-  const handleExecuteCommand = (cmd: { id: string; label: string; desc: string; icon: string; content?: string }) => {
+  const handleExecuteCommand = (cmd: { id: string; label: string; desc?: string; icon?: any; content?: string }) => {
     if (!textareaRef.current) return;
 
     if (cmd.id === 'custom.add_new' || cmd.id === 'custom.manage') {
@@ -856,8 +856,8 @@ function EditorView({
     }, 0);
   };
 
-  const handleExecuteProjectCommand = async (cmd: { id: string; label: string; script: string }) => {
-    if (!projectPath) return;
+  const handleExecuteProjectCommand = async (cmd: { id: string; label: string; script?: string }) => {
+    if (!projectPath || !cmd.script) return;
     setStatusMessage(`正在运行项目指令: ${cmd.label}...`);
 
     let cursorLine = 0;
@@ -886,7 +886,7 @@ function EditorView({
       const shellCmd = `DNOTE_PROJECT_PATH="${projectPath}" DNOTE_ACTIVE_FILE="${currentFile}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_CURSOR_LINE="${cursorLine}" DNOTE_CURSOR_COL="${cursorCol}" DNOTE_SELECTED_TEXT="${selectedText.replace(/"/g, '\\"')}" ${cmd.script}`;
 
       console.log(`[Editor] Executing project command: ${shellCmd}`);
-      const result = await (window as any).electronAPI.execCommand(shellCmd, workingDir);
+      await (window as any).electronAPI.execCommand(shellCmd, workingDir);
 
       let parsedData: any = null;
       try {
@@ -1135,7 +1135,7 @@ function EditorView({
         if (parsed.interval && parsed.interval > 0) continue;
 
         triggeredImmediateRefs.current.add(rawExpr);
-        executeImmediateScript(parsed, i, rawExpr);
+        executeImmediateScript(parsed as any, i, rawExpr);
       }
     }
   };
@@ -1143,7 +1143,7 @@ function EditorView({
   const executeImmediateScript = async (
     parsed: { jsonPath: string; keyPath: string; run: string; isolate: string | null },
     lineIndex: number,
-    rawExpr: string
+    _rawExpr: string
   ) => {
     const { jsonPath, run, isolate } = parsed;
     const uniqueId = 'exec_' + Math.random().toString(36).substring(2, 9);
@@ -1191,7 +1191,7 @@ function EditorView({
         const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
         if (updatedContent) {
           const parsedData = JSON.parse(updatedContent);
-          updateBloodKey(`script_json:${resolvedRelativeJsonPath}`, parsedData);
+          updateBloodKey(`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`, parsedData);
         }
       } catch (e) {}
 
@@ -1345,7 +1345,7 @@ function EditorView({
           let draftTags = [noteName];
           let draftTitle = noteName;
           if (noteName.startsWith('#')) {
-            const parsed = noteName.split('#').map(t => t.trim()).filter(Boolean);
+            const parsed = noteName.split('#').map((t: string) => t.trim()).filter(Boolean);
             if (parsed.length > 0) {
               draftTags = parsed;
               draftTitle = noteName;
@@ -1581,7 +1581,7 @@ function EditorView({
     else if (lastAction.id === 'editor.setAsTemplate') handleSetAsTemplate();
     else if (lastAction.id === 'editor.editShortcuts') setIsShortcutsModalOpen(true);
     else if (lastAction.id.startsWith('custom.') || lastAction.id.startsWith('project.')) {
-      const cmd = customCommands.find(c => c.id === lastAction.id) || projectCommands.find(c => c.id === lastAction.id);
+      const cmd = (customCommands.find(c => c.id === lastAction.id) || projectCommands.find(c => c.id === lastAction.id)) as any;
       if (cmd) {
         if (cmd.script) {
           handleExecuteProjectCommand(cmd as any);
@@ -1761,8 +1761,8 @@ function EditorView({
       style={{ position: 'relative' }}
     >
       {/* Editor Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px' }}>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px', overflow: 'hidden' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
           <span>{isPreviewMode ? '✨ 笔记预览' : '✍️ 笔记编辑器'}</span>
           {currentFile && (
             <>
@@ -1779,20 +1779,24 @@ function EditorView({
                   padding: '2px 6px',
                   borderRadius: '4px',
                   backgroundColor: 'rgba(0,0,0,0.03)',
-                  transition: 'background-color 0.12s'
+                  transition: 'background-color 0.12s',
+                  maxWidth: '150px',
+                  overflow: 'hidden'
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--highlight-color)'}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.03)'}
               >
-                {currentFile.split(/[/\\]/).pop()?.replace('.md', '')}
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ opacity: 0.8 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1 }}>
+                  {currentFile.split(/[/\\]/).pop()?.replace('.md', '')}
+                </span>
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ opacity: 0.8, flexShrink: 0 }}>
                   <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z" fill="currentColor"/>
                 </svg>
               </span>
             </>
           )}
         </span>
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
           <button
             className="area-btn"
             onClick={() => setIsTagGroupsOpen(true)}
@@ -1997,8 +2001,8 @@ function EditorView({
 
       {/* Status Bar */}
       <div className="editor-statusbar">
-        <span style={{ flexGrow: 1 }}>{statusMessage}</span>
-        <span>{activeTags.length} 个标签</span>
+        <span style={{ flexGrow: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{statusMessage}</span>
+        <span style={{ flexShrink: 0, whiteSpace: 'nowrap', marginLeft: '8px' }}>{activeTags.length} 个标签</span>
       </div>
 
       {isDraggingFile && (

@@ -250,7 +250,6 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     const activeDraggedId = Blood.getValue<string>('system.activeDraggedId', '');
     if (!activeDraggedId || activeDraggedId === areaId) return;
 
-    const rect = e.currentTarget.getBoundingClientRect();
     Blood.updateKey('system.dragState', {
       draggedId: activeDraggedId,
       location: { x: e.clientX, y: e.clientY }
@@ -313,17 +312,6 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
   };
 
   // Actions
-  const changeType = (newType: string) => {
-    Blood.updateKey(`layout.changeAreaType.${areaId}`, newType);
-  };
-
-  const splitHorizontally = () => {
-    Blood.updateKey(`layout.splitArea.${areaId}`, 'horizontal');
-  };
-
-  const splitVertically = () => {
-    Blood.updateKey(`layout.splitArea.${areaId}`, 'vertical');
-  };
 
   const popOut = () => {
     Blood.updateKey(`layout.poppedAreas.${areaId}`, componentType);
@@ -335,10 +323,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
   // Keep ref in sync so the stable Blood subscriber above can call the latest popOut
   popOutRef.current = popOut;
 
-  const mergeBack = () => {
-    Blood.updateKey(`layout.mergeBackArea.${areaId}`, true);
-    (window as any).electronAPI.closeSecondaryWindow(areaId);
-  };
+
 
   const closePanel = () => {
     Blood.updateKey(`layout.removeArea.${areaId}`, true);
@@ -370,7 +355,6 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
   };
 
   const currentComponent = ComponentRegistry.getComponent(componentType);
-  const availableTypes = ComponentRegistry.getAvailableTypes();
   const activeOverlay = getActiveDragOverlay();
 
   return (
@@ -388,8 +372,9 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
         draggable={true}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        style={{ overflow: 'hidden' }}
       >
-        <span className="area-header-icon" style={{ display: 'flex', alignItems: 'center' }}>
+        <span className="area-header-icon" style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           {currentComponent?.icon || (
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
@@ -397,14 +382,26 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
           )}
         </span>
 
-        <span style={{ fontWeight: 600, fontSize: '11px', color: 'var(--text-main)', userSelect: 'none' }}>
+        <span
+          className="area-header-title"
+          style={{
+            fontWeight: 600,
+            fontSize: '11px',
+            color: 'var(--text-main)',
+            userSelect: 'none',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            flexShrink: 1
+          }}
+        >
           {currentComponent?.displayName}
         </span>
 
         <div style={{ flexGrow: 1 }} />
 
         {!isPopped && (
-          <button className="area-btn danger" title="关闭面板" onClick={closePanel}>
+          <button className="area-btn danger" title="关闭面板" onClick={closePanel} style={{ flexShrink: 0 }}>
             <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" />
             </svg>

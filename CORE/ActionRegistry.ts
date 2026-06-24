@@ -21,20 +21,7 @@ interface FileShortcut {
   modifiers: string[];
 }
 
-// Convert "meta+shift+d" to JSON format { key: "d", modifiers: ["command", "shift"] }
-function comboToFileShortcut(combo: string): FileShortcut {
-  const parts = combo.split('+');
-  const rawKey = parts[parts.length - 1];
-  
-  // Normalize key names for storage if needed
-  let key = rawKey;
-  const modifiers = parts.slice(0, parts.length - 1).map((mod) => {
-    if (mod === 'meta') return 'command';
-    return mod;
-  });
-  
-  return { key, modifiers };
-}
+
 
 // Convert JSON format { key: "d", modifiers: ["command", "shift"] } to combo "meta+shift+d"
 function fileShortcutToCombo(sh: FileShortcut): string {

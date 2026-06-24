@@ -19,7 +19,7 @@ export const SettingsComponent = {
   manifest: {
     description: '快捷键与系统偏好设置（当前由 SettingsModal 承载，此插件为占位）',
     reads: [BC.system.focusedAreaId, BC.system.projectPath],
-    writes: ['system.maxIterations'],   // 将来修改迭代次数会写入此频道
+    writes: [BC.system.maxIterations],   // 将来修改迭代次数会写入此频道
     dependsOn: [],
   },
 };

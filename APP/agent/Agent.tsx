@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { agentActions } from './actions';
-import { Blood, useBloodChannel } from '../../CORE/Blood';
-import { BC } from '../../CORE/BloodChannels';
+import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 
 export interface ChatMessage {
   id: string;
@@ -29,19 +28,19 @@ export const AgentComponent = {
   ),
   component: AgentView,
   actions: agentActions,
-  bloodChannels: (areaId: string) => [
+  bloodChannels: (_areaId: string) => [
     BC.system.projectPath,
     BC.system.lastFocusedEditorId,
-    'events.openFile.',
-    'system.editorCursor.'
+    BC_PREFIX.openFileAll,
+    BC_PREFIX.editorCursorAll
   ],
   manifest: {
     description: 'LangChain 极简智能副驾驶，支持流式对话与代码重构工具',
     reads: [
       BC.system.projectPath,
       BC.system.lastFocusedEditorId,
-      BC.events.openFile(''),
-      'system.editorCursor.'
+      BC_PREFIX.openFileAll,
+      BC_PREFIX.editorCursorAll
     ],
     writes: [
       BC.events.fileSaved(''),
@@ -51,7 +50,7 @@ export const AgentComponent = {
 };
 
 function AgentView({
-  areaId,
+  areaId: _areaId,
   state,
   updateBloodKey,
   lastAction,
@@ -61,7 +60,6 @@ function AgentView({
   updateBloodKey: (key: string, value: any) => void;
   lastAction: { id: string; timestamp: number } | null;
 }) {
-  const projectPath = state[BC.system.projectPath] || '';
   const lastFocusedEditorId = state[BC.system.lastFocusedEditorId] || '';
 
   // Get active note file in the focused editor
@@ -219,7 +217,7 @@ function AgentView({
           messages: [
             {
               id: 'reset-' + Date.now(),
-              sender: 'agent',
+              sender: 'agent' as const,
               text: '历史记录已清空。你可以随时开始新的指令对话。',
               timestamp: Date.now(),
             },
@@ -250,7 +248,7 @@ function AgentView({
       try {
         const text = await (window as any).electronAPI.readFile(currentFile);
         const lines = text.split('\n');
-        const formatted = lines.map((line, idx) => `${idx + 1}:${line}`).join('\n');
+        const formatted = lines.map((line: string, idx: number) => `${idx + 1}:${line}`).join('\n');
         return `成功获取当前文档内容，全文如下（格式为 行号:文字）：\n\n\`\`\`text\n${formatted}\n\`\`\``;
       } catch (err: any) {
         return `错误：读取文件失败。${err.message}`;
@@ -666,7 +664,7 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
             onClick={handleDeleteCurrentChat}
             style={{
               backgroundColor: 'transparent',
-              color: 'var(--error-color, #ef4444)',
+              color: 'var(--delete-btn-color, var(--error-color, #ef4444))',
               border: 'none',
               fontSize: '11px',
               cursor: 'pointer',
@@ -807,7 +805,7 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
           }
           if (msg.sender === 'system') {
             return (
-              <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', fontSize: '11px', padding: '0 4px', fontStyle: 'italic' }}>
+              <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--agent-system-color, #10b981)', fontSize: '11px', padding: '0 4px', fontStyle: 'italic' }}>
                 {msg.text}
               </div>
             );

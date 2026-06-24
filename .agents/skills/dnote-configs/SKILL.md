@@ -123,6 +123,7 @@ description: Guidelines on how to locate, read, and write DNOTE workspace config
 | `editor` | Lattice Editor 文本编辑器 |
 | `fileTree` | Lattice Explorer 文件浏览器 |
 | `graphView` | Lattice Graph 标签拓扑图 |
+| `linkGraph` | Lattice Link Graph 双链关系图谱 |
 | `terminal` | Terminal Console 终端控制台 |
 | `settings` | Preferences 偏好设置 |
 | `agent` | Antigravity 助手 |

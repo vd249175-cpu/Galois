@@ -312,6 +312,7 @@ body {
   color: var(--text-muted);
   border-top: 1px solid var(--border-color);
   background-color: var(--bg-header);
+  overflow: hidden;
 }
 
 /* Mock Terminal Console plugin styling */

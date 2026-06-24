@@ -458,7 +458,7 @@ function watchProjectPath(projectPath: string) {
     
     const debounceMap = new Map<string, NodeJS.Timeout>();
     
-    projectWatcher = fs.watch(projectPath, { recursive: true }, (eventType, filename) => {
+    projectWatcher = fs.watch(projectPath, { recursive: true }, (_eventType, filename) => {
       if (!filename) return;
       
       // Ignore git, venv, cache and temporary files

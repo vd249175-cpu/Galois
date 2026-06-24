@@ -47,6 +47,9 @@ export const BC = {
 
     /** 记录每个 componentType 最后聚焦的 areaId。Writer: AreaShell → Reader: fileTree,graphView */
     lastFocused: (componentType: string) => `system.lastFocused.${componentType}Id` as const,
+
+    /** 注入到右侧栏的工具栏 actions 列表（按 componentType 分组）。Writer: ComponentRegistry → Reader: RightSidebar */
+    toolbarInjection: (componentType: string) => `system.injections.${componentType}.toolbar` as const,
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -73,6 +76,9 @@ export const BC = {
 
     /** drag-merge 事件 payload。Writer: AreaShell(onDrop) → Reader: LayoutEngine */
     dragMerge: 'layout.dragMerge' as const,
+
+    /** 所有面板被关闭的信号（timestamp）。Writer: LayoutEngine → Reader: App */
+    allClosed: 'layout.allClosed' as const,
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -100,9 +106,6 @@ export const BC = {
 
     /** 脚本执行错误（包含 message 和 scriptName）。Writer: fileTree(tagResolver) | graphView(lattice) → Reader: 任意订阅者 */
     scriptError: (pluginName: string) => `events.scriptError.${pluginName}` as const,
-
-    /** 注入到右侧栏的工具栏 actions 列表（按 componentType 分组）。Writer: ComponentRegistry → Reader: RightSidebar */
-    toolbarInjection: (componentType: string) => `injections.${componentType}.toolbar` as const,
   },
 } as const;
 
@@ -116,6 +119,18 @@ export const BC_PREFIX = {
   areaComponentTypes: 'system.areaComponentTypes.' as const,
   /** 所有 areaFrames 的前缀 */
   areaFrames: 'system.areaFrames.' as const,
-  /** script_json 脚本输出前缀（保留兼容性） */
-  scriptJson: 'script_json:' as const,
+  /** script_json 脚本输出前缀 */
+  scriptJson: 'events.scriptJson:' as const,
+  /** 所有 openFile 事件的前缀 */
+  openFileAll: 'events.openFile.' as const,
+  /** 所有 editorCursor 状态的前缀 */
+  editorCursorAll: 'system.editorCursor.' as const,
+  /** layout.changeAreaType. 的前缀 */
+  changeAreaType: 'layout.changeAreaType.' as const,
+  /** layout.removeArea. 的前缀 */
+  removeArea: 'layout.removeArea.' as const,
+  /** layout.splitArea. 的前缀 */
+  splitArea: 'layout.splitArea.' as const,
+  /** layout.mergeBackArea. 的前缀 */
+  mergeBackArea: 'layout.mergeBackArea.' as const,
 } as const;

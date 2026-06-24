@@ -1,6 +1,7 @@
 import React from 'react';
 import { Blood } from './Blood';
 import { ActionRegistry } from './ActionRegistry';
+import { BC } from './BloodChannels';
 
 /**
  * OrganAction — 统一动作与按钮接口定义（见 AGENTS.md §B）
@@ -84,7 +85,7 @@ class ComponentRegistryClass {
     }
 
     if (toolbarActions.length > 0) {
-      Blood.updateKey(`injections.${comp.typeId}.toolbar`, toolbarActions);
+      Blood.updateKey(BC.system.toolbarInjection(comp.typeId), toolbarActions);
     }
 
     // Dev: log plugin registration with manifest

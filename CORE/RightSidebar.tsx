@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type React from 'react';
 import { Blood, useBloodChannel } from './Blood';
 import { ActionRegistry } from './ActionRegistry';
+import { BC } from './BloodChannels';
 
 interface RightSidebarProps {
   onToggleSettings: () => void;
@@ -23,8 +24,8 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
   );
 
   const injectedButtons = useBloodChannel(
-    focusedComponentType ? [`injections.${focusedComponentType}.toolbar`] : [],
-    () => focusedComponentType ? Blood.getValue<string[]>(`injections.${focusedComponentType}.toolbar`, []) : []
+    focusedComponentType ? [BC.system.toolbarInjection(focusedComponentType)] : [],
+    () => focusedComponentType ? Blood.getValue<string[]>(BC.system.toolbarInjection(focusedComponentType), []) : []
   );
 
   const globalActions = ActionRegistry.getAllActions().filter((action) => action.isGlobal);

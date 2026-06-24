@@ -16,6 +16,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { terminalActions } from './actions';
 import { Blood, useBloodChannel } from '../../CORE/Blood';
+import { BC } from '../../CORE/BloodChannels';
 import '@xterm/xterm/css/xterm.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,10 +63,10 @@ export const TerminalComponent = {
   ),
   component: TerminalView,
   actions: terminalActions,
-  bloodChannels: ['system.projectPath'],
+  bloodChannels: [BC.system.projectPath],
   manifest: {
     description: '原生 PTY 终端（xterm.js + node-pty），自动启动 agy 并同步笔记项目',
-    reads: ['system.projectPath'],
+    reads: [BC.system.projectPath],
     writes: [],
     dependsOn: [],
   },
@@ -80,8 +81,8 @@ function TerminalView({
   areaId: string;
   lastAction: { id: string; timestamp: number } | null;
 }) {
-  const projectPath = useBloodChannel(['system.projectPath'], () =>
-    Blood.getValue<string>('system.projectPath', '')
+  const projectPath = useBloodChannel([BC.system.projectPath], () =>
+    Blood.getValue<string>(BC.system.projectPath, '')
   );
 
   // Mirror Blood tabs into local state for rendering
@@ -248,7 +249,7 @@ function TerminalView({
       prevProjectPathRef.current = savedTabs[0]?.projectPath || '';
     } else {
       // ── First bootstrap: create initial tab ──
-      const project = Blood.getValue<string>('system.projectPath', '');
+      const project = Blood.getValue<string>(BC.system.projectPath, '');
       prevProjectPathRef.current = project;
       const tabId = `pty-${areaId}-0`;
       spawnTab(tabId, '终端 1', project);
@@ -392,7 +393,7 @@ function TerminalView({
           className="terminal-tab-add"
           onClick={() => {
             const tabId = `pty-${areaId}-${Date.now()}`;
-            const proj = Blood.getValue<string>('system.projectPath', '');
+            const proj = Blood.getValue<string>(BC.system.projectPath, '');
             const num = Blood.getValue<TerminalTab[]>(BLOOD_TABS, []).length + 1;
             spawnTab(tabId, `终端 ${num}`, proj);
           }}

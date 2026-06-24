@@ -36,8 +36,7 @@ APP下的组件，插件即是组件即是应用本身
 ```
 APP/[plugin-name]/
 ├── index.ts                # 统一入口：暴露组件对象、名称、图标以及所有的 Actions 声明
-├── components/             # UI 组件目录
-│   └── [PluginView].tsx    # 主渲染界面组件
+├── [PluginView].tsx        # 主渲染界面组件（直接置于插件根目录，不要建立额外的 components/ 子目录）
 ├── actions/                # 动作逻辑与按钮声明目录（对应 button1, button2 等）
 │   ├── [SaveAction].ts     # 具体动作逻辑与图标 SVG 定义
 │   └── index.ts            # 导出所有 actions

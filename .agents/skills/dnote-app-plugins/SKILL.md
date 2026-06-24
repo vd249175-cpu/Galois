@@ -251,6 +251,7 @@ const editorCursor = useBloodChannel(
 | `editor` | 文本编辑器 | Markdown 编辑、预览、YAML 标签、WikiLink |
 | `fileTree` | 文本浏览器 | 文件树、标签搜索、模板系统、项目生命周期 |
 | `graphView` | 标签拓扑图 | 力导向 DAG、FCA 虚拟节点、色组管理 |
+| `linkGraph` | 双链关系图谱 | Obsidian 风格双链图谱，动态展示笔记文件之间的引用链接结构 |
 | `terminal` | 终端控制台 | xterm.js PTY、多标签、自动 agy 会话 |
 | `settings` | 偏好设置 | 快捷键录制、外观配置 |
 | `agent` | Antigravity 助手 | AI 聊天、编辑器上下文感知 |

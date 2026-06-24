@@ -18,6 +18,9 @@
   --highlight-color: rgba(115, 86, 177, 0.08);
   --error-color: #ff3b30;
   --terminal-green: #324a35;
+  --phantom-color: #9d8abf;
+  --agent-system-color: var(--clr-zi-luo-lan);
+  --delete-btn-color: #b83b5e;
   
   --font-mono: 'Fira Code', 'Courier New', Courier, monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;

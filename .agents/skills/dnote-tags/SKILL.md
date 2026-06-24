@@ -90,22 +90,21 @@ tags:
 | 变量名 | 说明 |
 |--------|------|
 | `DNOTE_NOTE_PATH` | 当前正在处理的笔记文件绝对路径 |
-| `DNOTE_OUTPUT_FILE` | 脚本必须将 JSON 数组写入的目标路径 |
 | `DNOTE_RESOLVED_TAGS` | 当前轮次已解析的标签列表（JSON 字符串，用于多轮迭代） |
 
 > ⚠️ **注意**：标签脚本的环境变量是 `DNOTE_NOTE_PATH`（非 `DNOTE_ACTIVE_FILE`），
-> 且**不会**注入 `DNOTE_PROJECT_PATH`，需要从 `DNOTE_NOTE_PATH` 推导。
+> 且**不会**注入 `DNOTE_PROJECT_PATH` 和 `DNOTE_OUTPUT_FILE`，需要从 `DNOTE_NOTE_PATH` 推导，输出结果必须打印到 `stdout`。
 
 ### 4.2 脚本输出协议
 
-标签脚本必须将结果**写入 `DNOTE_OUTPUT_FILE`**，内容为以下两种格式之一：
+标签脚本必须将计算结果输出至 **`stdout`**（标准输出，通常使用 `print()`），内容为以下两种 JSON 格式之一：
 
-**方式 A：直接返回 tag 字符串数组（推荐）**
+**方式 A：直接输出 tag 字符串数组的 JSON 字符串（推荐）**
 ```json
 ["tag1", "tag2", "tag3"]
 ```
 
-**方式 B：包含 `data.tags` 的结构化 JSON**
+**方式 B：输出包含 `data.tags` 的结构化 JSON**
 ```json
 {
   "status": "success",
@@ -113,8 +112,6 @@ tags:
   "timestamp": 1782305164
 }
 ```
-
-脚本同时应将标签数组 `print()` 到 stdout，以便调试。
 
 ### 4.3 脚本示例（`script/tag_calculator.py`）
 
