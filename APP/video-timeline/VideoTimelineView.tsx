@@ -213,6 +213,7 @@ function VideoTimelineView({
   const [zoom, setZoom] = useState<number>(1); // Timeline zoom factor
   const [isScrubbing, setIsScrubbing] = useState<boolean>(false); // Playhead dragging state
   const [containerWidth, setContainerWidth] = useState<number>(800); // Measured viewport width
+  const [isAssetLoaded, setIsAssetLoaded] = useState<boolean>(false);
   // Multi-select: Set of selected segment IDs (replaces single selectedSegmentId)
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<Set<string>>(new Set());
   const selectedSegmentId = selectedSegmentIds.size === 1 ? [...selectedSegmentIds][0] : null;
@@ -266,14 +267,17 @@ function VideoTimelineView({
     }
   }, [videoPath]);
 
-  // Persist video path to localStorage
+  // Persist video path to localStorage and reset states on change
   useEffect(() => {
+    setThumbnails([]);
+    setSegments([]);
+    setSelectedSegmentIds(new Set());
+    setZoom(1);
+    setDuration(0);
+    setIsAssetLoaded(false);
+
     if (videoPath) {
       localStorage.setItem(`dnote_video_path_${areaId}`, videoPath);
-      setThumbnails([]);
-      setSegments([]);
-      setSelectedSegmentIds(new Set());
-      setZoom(1);
     } else {
       localStorage.removeItem(`dnote_video_path_${areaId}`);
     }
@@ -283,7 +287,7 @@ function VideoTimelineView({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     const projectPath = state[BC.system.projectPath] || '';
-    if (!projectPath || !videoPath || segments.length === 0 || duration <= 0 || isNaN(duration)) return;
+    if (!isAssetLoaded || !projectPath || !videoPath || segments.length === 0 || duration <= 0 || isNaN(duration)) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       const asset: VideoAsset = {
@@ -298,7 +302,7 @@ function VideoTimelineView({
       saveAsset(projectPath, asset);
     }, 600);
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
-  }, [segments, videoPath, duration, state]);
+  }, [segments, videoPath, duration, state[BC.system.projectPath], isAssetLoaded]);
 
   // Measure container width dynamically to support Blender-style panel resizing
   useEffect(() => {
@@ -344,41 +348,52 @@ function VideoTimelineView({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Setup initial single segment when video duration is resolved
-  // Also tries to restore segments from the saved .asset.json file
-  const handleLoadedMetadata = async () => {
-    if (videoRef.current) {
-      const dur = videoRef.current.duration;
-      setDuration(dur);
-      const projectPath = state[BC.system.projectPath] || '';
-      // Try to restore saved asset first
-      if (projectPath && videoPath) {
-        const asset = await loadAsset(projectPath, videoPath);
-        if (asset && asset.segments.length > 0) {
-          setSegments(asset.segments);
-          setSelectedSegmentIds(new Set([asset.segments[0].id]));
-          extractThumbnails(videoPath, dur);
-          return;
-        }
-      }
-      // No saved asset — create the default full-video segment
-      if (segments.length === 0) {
+  // Setup initial segments and load asset when duration, videoPath, and projectPath are resolved
+  useEffect(() => {
+    const projectPath = state[BC.system.projectPath] || '';
+    if (!projectPath || !videoPath || duration <= 0 || isNaN(duration)) return;
+
+    let active = true;
+    const restoreAsset = async () => {
+      const asset = await loadAsset(projectPath, videoPath);
+      if (!active) return;
+
+      if (asset && asset.segments.length > 0) {
+        setSegments(asset.segments);
+        setSelectedSegmentIds(new Set([asset.segments[0].id]));
+      } else {
+        // No saved asset — create the default full-video segment
         const defaultSeg: VideoSegment = {
           id: 'seg-1',
           start: 0,
-          end: dur,
-          name: `${formatTimeShort(0)} - ${formatTimeShort(dur)}`,
+          end: duration,
+          name: `${formatTimeShort(0)} - ${formatTimeShort(duration)}`,
           color: generateColor(0),
         };
         setSegments([defaultSeg]);
         setSelectedSegmentIds(new Set(['seg-1']));
       }
-      extractThumbnails(videoPath, dur);
+
+      setIsAssetLoaded(true);
+      extractThumbnails(videoPath, duration, projectPath);
+    };
+
+    restoreAsset();
+
+    return () => {
+      active = false;
+    };
+  }, [state[BC.system.projectPath], videoPath, duration]);
+
+  // Setup video duration when video metadata is resolved
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
     }
   };
 
   // Dual-mode fast frame extractor (FFmpeg background command with HTML5 fallback)
-  const extractThumbnails = async (path: string, dur: number) => {
+  const extractThumbnails = async (path: string, dur: number, projectPath: string) => {
     if (!path || dur <= 0) return;
     setIsExtractingThumbnails(true);
     
@@ -387,7 +402,6 @@ function VideoTimelineView({
     const step = dur / frameCount;
     
     // 1. Try native FFmpeg extraction first for ultra-fast performance
-    const projectPath = state[BC.system.projectPath] || '';
     if (projectPath) {
       try {
         const cacheDir = `${projectPath}/.dnote_cache/video-timeline/${areaId}`;
