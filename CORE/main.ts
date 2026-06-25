@@ -120,7 +120,14 @@ app.whenReady().then(async () => {
         const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
 
         const chunkStart = Math.max(0, isNaN(start) ? 0 : start);
-        const chunkEnd = Math.min(totalSize - 1, isNaN(end) ? totalSize - 1 : end);
+        let chunkEnd = Math.min(totalSize - 1, isNaN(end) ? totalSize - 1 : end);
+
+        // Cap chunk size at 2MB to prevent large memory allocations and OOM crashes
+        const MAX_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+        if (chunkEnd - chunkStart + 1 > MAX_CHUNK_SIZE) {
+          chunkEnd = chunkStart + MAX_CHUNK_SIZE - 1;
+        }
+
         const chunkSize = chunkEnd - chunkStart + 1;
 
         console.log('[dnote-file Range Read]', { filePath, chunkStart, chunkEnd, chunkSize });
