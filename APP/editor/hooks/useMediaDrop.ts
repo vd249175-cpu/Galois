@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { getFrontmatterLineCount } from '../editorUtils';
 
 interface UseMediaDropOptions {
   projectPath: string;
@@ -72,9 +71,8 @@ export function useMediaDrop({
 
       let nextContent = '';
       if (insertAtLine !== undefined) {
-        const yamlLines = getFrontmatterLineCount(contentRef.current);
         const lines = contentRef.current.split('\n');
-        lines.splice(yamlLines + insertAtLine + 1, 0, markup);
+        lines.splice(insertAtLine + 1, 0, markup);
         nextContent = lines.join('\n');
       } else if (isPreviewMode) {
         nextContent = contentRef.current + '\n' + markup + '\n';
@@ -110,31 +108,25 @@ export function useMediaDrop({
     if (sourceLineStr !== '') {
       const sourceLineIdx = parseInt(sourceLineStr, 10);
       if (!isNaN(sourceLineIdx) && sourceLineIdx !== lineIdx) {
-        const yamlLines = getFrontmatterLineCount(contentRef.current);
         const allLines = contentRef.current.split('\n');
-        
-        const absSourceIdx = yamlLines + sourceLineIdx;
-        const absTargetIdx = yamlLines + lineIdx;
-        
-        const lineText = allLines[absSourceIdx];
-        
-        allLines.splice(absSourceIdx, 1);
-        allLines.splice(absTargetIdx, 0, lineText);
-        
-        const nextContent = allLines.join('\n');
-        setContent(nextContent);
-        saveNodeFile(nextContent);
-        setStatusMessage('区块已移动');
-        return;
+        const lineText = allLines[sourceLineIdx];
+        if (lineText !== undefined) {
+          allLines.splice(sourceLineIdx, 1);
+          allLines.splice(lineIdx, 0, lineText);
+          const nextContent = allLines.join('\n');
+          setContent(nextContent);
+          saveNodeFile(nextContent);
+          setStatusMessage('区块已移动');
+          return;
+        }
       }
     }
 
     // Priority 2: Video clip text (from timeline segment drag)
     const clipText = e.dataTransfer.getData('text/x-dnote-clip');
     if (clipText) {
-      const yamlLines = getFrontmatterLineCount(contentRef.current);
       const lines = contentRef.current.split('\n');
-      lines.splice(yamlLines + lineIdx + 1, 0, clipText);
+      lines.splice(lineIdx + 1, 0, clipText);
       const nextContent = lines.join('\n');
       setContent(nextContent);
       saveNodeFile(nextContent);

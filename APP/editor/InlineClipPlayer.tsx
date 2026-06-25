@@ -138,6 +138,7 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={(e) => e.stopPropagation()}
       style={{
         display: 'inline-flex',
         flexDirection: 'column',

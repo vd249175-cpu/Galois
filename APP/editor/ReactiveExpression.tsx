@@ -196,6 +196,7 @@ export function ReactiveExpression({
       className="reactive-pill-container"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
+      onClick={(e) => e.stopPropagation()}
       style={{
         position: 'relative',
         display: 'inline-flex',

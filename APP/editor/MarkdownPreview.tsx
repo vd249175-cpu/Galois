@@ -125,6 +125,19 @@ export function MermaidRenderer({ code }: { code: string }) {
   );
 }
 
+interface ParsedBlock {
+  key: string;
+  type: string;
+  startLine: number;
+  endLine: number;
+  rawText: string;
+  codeLang?: string;
+  codeText?: string;
+  tableHeaders?: string[];
+  tableAlignments?: string[];
+  tableRows?: string[][];
+}
+
 interface MarkdownPreviewProps {
   content: string;
   onContentChange: (newContent: string) => void;
@@ -156,32 +169,26 @@ export function MarkdownPreview({
 }: MarkdownPreviewProps) {
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
+  const [draggedBlockKey, setDraggedBlockKey] = useState<string | null>(null);
+  const [dragContent, setDragContent] = useState<string | null>(null);
+
+  const effectiveContent = dragContent ?? content;
 
   const updateMarkdownLines = (startLineIdx: number, endLineIdx: number, newLines: string[]) => {
-    let frontmatterLinesOffset = 0;
-    const body = parseMarkdownBody(content);
-    if (body !== content) {
-      const bodyIndex = content.indexOf(body);
-      const prefix = content.substring(0, bodyIndex);
-      frontmatterLinesOffset = prefix.split('\n').length - 1;
-    }
-
     const allLines = content.split('\n');
-    const absoluteStart = frontmatterLinesOffset + startLineIdx;
-    const absoluteEnd = frontmatterLinesOffset + endLineIdx;
-
-    allLines.splice(absoluteStart, absoluteEnd - absoluteStart + 1, ...newLines);
+    allLines.splice(startLineIdx, endLineIdx - startLineIdx + 1, ...newLines);
     onContentChange(allLines.join('\n'));
   };
 
   const handleTableCellEdit = (lineIdx: number, colIdx: number, newCellVal: string) => {
-    const body = parseMarkdownBody(content);
-    const lines = body.split('\n');
-    const originalLine = lines[lineIdx];
-    if (!originalLine) return;
+    const allLines = content.split('\n');
+    const originalLine = allLines[lineIdx];
+    if (originalLine === undefined) return;
 
     const cells = originalLine.split('|');
-    cells[colIdx + 1] = ` ${newCellVal.trim()} `;
+    if (colIdx + 1 < cells.length) {
+      cells[colIdx + 1] = ` ${newCellVal.trim()} `;
+    }
     const newLineText = cells.join('|');
     updateMarkdownLines(lineIdx, lineIdx, [newLineText]);
   };
@@ -235,29 +242,191 @@ export function MarkdownPreview({
     );
   };
 
-  const wrapBlock = (element: React.ReactNode, fileLineIndex: number) => {
-    if (!isPreviewMode) return element;
+  const parseMarkdownIntoBlocks = (md: string): ParsedBlock[] => {
+    let frontmatterLinesOffset = 0;
+    const body = parseMarkdownBody(md);
+    if (body !== md) {
+      const bodyIndex = md.indexOf(body);
+      const prefix = md.substring(0, bodyIndex);
+      frontmatterLinesOffset = prefix.split('\n').length - 1;
+    }
+
+    const allLines = md.split('\n');
+    const lines = body.split('\n');
+    const blocks: ParsedBlock[] = [];
     
+    const occurrenceMap: Record<string, number> = {};
+
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const startLine = frontmatterLinesOffset + i;
+
+      // 1. Code Block
+      if (line.trim().startsWith('```')) {
+        const lang = line.trim().substring(3).trim();
+        const codeLines: string[] = [];
+        let j = i + 1;
+        while (j < lines.length && !lines[j].trim().startsWith('```')) {
+          codeLines.push(lines[j]);
+          j++;
+        }
+        const endLine = frontmatterLinesOffset + Math.min(j, lines.length - 1);
+        const rawText = allLines.slice(startLine, endLine + 1).join('\n');
+        
+        const baseKey = `code:${rawText}`;
+        const idx = occurrenceMap[baseKey] || 0;
+        occurrenceMap[baseKey] = idx + 1;
+        const key = `${baseKey}_${idx}`;
+
+        blocks.push({
+          key,
+          type: 'code',
+          startLine,
+          endLine,
+          rawText,
+          codeLang: lang,
+          codeText: codeLines.join('\n')
+        });
+
+        i = j + 1;
+        continue;
+      }
+
+      // 2. Table
+      const isTableRow = (l: string) => l.trim().startsWith('|') && l.trim().endsWith('|');
+      const isSeparatorRow = (l: string) => l.trim().startsWith('|') && /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l.trim());
+      
+      if (i + 1 < lines.length && isTableRow(line) && isSeparatorRow(lines[i+1])) {
+        const headerRow = line;
+        const separatorRow = lines[i+1];
+        
+        const headerCells = headerRow.split('|').map(c => c.trim());
+        if (headerCells[0] === '') headerCells.shift();
+        if (headerCells[headerCells.length - 1] === '') headerCells.pop();
+
+        const separatorCells = separatorRow.split('|').map(c => c.trim());
+        if (separatorCells[0] === '') separatorCells.shift();
+        if (separatorCells[separatorCells.length - 1] === '') separatorCells.pop();
+
+        const alignments = separatorCells.map(cell => {
+          const left = cell.startsWith(':');
+          const right = cell.endsWith(':');
+          if (left && right) return 'center';
+          if (right) return 'right';
+          return 'left';
+        });
+
+        const dataRows: string[][] = [];
+        let j = i + 2;
+        while (j < lines.length && isTableRow(lines[j])) {
+          const cells = lines[j].split('|').map(c => c.trim());
+          if (cells[0] === '') cells.shift();
+          if (cells[cells.length - 1] === '') cells.pop();
+          dataRows.push(cells);
+          j++;
+        }
+
+        const endLine = frontmatterLinesOffset + j - 1;
+        const rawText = allLines.slice(startLine, endLine + 1).join('\n');
+        
+        const baseKey = `table:${rawText}`;
+        const idx = occurrenceMap[baseKey] || 0;
+        occurrenceMap[baseKey] = idx + 1;
+        const key = `${baseKey}_${idx}`;
+
+        blocks.push({
+          key,
+          type: 'table',
+          startLine,
+          endLine,
+          rawText,
+          tableHeaders: headerCells,
+          tableAlignments: alignments,
+          tableRows: dataRows
+        });
+
+        i = j;
+        continue;
+      }
+
+      // 3. Single-line blocks
+      let type = 'p';
+      const isHorizontalRule = (l: string) => /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
+      if (isHorizontalRule(line)) {
+        type = 'hr';
+      } else if (line.startsWith('# ')) {
+        type = 'h1';
+      } else if (line.startsWith('## ')) {
+        type = 'h2';
+      } else if (line.startsWith('### ')) {
+        type = 'h3';
+      } else if (line.startsWith('- [ ] ') || line.startsWith('- [x] ')) {
+        type = 'todo';
+      } else if (line.startsWith('- ')) {
+        type = 'li';
+      } else if (line.startsWith('> ')) {
+        type = 'blockquote';
+      } else if (line.trim() === '') {
+        type = 'empty';
+      }
+
+      const rawText = line;
+      const baseKey = `${type}:${rawText}`;
+      const idx = occurrenceMap[baseKey] || 0;
+      occurrenceMap[baseKey] = idx + 1;
+      const key = `${baseKey}_${idx}`;
+
+      blocks.push({
+        key,
+        type,
+        startLine,
+        endLine: startLine,
+        rawText
+      });
+
+      i++;
+    }
+
+    return blocks;
+  };
+
+  const blocks = parseMarkdownIntoBlocks(effectiveContent);
+
+  const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
+    if (!isPreviewMode) return element;
+
+    const isCurrentlyDragged = draggedBlockKey === block.key;
+
     return (
       <div
-        key={`wrapper_${fileLineIndex}`}
+        key={block.key}
         className="preview-block-wrapper"
-        {...getLineDragProps(fileLineIndex)}
-        style={getLineStyle(fileLineIndex, {
+        {...getLineDragProps(block)}
+        style={getLineStyle(block, {
           display: 'flex',
           alignItems: 'center',
           width: '100%',
           position: 'relative',
+          opacity: isCurrentlyDragged ? 0.35 : 1,
         })}
       >
         <div
           draggable
           onDragStart={(e) => {
             e.stopPropagation();
+            setDraggedBlockKey(block.key);
+            setDragContent(content);
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/x-dnote-block-line', String(fileLineIndex));
-            const allLines = content.split('\n');
-            e.dataTransfer.setData('text/plain', allLines[fileLineIndex] || '');
+            e.dataTransfer.setData('text/x-dnote-block-line', String(block.startLine));
+            e.dataTransfer.setData('text/plain', block.rawText);
+          }}
+          onDragEnd={() => {
+            if (dragContent !== null) {
+              onContentChange(dragContent);
+              setDragContent(null);
+            }
+            setDraggedBlockKey(null);
           }}
           className="drag-handle"
           style={{
@@ -287,33 +456,70 @@ export function MarkdownPreview({
     );
   };
 
-  const getLineDragProps = (lineIdx: number) => {
+  const getLineDragProps = (block: ParsedBlock) => {
     if (!isPreviewMode) return {};
     return {
       onDragOver: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (
-          e.dataTransfer.types.includes('Files') ||
-          e.dataTransfer.types.includes('text/x-dnote-clip') ||
-          e.dataTransfer.types.includes('text/x-dnote-block-line')
-        ) {
-          setHoveredLineIndex(lineIdx);
+        if (!draggedBlockKey) {
+          if (
+            e.dataTransfer.types.includes('Files') ||
+            e.dataTransfer.types.includes('text/x-dnote-clip')
+          ) {
+            setHoveredLineIndex(block.startLine);
+          }
         }
       },
       onDragLeave: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        setHoveredLineIndex((prev) => (prev === lineIdx ? null : prev));
+        if (!draggedBlockKey) {
+          setHoveredLineIndex((prev) => (prev === block.startLine ? null : prev));
+        }
+      },
+      onDragEnter: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (draggedBlockKey && draggedBlockKey !== block.key) {
+          const currentMD = dragContent ?? content;
+          const parsed = parseMarkdownIntoBlocks(currentMD);
+          
+          const sourceIdx = parsed.findIndex(b => b.key === draggedBlockKey);
+          const targetIdx = parsed.findIndex(b => b.key === block.key);
+          
+          if (sourceIdx !== -1 && targetIdx !== -1) {
+            const nextBlocks = [...parsed];
+            const [movedBlock] = nextBlocks.splice(sourceIdx, 1);
+            nextBlocks.splice(targetIdx, 0, movedBlock);
+            
+            let frontmatterLinesOffset = 0;
+            const body = parseMarkdownBody(currentMD);
+            if (body !== currentMD) {
+              const bodyIndex = currentMD.indexOf(body);
+              const prefix = currentMD.substring(0, bodyIndex);
+              frontmatterLinesOffset = prefix.split('\n').length - 1;
+            }
+            const allLines = currentMD.split('\n');
+            const frontmatterLines = allLines.slice(0, frontmatterLinesOffset);
+            
+            const rebuiltBodyLines = nextBlocks.map(b => b.rawText);
+            const nextContent = [...frontmatterLines, ...rebuiltBodyLines].join('\n');
+            setDragContent(nextContent);
+          }
+        }
       },
       onDrop: (e: React.DragEvent) => {
-        handleLineDrop(e, lineIdx);
+        if (!draggedBlockKey) {
+          handleLineDrop(e, block.startLine);
+        }
       }
     };
   };
 
-  const getLineStyle = (lineIdx: number, baseStyle: React.CSSProperties = {}): React.CSSProperties => {
-    if (isPreviewMode && hoveredLineIndex === lineIdx) {
+  const getLineStyle = (block: ParsedBlock, baseStyle: React.CSSProperties = {}): React.CSSProperties => {
+    if (isPreviewMode && !draggedBlockKey && hoveredLineIndex === block.startLine) {
       return {
         ...baseStyle,
         borderTop: '3px solid var(--accent-color, #7000ff)',
@@ -324,157 +530,147 @@ export function MarkdownPreview({
     return baseStyle;
   };
 
-  const parseMarkdown = (md: string) => {
-    let frontmatterLinesOffset = 0;
-    const body = parseMarkdownBody(md);
-    if (body !== md) {
-      const bodyIndex = md.indexOf(body);
-      const prefix = md.substring(0, bodyIndex);
-      frontmatterLinesOffset = prefix.split('\n').length - 1;
+  const renderParsedBlock = (block: ParsedBlock, idx: number) => {
+    const contentVal = block.rawText;
+    const isEditing = editingLineIdx === block.startLine;
+
+    if (block.type === 'code') {
+      const lang = block.codeLang || '';
+      const codeText = block.codeText || '';
+      
+      const blockEl = isEditing ? (
+        <textarea
+          defaultValue={codeText}
+          onBlur={(e) => {
+            const newCode = e.currentTarget.value;
+            const newLines = ['```' + lang, ...newCode.split('\n'), '```'];
+            updateMarkdownLines(block.startLine, block.endLine, newLines);
+            setEditingLineIdx(null);
+          }}
+          style={{
+            width: '100%',
+            minHeight: '120px',
+            fontFamily: 'var(--font-mono, monospace)',
+            fontSize: '12px',
+            backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.05))',
+            padding: '12px',
+            borderRadius: '6px',
+            border: '1px solid var(--accent-color, #7000ff)',
+            color: 'var(--text-main)',
+            resize: 'vertical',
+            outline: 'none',
+            boxSizing: 'border-box',
+            margin: '12px 0',
+          }}
+          ref={(el) => {
+            if (el) el.focus();
+          }}
+        />
+      ) : (
+        <div onClick={() => setEditingLineIdx(block.startLine)} style={{ cursor: 'text', width: '100%' }}>
+          {lang.toLowerCase() === 'mermaid' ? (
+            <MermaidRenderer key={`mermaid_${idx}`} code={codeText} />
+          ) : (
+            <div key={`codeblock_${idx}`} style={{ margin: '14px 0', overflowX: 'auto' }}>
+              <pre
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.03))',
+                  padding: '12px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-main)',
+                  margin: 0,
+                  whiteSpace: 'pre'
+                }}
+              >
+                <code>{codeText}</code>
+              </pre>
+            </div>
+          )}
+        </div>
+      );
+      
+      return wrapBlock(blockEl, block);
     }
 
-    const lines = body.split('\n');
-    const elements: React.ReactNode[] = [];
-    
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const fileLineIndex = frontmatterLinesOffset + i;
-
-      // ── Code Block & Mermaid Parsing ─────────────────────────────────────────
-      if (line.trim().startsWith('```')) {
-        const lang = line.trim().substring(3).trim();
-        const codeLines: string[] = [];
-        let j = i + 1;
-        while (j < lines.length && !lines[j].trim().startsWith('```')) {
-          codeLines.push(lines[j]);
-          j++;
-        }
-        const codeText = codeLines.join('\n');
-        
-        const isEditing = editingLineIdx === fileLineIndex;
-        
-        const blockEl = isEditing ? (
-          <textarea
-            defaultValue={codeText}
-            onBlur={(e) => {
-              const newCode = e.currentTarget.value;
-              const newLines = ['```' + lang, ...newCode.split('\n'), '```'];
-              updateMarkdownLines(fileLineIndex, fileLineIndex + codeLines.length + 1, newLines);
-              setEditingLineIdx(null);
-            }}
+    if (block.type === 'table') {
+      const headerCells = block.tableHeaders || [];
+      const alignments = block.tableAlignments || [];
+      const dataRows = block.tableRows || [];
+      
+      const tableEl = (
+        <div key={`table_${idx}`} style={{ overflowX: 'auto', margin: '14px 0', width: '100%' }}>
+          <table
             style={{
               width: '100%',
-              minHeight: '120px',
-              fontFamily: 'var(--font-mono, monospace)',
-              fontSize: '12px',
-              backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.05))',
-              padding: '12px',
-              borderRadius: '6px',
-              border: '1px solid var(--accent-color, #7000ff)',
-              color: 'var(--text-main)',
-              resize: 'vertical',
-              outline: 'none',
-              boxSizing: 'border-box',
-              margin: '12px 0',
+              borderCollapse: 'collapse',
+              fontSize: '13px',
+              border: '1.2px solid var(--border-color)',
+              borderRadius: '6px'
             }}
-            ref={(el) => {
-              if (el) el.focus();
-            }}
-          />
-        ) : (
-          <div onClick={() => setEditingLineIdx(fileLineIndex)} style={{ cursor: 'text', width: '100%' }}>
-            {lang.toLowerCase() === 'mermaid' ? (
-              <MermaidRenderer key={`mermaid_${i}`} code={codeText} />
-            ) : (
-              <div key={`codeblock_${i}`} style={{ margin: '14px 0', overflowX: 'auto' }}>
-                <pre
+          >
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.015)' }}>
+                {headerCells.map((cell, colIdx) => {
+                  const isCellActive = activeCell?.lineIdx === block.startLine && activeCell?.colIdx === colIdx;
+                  return (
+                    <th
+                      key={`th_${colIdx}`}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onFocus={() => setActiveCell({ lineIdx: block.startLine, colIdx })}
+                      onBlur={(e) => {
+                        const newCellVal = e.currentTarget.textContent || '';
+                        handleTableCellEdit(block.startLine, colIdx, newCellVal);
+                        setActiveCell(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        padding: '8px 12px',
+                        fontWeight: '600',
+                        textAlign: (alignments[colIdx] || 'left') as any,
+                        color: 'var(--text-main)',
+                        borderBottom: '2px solid var(--border-color)',
+                        outline: 'none',
+                        backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
+                      }}
+                    >
+                      {isCellActive ? cell : renderInline(cell, block.startLine)}
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {dataRows.map((rowCells, rowIdx) => (
+                <tr
+                  key={`tr_${rowIdx}`}
                   style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: '12px',
-                    backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.03))',
-                    padding: '12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    color: 'var(--text-main)',
-                    margin: 0,
-                    whiteSpace: 'pre'
+                    borderBottom: '1px solid var(--border-color)',
+                    backgroundColor: rowIdx % 2 === 1 ? 'rgba(0,0,0,0.005)' : 'transparent'
                   }}
                 >
-                  <code>{codeText}</code>
-                </pre>
-              </div>
-            )}
-          </div>
-        );
-        
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-        i = j + 1; // skip past closing backticks
-        continue;
-      }
-
-      // ── Table Parsing ────────────────────────────────────────────────────────
-      const isTableRow = (l: string) => l.trim().startsWith('|') && l.trim().endsWith('|');
-      const isSeparatorRow = (l: string) => l.trim().startsWith('|') && /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l.trim());
-      
-      if (i + 1 < lines.length && isTableRow(line) && isSeparatorRow(lines[i+1])) {
-        const headerRow = line;
-        const separatorRow = lines[i+1];
-        
-        // Parse headers
-        const headerCells = headerRow.split('|').map(c => c.trim());
-        if (headerCells[0] === '') headerCells.shift();
-        if (headerCells[headerCells.length - 1] === '') headerCells.pop();
-
-        // Parse alignments
-        const separatorCells = separatorRow.split('|').map(c => c.trim());
-        if (separatorCells[0] === '') separatorCells.shift();
-        if (separatorCells[separatorCells.length - 1] === '') separatorCells.pop();
-
-        const alignments = separatorCells.map(cell => {
-          const left = cell.startsWith(':');
-          const right = cell.endsWith(':');
-          if (left && right) return 'center';
-          if (right) return 'right';
-          return 'left';
-        });
-
-        // Parse data rows
-        const dataRows: string[][] = [];
-        let j = i + 2;
-        while (j < lines.length && isTableRow(lines[j])) {
-          const cells = lines[j].split('|').map(c => c.trim());
-          if (cells[0] === '') cells.shift();
-          if (cells[cells.length - 1] === '') cells.pop();
-          dataRows.push(cells);
-          j++;
-        }
-
-        // Render table
-        const tableEl = (
-          <div key={`table_${i}`} style={{ overflowX: 'auto', margin: '14px 0', width: '100%' }}>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                fontSize: '13px',
-                border: '1.2px solid var(--border-color)',
-                borderRadius: '6px'
-              }}
-            >
-              <thead>
-                <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.015)' }}>
-                  {headerCells.map((cell, colIdx) => {
-                    const isCellActive = activeCell?.lineIdx === fileLineIndex && activeCell?.colIdx === colIdx;
+                  {headerCells.map((_, colIdx) => {
+                    const cellVal = rowCells[colIdx] || '';
+                    const cellLineIndex = block.startLine + 2 + rowIdx;
+                    const isCellActive = activeCell?.lineIdx === cellLineIndex && activeCell?.colIdx === colIdx;
                     return (
-                      <th
-                        key={`th_${colIdx}`}
+                      <td
+                        key={`td_${rowIdx}_${colIdx}`}
                         contentEditable
                         suppressContentEditableWarning
-                        onFocus={() => setActiveCell({ lineIdx: fileLineIndex, colIdx })}
+                        onFocus={() => setActiveCell({ lineIdx: cellLineIndex, colIdx })}
                         onBlur={(e) => {
                           const newCellVal = e.currentTarget.textContent || '';
-                          handleTableCellEdit(fileLineIndex, colIdx, newCellVal);
+                          handleTableCellEdit(cellLineIndex, colIdx, newCellVal);
                           setActiveCell(null);
                         }}
                         onKeyDown={(e) => {
@@ -483,229 +679,167 @@ export function MarkdownPreview({
                             e.currentTarget.blur();
                           }
                         }}
+                        onClick={(e) => e.stopPropagation()}
                         style={{
                           padding: '8px 12px',
-                          fontWeight: '600',
                           textAlign: (alignments[colIdx] || 'left') as any,
                           color: 'var(--text-main)',
-                          borderBottom: '2px solid var(--border-color)',
                           outline: 'none',
                           backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
                         }}
                       >
-                        {isCellActive ? cell : renderInline(cell, fileLineIndex)}
-                      </th>
+                        {isCellActive ? cellVal : renderInline(cellVal, cellLineIndex)}
+                      </td>
                     );
                   })}
                 </tr>
-              </thead>
-              <tbody>
-                {dataRows.map((rowCells, rowIdx) => (
-                  <tr
-                    key={`tr_${rowIdx}`}
-                    style={{
-                      borderBottom: '1px solid var(--border-color)',
-                      backgroundColor: rowIdx % 2 === 1 ? 'rgba(0,0,0,0.005)' : 'transparent'
-                    }}
-                  >
-                    {headerCells.map((_, colIdx) => {
-                      const cellVal = rowCells[colIdx] || '';
-                      const cellLineIndex = fileLineIndex + 2 + rowIdx;
-                      const isCellActive = activeCell?.lineIdx === cellLineIndex && activeCell?.colIdx === colIdx;
-                      return (
-                        <td
-                          key={`td_${rowIdx}_${colIdx}`}
-                          contentEditable
-                          suppressContentEditableWarning
-                          onFocus={() => setActiveCell({ lineIdx: cellLineIndex, colIdx })}
-                          onBlur={(e) => {
-                            const newCellVal = e.currentTarget.textContent || '';
-                            handleTableCellEdit(cellLineIndex, colIdx, newCellVal);
-                            setActiveCell(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              e.currentTarget.blur();
-                            }
-                          }}
-                          style={{
-                            padding: '8px 12px',
-                            textAlign: (alignments[colIdx] || 'left') as any,
-                            color: 'var(--text-main)',
-                            outline: 'none',
-                            backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
-                          }}
-                        >
-                          {isCellActive ? cellVal : renderInline(cellVal, cellLineIndex)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-
-        elements.push(wrapBlock(tableEl, fileLineIndex));
-        i = j; // skip forward
-        continue;
-      }
-
-      // Default line parsers
-      let contentVal = line;
-      const isHorizontalRule = (l: string) => /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
-
-      if (isHorizontalRule(contentVal)) {
-        elements.push(
-          wrapBlock(
-            <hr
-              key={i}
-              style={{
-                border: 'none',
-                borderTop: '1px solid var(--border-color)',
-                margin: '16px 0',
-                width: '100%',
-              }}
-            />,
-            fileLineIndex
-          )
-        );
-      } else if (contentVal.startsWith('# ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <h1
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700', cursor: 'text' }}
-          >
-            {renderInline(contentVal.substring(2), fileLineIndex)}
-          </h1>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.startsWith('## ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <h2
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600', cursor: 'text' }}
-          >
-            {renderInline(contentVal.substring(3), fileLineIndex)}
-          </h2>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.startsWith('### ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <h3
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600', cursor: 'text' }}
-          >
-            {renderInline(contentVal.substring(4), fileLineIndex)}
-          </h3>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.startsWith('- [ ] ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <div
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text' }}
-          >
-            <input type="checkbox" disabled checked={false} />
-            <span>{renderInline(contentVal.substring(6), fileLineIndex)}</span>
-          </div>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.startsWith('- [x] ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <div
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55, cursor: 'text' }}
-          >
-            <input type="checkbox" disabled checked={true} />
-            <span style={{ textDecoration: 'line-through' }}>{renderInline(contentVal.substring(6), fileLineIndex)}</span>
-          </div>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.startsWith('- ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <li
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ marginLeft: '16px', margin: '4px 0', fontSize: '13px', cursor: 'text' }}
-          >
-            {renderInline(contentVal.substring(2), fileLineIndex)}
-          </li>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.startsWith('> ')) {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <blockquote
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' }}
-          >
-            {renderInline(contentVal.substring(2), fileLineIndex)}
-          </blockquote>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else if (contentVal.trim() === '') {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <div
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ height: '18px', margin: '4px 0', cursor: 'text', border: '1px dashed transparent', width: '100%' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
-            title="点击在此输入新内容..."
-          />
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      } else {
-        const isEditing = editingLineIdx === fileLineIndex;
-        const blockEl = isEditing ? (
-          renderBlockEditor(fileLineIndex, line)
-        ) : (
-          <p
-            key={i}
-            onClick={() => setEditingLineIdx(fileLineIndex)}
-            style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '13px', cursor: 'text' }}
-          >
-            {renderInline(contentVal, fileLineIndex)}
-          </p>
-        );
-        elements.push(wrapBlock(blockEl, fileLineIndex));
-      }
-      i++;
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      
+      return wrapBlock(tableEl, block);
     }
 
-    return elements;
+    if (block.type === 'hr') {
+      return wrapBlock(
+        <hr
+          key={idx}
+          style={{
+            border: 'none',
+            borderTop: '1px solid var(--border-color)',
+            margin: '16px 0',
+            width: '100%',
+          }}
+        />,
+        block
+      );
+    }
+
+    if (block.type === 'h1') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <h1
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700', cursor: 'text' }}
+        >
+          {renderInline(contentVal.substring(2), block.startLine)}
+        </h1>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'h2') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <h2
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600', cursor: 'text' }}
+        >
+          {renderInline(contentVal.substring(3), block.startLine)}
+        </h2>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'h3') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <h3
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600', cursor: 'text' }}
+        >
+          {renderInline(contentVal.substring(4), block.startLine)}
+        </h3>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'todo') {
+      const isChecked = contentVal.startsWith('- [x] ');
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <div
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text', opacity: isChecked ? 0.55 : 1 }}
+        >
+          <input type="checkbox" disabled checked={isChecked} />
+          <span style={{ textDecoration: isChecked ? 'line-through' : 'none' }}>
+            {renderInline(contentVal.substring(6), block.startLine)}
+          </span>
+        </div>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'li') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <li
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ marginLeft: '16px', margin: '4px 0', fontSize: '13px', cursor: 'text' }}
+        >
+          {renderInline(contentVal.substring(2), block.startLine)}
+        </li>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'blockquote') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <blockquote
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' }}
+        >
+          {renderInline(contentVal.substring(2), block.startLine)}
+        </blockquote>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'empty') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <div
+          key={idx}
+          onClick={() => setEditingLineIdx(block.startLine)}
+          style={{ height: '18px', margin: '4px 0', cursor: 'text', border: '1px dashed transparent', width: '100%' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+          title="点击在此输入新内容..."
+        />
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    // Default paragraph (p)
+    const blockEl = isEditing ? (
+      renderBlockEditor(block.startLine, contentVal)
+    ) : (
+      <p
+        key={idx}
+        onClick={() => setEditingLineIdx(block.startLine)}
+        style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '13px', cursor: 'text' }}
+      >
+        {renderInline(contentVal, block.startLine)}
+      </p>
+    );
+    return wrapBlock(blockEl, block);
   };
 
   const renderInline = (text: string, lineIndex: number) => {
@@ -781,7 +915,10 @@ export function MarkdownPreview({
       return (
         <span
           key={stableKey}
-          onClick={() => handleLinkClick(target)}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleLinkClick(target);
+          }}
           className="wiki-link"
           style={{
             color: 'var(--accent-color)',
@@ -825,6 +962,7 @@ export function MarkdownPreview({
             key={`video_${url}_${idx}`}
             src={finalSrc}
             controls
+            onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid var(--border-color)', margin: '8px 0', display: 'block' }}
           />
         );
@@ -835,6 +973,7 @@ export function MarkdownPreview({
             key={`audio_${url}_${idx}`}
             src={finalSrc}
             controls
+            onClick={(e) => e.stopPropagation()}
             style={{ width: '100%', margin: '8px 0', display: 'block' }}
           />
         );
@@ -845,6 +984,7 @@ export function MarkdownPreview({
           key={`img_${url}_${idx}`}
           src={finalSrc}
           alt={alt}
+          onClick={(e) => e.stopPropagation()}
           style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'block', margin: '10px 0' }}
         />
       );
@@ -859,7 +999,8 @@ export function MarkdownPreview({
       return (
         <span
           key={stableKey}
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             if (isMd) {
               handleLinkClick(url.replace('.md', ''));
             } else {
@@ -960,7 +1101,13 @@ export function MarkdownPreview({
           opacity: 0.8;
         }
       ` }} />
-      {content ? parseMarkdown(content) : <div style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>No content. Switch to edit mode to write.</div>}
+      {effectiveContent ? (
+        blocks.map((block, idx) => renderParsedBlock(block, idx))
+      ) : (
+        <div style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>
+          No content. Switch to edit mode to write.
+        </div>
+      )}
     </div>
   );
 }
