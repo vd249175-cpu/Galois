@@ -393,10 +393,22 @@ export function MarkdownPreview({
 
   const blocks = parseMarkdownIntoBlocks(effectiveContent);
 
+  const handleDeleteBlock = (block: ParsedBlock) => {
+    const allLines = content.split('\n');
+    allLines.splice(block.startLine, block.endLine - block.startLine + 1);
+    onContentChange(allLines.join('\n'));
+  };
+
   const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
     if (!isPreviewMode) return element;
 
     const isCurrentlyDragged = draggedBlockKey === block.key;
+
+    const trimText = block.rawText.trim();
+    const isMedia = (
+      (trimText.startsWith('![') && trimText.endsWith(')')) ||
+      (trimText.startsWith('@video[') && trimText.endsWith(')'))
+    );
 
     return (
       <div
@@ -452,6 +464,18 @@ export function MarkdownPreview({
         <div style={{ flex: 1, minWidth: 0 }}>
           {element}
         </div>
+        {isMedia && (
+          <button
+            className="media-delete-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteBlock(block);
+            }}
+            title="清除此媒体文件"
+          >
+            ✕
+          </button>
+        )}
       </div>
     );
   };
@@ -1099,6 +1123,37 @@ export function MarkdownPreview({
         }
         .wiki-link:hover {
           opacity: 0.8;
+        }
+        .media-delete-btn {
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          width: 26px;
+          height: 26px;
+          border-radius: 50%;
+          background: rgba(255, 59, 48, 0.12);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 59, 48, 0.25);
+          color: #ff3b30;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          opacity: 0;
+          transform: scale(0.9);
+          transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s, color 0.2s, box-shadow 0.2s;
+          z-index: 100;
+        }
+        .preview-block-wrapper:hover .media-delete-btn {
+          opacity: 1;
+          transform: scale(1);
+        }
+        .media-delete-btn:hover {
+          background: #ff3b30;
+          color: #ffffff;
+          border-color: transparent;
+          box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
         }
       ` }} />
       {effectiveContent ? (
