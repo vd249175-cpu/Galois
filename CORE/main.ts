@@ -94,14 +94,58 @@ app.whenReady().then(async () => {
         return new Response('File Not Found', { status: 404 });
       }
 
-      // Serve the file using Electron's native net.fetch.
-      // This delegates range requests, seeking, caching, and streaming completely to Chromium's native C++ file loader.
-      // It is 100% zero-copy, highly optimized, prevents OOM crashes on large files, and resolves all custom range implementation limits.
-      const fileUrl = pathToFileURL(filePath).toString();
-      return net.fetch(fileUrl, {
-        bypassCustomProtocolHandlers: true,
-        headers: request.headers
-      });
+      const stat = fs.statSync(filePath);
+      const totalSize = stat.size;
+      const rangeHeader = request.headers.get('range');
+
+      // Guess Content-Type based on extension
+      const ext = path.extname(filePath).toLowerCase();
+      let contentType = 'application/octet-stream';
+      if (ext === '.mp4') contentType = 'video/mp4';
+      else if (ext === '.webm') contentType = 'video/webm';
+      else if (ext === '.ogg') contentType = 'video/ogg';
+      else if (ext === '.mp3') contentType = 'audio/mpeg';
+      else if (ext === '.wav') contentType = 'audio/wav';
+      else if (ext === '.m4a') contentType = 'audio/mp4';
+      else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
+      else if (ext === '.png') contentType = 'image/png';
+      else if (ext === '.gif') contentType = 'image/gif';
+      else if (ext === '.svg') contentType = 'image/svg+xml';
+      else if (ext === '.webp') contentType = 'image/webp';
+
+      if (rangeHeader) {
+        // Parse Range Header: "bytes=start-end"
+        const parts = rangeHeader.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+        const chunkStart = Math.max(0, isNaN(start) ? 0 : start);
+        const chunkEnd = Math.min(totalSize - 1, isNaN(end) ? totalSize - 1 : end);
+        const chunkSize = chunkEnd - chunkStart + 1;
+
+        console.log('[dnote-file Range Read]', { filePath, chunkStart, chunkEnd, chunkSize });
+
+        const fd = fs.openSync(filePath, 'r');
+        const buffer = Buffer.alloc(chunkSize);
+        fs.readSync(fd, buffer, 0, chunkSize, chunkStart);
+        fs.closeSync(fd);
+
+        return new Response(buffer, {
+          status: 206,
+          statusText: 'Partial Content',
+          headers: {
+            'Content-Type': contentType,
+            'Content-Range': `bytes ${chunkStart}-${chunkEnd}/${totalSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': String(chunkSize)
+          }
+        });
+      } else {
+        // Serve full file using electron's native C++ net.fetch (zero-copy and highly optimized)
+        console.log('[dnote-file Full Read]', { filePath, totalSize });
+        const fileUrl = pathToFileURL(filePath).toString();
+        return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true });
+      }
     } catch (err: any) {
       console.error('[dnote-file handler error]', err);
       return new Response('Internal Server Error', { status: 500 });
