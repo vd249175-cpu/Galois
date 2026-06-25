@@ -238,6 +238,7 @@ function VideoTimelineView({
   const wasMutedRef = useRef<boolean>(false);
   const smoothTimeRef = useRef<number>(0);
   const scrubLoopActiveRef = useRef<boolean>(false);
+  const lastSeekTimeRef = useRef<number>(0);
 
   // Sync references to avoid closure capture issues in global action triggers and scrub events
   const currentTimeRef = useRef(currentTime);
@@ -282,7 +283,7 @@ function VideoTimelineView({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     const projectPath = state[BC.system.projectPath] || '';
-    if (!projectPath || !videoPath || segments.length === 0 || duration <= 0) return;
+    if (!projectPath || !videoPath || segments.length === 0 || duration <= 0 || isNaN(duration)) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       const asset: VideoAsset = {
@@ -315,7 +316,7 @@ function VideoTimelineView({
 
   // Keep playhead visible during playback (auto-scroll)
   useEffect(() => {
-    if (!isPlaying || duration <= 0) return;
+    if (!isPlaying || duration <= 0 || isNaN(duration)) return;
     const el = timelineRef.current;
     if (!el) return;
 
@@ -491,6 +492,12 @@ function VideoTimelineView({
   };
 
   const handleTimeUpdate = () => {
+    if (videoRef.current && !isScrubbingRef.current && !videoRef.current.seeking) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleSeeked = () => {
     if (videoRef.current && !isScrubbingRef.current) {
       setCurrentTime(videoRef.current.currentTime);
     }
@@ -511,7 +518,7 @@ function VideoTimelineView({
 
   const handleSplit = () => {
     const t = currentTimeRef.current;
-    if (duration <= 0) return;
+    if (duration <= 0 || isNaN(duration)) return;
 
     setSegments((prev) => {
       const targetIndex = prev.findIndex((s) => s.start <= t && t <= s.end);
@@ -638,7 +645,7 @@ function VideoTimelineView({
   // Alt + Mouse Wheel timeline zooming listener, and vertical scroll horizontal redirection
   useEffect(() => {
     const el = timelineRef.current;
-    if (!el || duration <= 0) return;
+    if (!el || duration <= 0 || isNaN(duration)) return;
 
     const handleWheel = (e: WheelEvent) => {
       if (e.altKey || e.metaKey || e.ctrlKey) {
@@ -689,7 +696,7 @@ function VideoTimelineView({
       if (!isFocused) return;
 
       const el = timelineRef.current;
-      if (!el || duration <= 0) return;
+      if (!el || duration <= 0 || isNaN(duration)) return;
 
       if (e.key === '=' || e.key === '+') {
         e.preventDefault();
@@ -735,7 +742,7 @@ function VideoTimelineView({
   // Easing/smooth loop for scrubbing to ensure buttery-smooth video decoding & playhead rendering
   const startScrubLoop = () => {
     const loop = () => {
-      if (!isScrubbingRef.current || !videoRef.current || duration <= 0) {
+      if (!isScrubbingRef.current || !videoRef.current || duration <= 0 || isNaN(duration)) {
         scrubLoopActiveRef.current = false;
         return;
       }
@@ -758,10 +765,12 @@ function VideoTimelineView({
           timeReadoutRef.current.textContent = formatTime(nextTime);
         }
 
-        // Direct Video Seek - only set if the video is not currently seeking
-        // This allows the browser decoder to complete the seek and display intermediate frames
-        if (!videoRef.current.seeking) {
+        // Throttled Video Seek - allow seek if not seeking, OR if at least 100ms has passed since the last seek
+        // This guarantees that we get intermediate visual frames even during large/fast scrubs
+        const now = Date.now();
+        if (!videoRef.current.seeking || now - lastSeekTimeRef.current > 100) {
           videoRef.current.currentTime = nextTime;
+          lastSeekTimeRef.current = now;
         }
       }
 
@@ -777,7 +786,7 @@ function VideoTimelineView({
   // Scrub calculation utility (handles scroll offsets & scaled track width)
   const scrub = (clientX: number) => {
     const el = timelineRef.current;
-    if (!el || duration <= 0 || !videoRef.current) return;
+    if (!el || duration <= 0 || isNaN(duration) || !videoRef.current) return;
     const rect = el.getBoundingClientRect();
     const currentScrollLeft = el.scrollLeft;
     const clickX = clientX - rect.left + currentScrollLeft;
@@ -802,7 +811,7 @@ function VideoTimelineView({
     // from bubbling up and triggering global Blood state updates during scrubbing.
     e.stopPropagation();
 
-    if (!timelineRef.current || duration <= 0 || !videoRef.current) return;
+    if (!timelineRef.current || duration <= 0 || isNaN(duration) || !videoRef.current) return;
     
     // Ignore scrub if clicking delete button
     if ((e.target as HTMLElement).closest('.segment-delete-btn')) return;
@@ -1326,6 +1335,7 @@ function VideoTimelineView({
               ref={videoRef}
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
+              onSeeked={handleSeeked}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
