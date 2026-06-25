@@ -3,7 +3,7 @@
 DNOTE 是一个基于 **TypeScript / Electron / Vite / React** 打造的现代化、高可定制性桌面工作区。项目核心采用**仿生设计理念**（Biomimetic Architecture），最大程度地实现了各面板组件的模块化解耦与自治性。
 
 ![DNOTE Workspace Showcase](assets/workspace.png)
-![DNOTE Video Timeline Showcase](assets/video_timeline.png)
+![DNOTE Video Timeline Showcase](assets/video_timeline_v2.png)
 
 ---
 
@@ -119,7 +119,7 @@ DNOTE 提供了一套完整的项目级和页面级生命周期与循环调度�
 
 ### 3. 🎬 视频时间轴与无损拉片系统 ([VideoTimelineView.tsx](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/APP/video-timeline/VideoTimelineView.tsx))
 
-![DNOTE Video Timeline Slicer](assets/video_timeline.png)
+![DNOTE Video Timeline Slicer](assets/video_timeline_v2.png)
 
 DNOTE 内置了**视频时间轴与无损拉片剪辑系统**，专为音视频资料整理与细粒度学术/研究拉片设计：
 *   **非破坏性无损剪辑 (Non-destructive persistence)**：系统不修改原始视频文件。所有切分、标注和片段信息均以 JSON 格式持久化于项目 `.dnote_assets/videos/<video_name>.asset.json` 目录中。
