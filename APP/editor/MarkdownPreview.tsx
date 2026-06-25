@@ -237,18 +237,27 @@ export function MarkdownPreview({
 
   const wrapBlock = (element: React.ReactNode, fileLineIndex: number) => {
     if (!isPreviewMode) return element;
-    const body = parseMarkdownBody(content);
     
     return (
-      <div key={`wrapper_${fileLineIndex}`} className="preview-block-wrapper" style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
+      <div
+        key={`wrapper_${fileLineIndex}`}
+        className="preview-block-wrapper"
+        {...getLineDragProps(fileLineIndex)}
+        style={getLineStyle(fileLineIndex, {
+          display: 'flex',
+          alignItems: 'center',
+          width: '100%',
+          position: 'relative',
+        })}
+      >
         <div
           draggable
           onDragStart={(e) => {
             e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/x-dnote-block-line', String(fileLineIndex));
-            const lines = body.split('\n');
-            e.dataTransfer.setData('text/plain', lines[fileLineIndex] || '');
+            const allLines = content.split('\n');
+            e.dataTransfer.setData('text/plain', allLines[fileLineIndex] || '');
           }}
           className="drag-handle"
           style={{
@@ -307,12 +316,9 @@ export function MarkdownPreview({
     if (isPreviewMode && hoveredLineIndex === lineIdx) {
       return {
         ...baseStyle,
-        backgroundColor: 'var(--highlight-color)',
-        boxShadow: '0 0 0 2px var(--accent-color)',
-        borderRadius: '6px',
-        transition: 'all 0.15s ease',
-        padding: '4px 8px',
-        margin: '6px 0',
+        borderTop: '3px solid var(--accent-color, #7000ff)',
+        backgroundColor: 'rgba(112, 0, 255, 0.05)',
+        transition: 'all 0.1s ease',
       };
     }
     return baseStyle;
@@ -556,12 +562,12 @@ export function MarkdownPreview({
           wrapBlock(
             <hr
               key={i}
-              {...getLineDragProps(i)}
-              style={getLineStyle(i, {
+              style={{
                 border: 'none',
                 borderTop: '1px solid var(--border-color)',
-                margin: '16px 0'
-              })}
+                margin: '16px 0',
+                width: '100%',
+              }}
             />,
             fileLineIndex
           )
@@ -574,8 +580,7 @@ export function MarkdownPreview({
           <h1
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700', cursor: 'text' })}
+            style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700', cursor: 'text' }}
           >
             {renderInline(contentVal.substring(2), fileLineIndex)}
           </h1>
@@ -589,8 +594,7 @@ export function MarkdownPreview({
           <h2
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600', cursor: 'text' })}
+            style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600', cursor: 'text' }}
           >
             {renderInline(contentVal.substring(3), fileLineIndex)}
           </h2>
@@ -604,8 +608,7 @@ export function MarkdownPreview({
           <h3
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600', cursor: 'text' })}
+            style={{ margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600', cursor: 'text' }}
           >
             {renderInline(contentVal.substring(4), fileLineIndex)}
           </h3>
@@ -619,8 +622,7 @@ export function MarkdownPreview({
           <div
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text' })}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text' }}
           >
             <input type="checkbox" disabled checked={false} />
             <span>{renderInline(contentVal.substring(6), fileLineIndex)}</span>
@@ -635,8 +637,7 @@ export function MarkdownPreview({
           <div
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55, cursor: 'text' })}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55, cursor: 'text' }}
           >
             <input type="checkbox" disabled checked={true} />
             <span style={{ textDecoration: 'line-through' }}>{renderInline(contentVal.substring(6), fileLineIndex)}</span>
@@ -651,8 +652,7 @@ export function MarkdownPreview({
           <li
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { marginLeft: '16px', margin: '4px 0', fontSize: '13px', cursor: 'text' })}
+            style={{ marginLeft: '16px', margin: '4px 0', fontSize: '13px', cursor: 'text' }}
           >
             {renderInline(contentVal.substring(2), fileLineIndex)}
           </li>
@@ -666,8 +666,7 @@ export function MarkdownPreview({
           <blockquote
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' })}
+            style={{ borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' }}
           >
             {renderInline(contentVal.substring(2), fileLineIndex)}
           </blockquote>
@@ -681,9 +680,8 @@ export function MarkdownPreview({
           <div
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { height: '18px', margin: '4px 0', cursor: 'text', border: '1px dashed transparent' })}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'; }}
+            style={{ height: '18px', margin: '4px 0', cursor: 'text', border: '1px dashed transparent', width: '100%' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
             title="点击在此输入新内容..."
           />
@@ -697,8 +695,7 @@ export function MarkdownPreview({
           <p
             key={i}
             onClick={() => setEditingLineIdx(fileLineIndex)}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px', cursor: 'text' })}
+            style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '13px', cursor: 'text' }}
           >
             {renderInline(contentVal, fileLineIndex)}
           </p>
