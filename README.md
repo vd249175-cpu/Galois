@@ -3,6 +3,7 @@
 DNOTE 是一个基于 **TypeScript / Electron / Vite / React** 打造的现代化、高可定制性桌面工作区。项目核心采用**仿生设计理念**（Biomimetic Architecture），最大程度地实现了各面板组件的模块化解耦与自治性。
 
 ![DNOTE Workspace Showcase](assets/workspace.png)
+![DNOTE Video Timeline Showcase](assets/video_timeline.png)
 
 ---
 
