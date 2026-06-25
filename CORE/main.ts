@@ -120,24 +120,13 @@ app.whenReady().then(async () => {
         const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
 
         const chunkStart = Math.max(0, isNaN(start) ? 0 : start);
-        let chunkEnd = Math.min(totalSize - 1, isNaN(end) ? totalSize - 1 : end);
-
-        // Cap chunk size at 2MB to prevent large memory allocations and OOM crashes
-        const MAX_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
-        if (chunkEnd - chunkStart + 1 > MAX_CHUNK_SIZE) {
-          chunkEnd = chunkStart + MAX_CHUNK_SIZE - 1;
-        }
-
+        const chunkEnd = Math.min(totalSize - 1, isNaN(end) ? totalSize - 1 : end);
         const chunkSize = chunkEnd - chunkStart + 1;
 
-        console.log('[dnote-file Range Read]', { filePath, chunkStart, chunkEnd, chunkSize });
+        console.log('[dnote-file Range Stream]', { filePath, chunkStart, chunkEnd, chunkSize });
 
-        const fd = fs.openSync(filePath, 'r');
-        const buffer = Buffer.alloc(chunkSize);
-        fs.readSync(fd, buffer, 0, chunkSize, chunkStart);
-        fs.closeSync(fd);
-
-        return new Response(buffer, {
+        const stream = fs.createReadStream(filePath, { start: chunkStart, end: chunkEnd });
+        return new Response(stream as any, {
           status: 206,
           statusText: 'Partial Content',
           headers: {
@@ -148,10 +137,16 @@ app.whenReady().then(async () => {
           }
         });
       } else {
-        // Serve full file using electron's native C++ net.fetch (zero-copy and highly optimized)
-        console.log('[dnote-file Full Read]', { filePath, totalSize });
-        const fileUrl = pathToFileURL(filePath).toString();
-        return net.fetch(fileUrl, { bypassCustomProtocolHandlers: true });
+        console.log('[dnote-file Full Stream]', { filePath, totalSize });
+        const stream = fs.createReadStream(filePath);
+        return new Response(stream as any, {
+          status: 200,
+          headers: {
+            'Content-Type': contentType,
+            'Content-Length': String(totalSize),
+            'Accept-Ranges': 'bytes'
+          }
+        });
       }
     } catch (err: any) {
       console.error('[dnote-file handler error]', err);
