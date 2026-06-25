@@ -83,9 +83,9 @@ export function buildClipMarkdown(
   const start = segment.start.toFixed(3);
   const end = segment.end.toFixed(3);
   const label = segment.name || `${formatTimestamp(segment.start)} – ${formatTimestamp(segment.end)}`;
-  // Syntax: @video[label](filename#t=start,end)
+  // Syntax: @video[label](filename?t=start,end)
   // Avoids conflict with [[wikilinks]] and standard markdown
-  return `@video[${label}](${fileName}#t=${start},${end})`;
+  return `@video[${label}](${fileName}?t=${start},${end})`;
 }
 
 export function parseClipSyntax(text: string): {
@@ -94,7 +94,7 @@ export function parseClipSyntax(text: string): {
   start: number;
   end: number;
 } | null {
-  const m = /@video\[([^\]]*)\]\(([^#)]+)#t=([\d.]+),([\d.]+)\)/.exec(text);
+  const m = /@video\[([^\]]*)\]\(([^#?)]+)[#?]t=([\d.]+),([\d.]+)\)/.exec(text);
   if (!m) return null;
   return {
     label: m[1],

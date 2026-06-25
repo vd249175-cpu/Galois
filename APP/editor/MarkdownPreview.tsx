@@ -869,8 +869,8 @@ export function MarkdownPreview({
   const renderInline = (text: string, lineIndex: number) => {
     let parts: React.ReactNode[] = [text];
 
-    // -1. @video clip embeds — @video[label](filename#t=start,end)
-    parts = splitByRegex(parts, /@video\[([^\]]*)\]\(([^#)]+)#t=([\d.]+),([\d.]+)\)/g, (match, idx) => {
+    // -1. @video clip embeds — @video[label](filename?t=start,end) (supports legacy #t= format as well)
+    parts = splitByRegex(parts, /@video\[([^\]]*)\]\(([^#?)]+)[#?]t=([\d.]+),([\d.]+)\)/g, (match, idx) => {
       const label = match[1];
       const fileName = match[2];
       const start = parseFloat(match[3]);

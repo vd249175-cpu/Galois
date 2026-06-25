@@ -102,7 +102,7 @@ DNOTE 提供了一套完整的项目级和页面级生命周期与循环调度�
 
 ## 🛠️ 核心功能子系统 (Subsystems)
 
-### 1. 🎛️ 窗口排版布局引擎 ([LayoutEngine.tsx](file:///Users/apexwave/Desktop/DNOTE/CORE/LayoutEngine.tsx))
+### 1. 🎛️ 窗口排版布局引擎 ([LayoutEngine.tsx](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/CORE/LayoutEngine.tsx))
 *   基于 Blender 风格的递归网格分割算法。
 *   支持拖拽分栏边界实时改变尺寸比例。
 *   支持拖拽面板头部标题：
@@ -110,11 +110,27 @@ DNOTE 提供了一套完整的项目级和页面级生命周期与循环调度�
     *   拖拽至窗口物理边界外时：**独立弹出辅助窗口（Window Popout）**（利用 Electron IPC 新开辟渲染进程窗口）。
     *   在辅助窗口点击“归位”或关闭时：**平滑合并回主格栅窗口**。
 
-### 2. ⌨️ 动作与快捷键反射系统 ([ActionRegistry.ts](file:///Users/apexwave/Desktop/DNOTE/CORE/ActionRegistry.ts))
+### 2. ⌨️ 动作与快捷键反射系统 ([ActionRegistry.ts](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/CORE/ActionRegistry.ts))
 *   通过 `ActionRegistry` 收集注册的所有动作和快捷键。
 *   **动态装配**：插件在 `ComponentRegistry` 注册时，会自动向反射系统注册其支持 of Action、默认快捷键（Shortcut）以及对应的头部工具栏按钮。
 *   **多实例隔离**：按快捷键时，系统通过 `focusedAreaId` 智能将动作路由到目前处于 Focus 状态下的那个具体面板实例中，实现多个编辑器实例的独立热键响应。
-*   **本地持久化**：用户自定义快捷键会以 JSON 结构序列化并存储至 [dnote_shortcuts.json](file:///Users/apexwave/Desktop/DNOTE/dnote_shortcuts.json)。支持在设置面板中进行物理 3D 键帽交互录制和一键 Reset。
+*   **本地持久化**：用户自定义快捷键会以 JSON 结构序列化并存储至 [dnote_shortcuts.json](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/dnote_shortcuts.json)。支持在设置面板中进行物理 3D 键帽交互录制和一键 Reset。
+
+### 3. 🎬 视频时间轴与无损拉片系统 ([VideoTimelineView.tsx](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/APP/video-timeline/VideoTimelineView.tsx))
+
+![DNOTE Video Timeline Slicer](assets/video_timeline.png)
+
+DNOTE 内置了**视频时间轴与无损拉片剪辑系统**，专为音视频资料整理与细粒度学术/研究拉片设计：
+*   **非破坏性无损剪辑 (Non-destructive persistence)**：系统不修改原始视频文件。所有切分、标注和片段信息均以 JSON 格式持久化于项目 `.dnote_assets/videos/<video_name>.asset.json` 目录中。
+*   **高精度帧级定位与缩放 (Frame-accurate zoom & Navigation)**：
+    *   **指针锚定缩放**：时间轴的缩放比例（Zooming）会自动根据当前播放头（Playhead）指针位置作为锚点进行平滑缩放，保证缩放时播放线始终稳定在视野中心。
+    *   **帧级微调**：支持使用键盘 `,` (逗号) 与 `.` (句号) 进行逐帧后退/前进，实现毫秒级剪辑对齐。
+*   **流式快捷键与焦点隔离 (Focused Hotkeys)**：
+    *   通过 `ActionRegistry` 挂载全局/局域快捷键反射：`Space` 控制播放/暂停、`C` 在当前位置快速切分（Split）、`Left / Right` 左右箭头进行秒级快进快退。
+    *   针对多面板拆分场景，实现了**焦点隔离**，确保快捷键动作精准路由至当前激活的视频播放器实例，避免多开冲突。
+*   **双向交互式拉片与 Markdown 联动 (Bionic Markdown Linking)**：
+    *   **拖拽引用**：在时间轴上切分出的片段卡片可以直接拖拽至 Markdown 编辑器中，自动转化为特定的富文本引用标签 `@video[片段名称](视频文件名?t=开始秒数,结束秒数)`（采用 `?t=` 参数传参，规避传统的 `#t=` 哈希值被解析为笔记标签的问题）。
+    *   **独立解析与全屏播放**：Markdown 渲染引擎（`MarkdownPreview`）会自动识别该标签，并将其渲染为交互式视频卡片。点击即可控制主播放器跳转至对应区间，且支持全屏播放、充满容器布局等优化。
 
 ---
 

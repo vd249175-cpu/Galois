@@ -588,10 +588,9 @@ function VideoTimelineView({
   };
 
 
-  // Playback Control Handlers
   const handlePlayPause = () => {
     if (!videoRef.current) return;
-    if (isPlaying) {
+    if (!videoRef.current.paused) {
       videoRef.current.pause();
       setIsPlaying(false);
     } else {
@@ -743,15 +742,13 @@ function VideoTimelineView({
           const nextZoom = Math.max(minZ, Math.min(maxZ, prev * zoomFactor));
           if (nextZoom === prev) return prev;
 
-          // Align scrollLeft to keep the point under the mouse cursor stable
-          const rect = el.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const contentX = mouseX + el.scrollLeft;
-          const pct = contentX / el.scrollWidth;
+          // Align scrollLeft to keep the playhead pointer stable in the viewport
+          const playheadPct = currentTimeRef.current / duration;
+          const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
 
           requestAnimationFrame(() => {
             const newScrollWidth = el.clientWidth * nextZoom;
-            el.scrollLeft = pct * newScrollWidth - mouseX;
+            el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
           });
 
           return nextZoom;
@@ -779,6 +776,11 @@ function VideoTimelineView({
       const isFocused = state[BC.system.focusedAreaId] === areaId;
       if (!isFocused) return;
 
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
       const el = timelineRef.current;
       if (!el || duration <= 0 || isNaN(duration)) return;
 
@@ -790,11 +792,13 @@ function VideoTimelineView({
           const nextZoom = Math.max(minZ, Math.min(maxZ, prev * 1.25));
           if (nextZoom === prev) return prev;
 
-          // Center on playhead
+          // Align scrollLeft to keep the playhead pointer stable in the viewport
           const playheadPct = currentTimeRef.current / duration;
+          const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
+
           requestAnimationFrame(() => {
             const newScrollWidth = el.clientWidth * nextZoom;
-            el.scrollLeft = playheadPct * newScrollWidth - el.clientWidth / 2;
+            el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
           });
           return nextZoom;
         });
@@ -806,14 +810,20 @@ function VideoTimelineView({
           const nextZoom = Math.max(minZ, Math.min(maxZ, prev / 1.25));
           if (nextZoom === prev) return prev;
 
-          // Center on playhead
+          // Align scrollLeft to keep the playhead pointer stable in the viewport
           const playheadPct = currentTimeRef.current / duration;
+          const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
+
           requestAnimationFrame(() => {
             const newScrollWidth = el.clientWidth * nextZoom;
-            el.scrollLeft = playheadPct * newScrollWidth - el.clientWidth / 2;
+            el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
           });
           return nextZoom;
         });
+      } else if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        e.stopPropagation();
+        handlePlayPause();
       }
     };
 

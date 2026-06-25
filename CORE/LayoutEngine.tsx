@@ -16,6 +16,15 @@ export function isNodeCollapsed(node: AreaLayout): boolean {
   return isNodeCollapsed(node.first) && isNodeCollapsed(node.second);
 }
 
+export function getCollapsedNodeIds(node: AreaLayout): string {
+  if (node.type === 'area') {
+    return Blood.getValue(BC.layout.removeArea(node.id), false) ? node.id : '';
+  }
+  const f = getCollapsedNodeIds(node.first);
+  const s = getCollapsedNodeIds(node.second);
+  return [f, s].filter(Boolean).sort().join(',');
+}
+
 export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
   // Subscribe to all layout-related state triggers in Blood
   useEffect(() => {
@@ -109,11 +118,15 @@ interface LayoutEngineViewProps {
 }
 
 function LayoutEngineView({ node, onLayoutChange }: LayoutEngineViewProps) {
-  // Use Blood channel updates to catch hidden/collapse triggers
-  const collapsed = useBloodChannel(
+  // Use Blood channel updates to catch hidden/collapse triggers.
+  // By returning a list of collapsed leaf node IDs, we ensure this component
+  // re-renders whenever any descendant node's collapsed state changes.
+  useBloodChannel(
     [`layout.removeArea.`],
-    () => isNodeCollapsed(node)
+    () => getCollapsedNodeIds(node)
   );
+
+  const collapsed = isNodeCollapsed(node);
 
   if (collapsed) {
     return null;
