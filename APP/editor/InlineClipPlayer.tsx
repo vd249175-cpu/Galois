@@ -143,7 +143,7 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
         display: 'inline-flex',
         flexDirection: 'column',
         width: '100%',
-        maxWidth: '560px',
+        maxWidth: '100%',
         margin: '12px 0',
         borderRadius: '8px',
         overflow: 'hidden',
