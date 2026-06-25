@@ -1390,6 +1390,10 @@ function VideoTimelineView({
               onSeeked={handleSeeked}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
+              onError={(e) => {
+                const err = videoRef.current?.error;
+                console.error('[VideoTimeline] Video load error:', err ? { code: err.code, message: err.message } : e);
+              }}
               style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             />
 
