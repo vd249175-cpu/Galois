@@ -249,7 +249,7 @@ function VideoTimelineView({
 
   // Diagnostic lifecycle logger
   useEffect(() => {
-    console.log('[VideoTimeline] Component mounted');
+    console.log('[VideoTimeline] Component mounted, videoPath from localStorage:', videoPath);
     return () => {
       console.log('[VideoTimeline] Component unmounted');
     };
@@ -260,8 +260,10 @@ function VideoTimelineView({
     if (videoRef.current) {
       if (videoPath) {
         const cleanPath = encodeURI(videoPath).replace(/^\//, '');
+        console.log('[VideoTimeline] Setting video src to:', `dnote-file://${cleanPath}`);
         videoRef.current.src = `dnote-file://${cleanPath}`;
       } else {
+        console.log('[VideoTimeline] Setting video src to empty string');
         videoRef.current.src = '';
       }
     }
@@ -269,6 +271,7 @@ function VideoTimelineView({
 
   // Persist video path to localStorage and reset states on change
   useEffect(() => {
+    console.log('[VideoTimeline] videoPath state changed, resetting dependent states:', videoPath);
     setThumbnails([]);
     setSegments([]);
     setSelectedSegmentIds(new Set());
@@ -287,7 +290,10 @@ function VideoTimelineView({
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     const projectPath = state[BC.system.projectPath] || '';
-    if (!isAssetLoaded || !projectPath || !videoPath || segments.length === 0 || duration <= 0 || isNaN(duration)) return;
+    if (!isAssetLoaded || !projectPath || !videoPath || segments.length === 0 || duration <= 0 || isNaN(duration)) {
+      console.log('[VideoTimeline] Auto-save skipped:', { isAssetLoaded, projectPath, videoPath, segmentsCount: segments.length, duration });
+      return;
+    }
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
       const asset: VideoAsset = {
@@ -299,6 +305,7 @@ function VideoTimelineView({
         updatedAt: new Date().toISOString(),
         segments,
       };
+      console.log('[VideoTimeline] Auto-saving asset file:', asset);
       saveAsset(projectPath, asset);
     }, 600);
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
@@ -351,18 +358,28 @@ function VideoTimelineView({
   // Setup initial segments and load asset when duration, videoPath, and projectPath are resolved
   useEffect(() => {
     const projectPath = state[BC.system.projectPath] || '';
-    if (!projectPath || !videoPath || duration <= 0 || isNaN(duration)) return;
+    console.log('[VideoTimeline] restoreAsset hook fired:', { projectPath, videoPath, duration });
+    if (!projectPath || !videoPath || duration <= 0 || isNaN(duration)) {
+      console.log('[VideoTimeline] restoreAsset hook skipped (incomplete parameters)');
+      return;
+    }
 
     let active = true;
     const restoreAsset = async () => {
+      console.log('[VideoTimeline] restoreAsset: Loading asset JSON...');
       const asset = await loadAsset(projectPath, videoPath);
-      if (!active) return;
+      if (!active) {
+        console.log('[VideoTimeline] restoreAsset: hook unmounted during load, aborting');
+        return;
+      }
 
       if (asset && asset.segments.length > 0) {
+        console.log('[VideoTimeline] restoreAsset success: loaded segments:', asset.segments);
         setSegments(asset.segments);
         setSelectedSegmentIds(new Set([asset.segments[0].id]));
       } else {
         // No saved asset — create the default full-video segment
+        console.log('[VideoTimeline] restoreAsset: no saved asset found. Creating default segment.');
         const defaultSeg: VideoSegment = {
           id: 'seg-1',
           start: 0,
@@ -375,6 +392,7 @@ function VideoTimelineView({
       }
 
       setIsAssetLoaded(true);
+      console.log('[VideoTimeline] restoreAsset complete. Triggering extractThumbnails...');
       extractThumbnails(videoPath, duration, projectPath);
     };
 
@@ -388,13 +406,19 @@ function VideoTimelineView({
   // Setup video duration when video metadata is resolved
   const handleLoadedMetadata = () => {
     if (videoRef.current) {
-      setDuration(videoRef.current.duration);
+      const dur = videoRef.current.duration;
+      console.log('[VideoTimeline] Loaded video metadata: duration =', dur);
+      setDuration(dur);
     }
   };
 
   // Dual-mode fast frame extractor (FFmpeg background command with HTML5 fallback)
   const extractThumbnails = async (path: string, dur: number, projectPath: string) => {
-    if (!path || dur <= 0) return;
+    if (!path || dur <= 0) {
+      console.log('[VideoTimeline] extractThumbnails skipped: invalid parameters');
+      return;
+    }
+    console.log('[VideoTimeline] extractThumbnails start:', { path, dur, projectPath });
     setIsExtractingThumbnails(true);
     
     // We pre-extract 30 thumbnails to cover high zoom density details
@@ -405,6 +429,7 @@ function VideoTimelineView({
     if (projectPath) {
       try {
         const cacheDir = `${projectPath}/.dnote_cache/video-timeline/${areaId}`;
+        console.log('[VideoTimeline] extractThumbnails trying native FFmpeg in directory:', cacheDir);
         
         // Build parallel commands running with & and wait
         const cleanCacheCmd = `mkdir -p "${cacheDir}" && rm -f "${cacheDir}/thumb_*.jpg"`;
@@ -417,6 +442,7 @@ function VideoTimelineView({
         
         const shellCmd = `${cleanCacheCmd} && ${ffmpegTasks.join(' ')} wait`;
 
+        console.log('[VideoTimeline] extractThumbnails executing native FFmpeg command:', shellCmd);
         // Run in shell asynchronously (does not block renderer UI)
         await (window as any).electronAPI.execCommand(shellCmd, projectPath);
 
@@ -425,6 +451,7 @@ function VideoTimelineView({
           const cleanPath = `${cacheDir}/thumb_${i + 1}.jpg`.replace(/^\//, '');
           return `dnote-file://${cleanPath}`;
         });
+        console.log('[VideoTimeline] extractThumbnails native extraction success, thumbnail count:', paths.length);
         setThumbnails(paths);
         setIsExtractingThumbnails(false);
         return; // Success! Exit early
@@ -434,7 +461,7 @@ function VideoTimelineView({
     }
 
     // 2. Fallback to HTML5 browser-level canvas sequential seeking if projectPath is empty or FFmpeg fails
-    // (We extract 15 frames in fallback mode to prevent rendering slowdowns)
+    console.log('[VideoTimeline] extractThumbnails falling back to HTML5 canvas seeking...');
     const fallbackCount = 15;
     const fallbackStep = dur / fallbackCount;
     const list: string[] = new Array(fallbackCount).fill('');
@@ -496,6 +523,7 @@ function VideoTimelineView({
         setThumbnails([...list]);
       }
 
+      console.log('[VideoTimeline] extractThumbnails HTML5 fallback extraction complete.');
       tempVideo.src = '';
       tempVideo.load();
     } catch (e) {
@@ -513,6 +541,7 @@ function VideoTimelineView({
 
   const handleSeeked = () => {
     if (videoRef.current && !isScrubbingRef.current) {
+      console.log('[VideoTimeline] Video element handleSeeked: currentTime =', videoRef.current.currentTime);
       setCurrentTime(videoRef.current.currentTime);
     }
   };
@@ -838,6 +867,7 @@ function VideoTimelineView({
       e.preventDefault();
       e.stopPropagation();
       
+      console.log('[VideoTimeline] Empty track mousedown: initiating pan drag');
       if (panRef.current.animationFrameId) {
         cancelAnimationFrame(panRef.current.animationFrameId);
         panRef.current.animationFrameId = 0;
@@ -862,7 +892,9 @@ function VideoTimelineView({
         e.preventDefault();
         e.stopPropagation();
 
+        console.log('[VideoTimeline] Ruler/playhead mousedown: initiating playhead scrub at clientX =', e.clientX);
         if (isPlaying && videoRef.current) {
+          console.log('[VideoTimeline] Video was playing, pausing during scrub');
           videoRef.current.pause();
           setIsPlaying(false);
         }
@@ -896,6 +928,7 @@ function VideoTimelineView({
       e.preventDefault();
       e.stopPropagation();
       
+      console.log('[VideoTimeline] MouseUp event triggered. Ending scrub. scrubbedTime =', scrubbedTimeRef.current);
       setIsScrubbing(false);
       isScrubbingRef.current = false;
 
@@ -905,11 +938,13 @@ function VideoTimelineView({
 
       if (scrubbedTimeRef.current !== null) {
         if (videoRef.current) {
+          console.log('[VideoTimeline] MouseUp final video currentTime seek to:', scrubbedTimeRef.current);
           videoRef.current.currentTime = scrubbedTimeRef.current;
         }
         setCurrentTime(scrubbedTimeRef.current);
         scrubbedTimeRef.current = null;
       } else {
+        console.log('[VideoTimeline] MouseUp final video currentTime fallback to smoothTime:', smoothTimeRef.current);
         setCurrentTime(smoothTimeRef.current);
       }
     };
