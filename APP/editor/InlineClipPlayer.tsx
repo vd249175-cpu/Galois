@@ -127,6 +127,20 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
     window.addEventListener('mouseup', onUp, { capture: true });
   };
 
+  const handleFullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.requestFullscreen) {
+      v.requestFullscreen();
+    } else if ((v as any).webkitRequestFullscreen) {
+      (v as any).webkitRequestFullscreen();
+    } else if ((v as any).mozRequestFullScreen) {
+      (v as any).mozRequestFullScreen();
+    } else if ((v as any).msRequestFullscreen) {
+      (v as any).msRequestFullscreen();
+    }
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => { cancelAnimationFrame(rafRef.current); };
@@ -178,6 +192,10 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
           onTimeUpdate={handleTimeUpdate}
           onEnded={() => setIsPlaying(false)}
           onError={() => setError(true)}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            handleFullscreen();
+          }}
           style={{ width: '100%', height: 'auto', display: 'block' }}
         />
 
@@ -276,6 +294,45 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
           >
             <span ref={timeReadRef}>0:00 / {formatTimestamp(duration)}</span>
           </div>
+        )}
+
+        {/* Fullscreen Overlay Button */}
+        {loaded && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleFullscreen();
+            }}
+            style={{
+              position: 'absolute',
+              bottom: 16,
+              right: 12,
+              background: 'rgba(0,0,0,0.65)',
+              backdropFilter: 'blur(4px)',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              fontSize: '11px',
+              color: '#fff',
+              cursor: 'pointer',
+              opacity: showOverlay ? 1 : 0,
+              transition: 'opacity 0.2s ease, background-color 0.2s',
+              zIndex: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              outline: 'none',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(0,0,0,0.65)';
+            }}
+            title="全屏播放"
+          >
+            ⛶
+          </button>
         )}
 
         {/* Draggable Scrubber Overlay (Absolute Bottom) */}
