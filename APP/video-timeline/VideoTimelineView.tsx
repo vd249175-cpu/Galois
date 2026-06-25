@@ -259,7 +259,8 @@ function VideoTimelineView({
   useEffect(() => {
     if (videoRef.current) {
       if (videoPath) {
-        const cleanPath = encodeURI(videoPath).replace(/^\//, '');
+        const absolutePath = videoPath.startsWith('/') ? videoPath : `/${videoPath}`;
+        const cleanPath = encodeURI(absolutePath);
         console.log('[VideoTimeline] Setting video src to:', `dnote-file://${cleanPath}`);
         videoRef.current.src = `dnote-file://${cleanPath}`;
       } else {
@@ -448,8 +449,9 @@ function VideoTimelineView({
 
         // Populate thumbnails state with local custom scheme URLs
         const paths = Array.from({ length: frameCount }).map((_, i) => {
-          const cleanPath = `${cacheDir}/thumb_${i + 1}.jpg`.replace(/^\//, '');
-          return `dnote-file://${cleanPath}`;
+          const fullPath = `${cacheDir}/thumb_${i + 1}.jpg`;
+          const absolutePath = fullPath.startsWith('/') ? fullPath : `/${fullPath}`;
+          return `dnote-file://${encodeURI(absolutePath)}`;
         });
         console.log('[VideoTimeline] extractThumbnails native extraction success, thumbnail count:', paths.length);
         setThumbnails(paths);
@@ -469,7 +471,8 @@ function VideoTimelineView({
 
     try {
       const tempVideo = document.createElement('video');
-      const normalizedPath = encodeURI(path).replace(/^\//, '');
+      const absolutePath = path.startsWith('/') ? path : `/${path}`;
+      const normalizedPath = encodeURI(absolutePath);
       tempVideo.src = `dnote-file://${normalizedPath}`;
       tempVideo.muted = true;
       tempVideo.playsInline = true;

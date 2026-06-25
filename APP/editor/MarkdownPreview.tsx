@@ -564,7 +564,8 @@ export function MarkdownPreview({
         }
         const isRelative = !cleanPath.startsWith('/');
         const absolutePath = isRelative ? `${projectPath}/${cleanPath}` : cleanPath;
-        finalSrc = `dnote-file://${absolutePath}`;
+        const normalizedPath = absolutePath.startsWith('/') ? absolutePath : `/${absolutePath}`;
+        finalSrc = `dnote-file://${encodeURI(normalizedPath)}`;
       }
 
       const cleanUrl = url.split('#')[0].split('?')[0];

@@ -35,9 +35,13 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
   const duration = end - start;
 
   // Resolve video src — search .dnote_assets/videos/ for the file
-  const videoSrc = projectPath
-    ? `dnote-file://${projectPath}/.dnote_assets/videos/${fileName}`.replace(/^dnote-file:\/\/\//, 'dnote-file://')
-    : '';
+  const getAbsoluteVideoSrc = () => {
+    if (!projectPath) return '';
+    const fullPath = `${projectPath}/.dnote_assets/videos/${fileName}`;
+    const absolutePath = fullPath.startsWith('/') ? fullPath : `/${fullPath}`;
+    return `dnote-file://${encodeURI(absolutePath)}`;
+  };
+  const videoSrc = getAbsoluteVideoSrc();
 
   const clampTime = (t: number) => Math.max(start, Math.min(end, t));
 
