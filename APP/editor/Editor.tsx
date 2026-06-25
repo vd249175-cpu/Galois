@@ -1031,6 +1031,11 @@ function EditorView({
     lastHistoryContentRef.current = resolvedVal;
   };
 
+  const handlePreviewContentChange = (newContent: string) => {
+    setContent(newContent);
+    saveNodeFile(newContent);
+  };
+
   const {
     isDraggingFile,
     hoveredLineIndex,
@@ -1657,6 +1662,7 @@ function EditorView({
       {isPreviewMode ? (
         <MarkdownPreview
           content={content}
+          onContentChange={handlePreviewContentChange}
           areaId={areaId}
           projectPath={projectPath}
           state={state}

@@ -105,10 +105,33 @@ export function useMediaDrop({
     e.stopPropagation();
     setHoveredLineIndex(null);
 
-    // Priority 1: Video clip text (from timeline segment drag)
+    // Priority 1: Block line drag (moving blocks)
+    const sourceLineStr = e.dataTransfer.getData('text/x-dnote-block-line');
+    if (sourceLineStr !== '') {
+      const sourceLineIdx = parseInt(sourceLineStr, 10);
+      if (!isNaN(sourceLineIdx) && sourceLineIdx !== lineIdx) {
+        const yamlLines = getFrontmatterLineCount(contentRef.current);
+        const allLines = contentRef.current.split('\n');
+        
+        const absSourceIdx = yamlLines + sourceLineIdx;
+        const absTargetIdx = yamlLines + lineIdx;
+        
+        const lineText = allLines[absSourceIdx];
+        
+        allLines.splice(absSourceIdx, 1);
+        allLines.splice(absTargetIdx, 0, lineText);
+        
+        const nextContent = allLines.join('\n');
+        setContent(nextContent);
+        saveNodeFile(nextContent);
+        setStatusMessage('区块已移动');
+        return;
+      }
+    }
+
+    // Priority 2: Video clip text (from timeline segment drag)
     const clipText = e.dataTransfer.getData('text/x-dnote-clip');
     if (clipText) {
-      const { getFrontmatterLineCount } = await import('../editorUtils');
       const yamlLines = getFrontmatterLineCount(contentRef.current);
       const lines = contentRef.current.split('\n');
       lines.splice(yamlLines + lineIdx + 1, 0, clipText);
@@ -119,7 +142,7 @@ export function useMediaDrop({
       return;
     }
 
-    // Priority 2: File drop (image/video/audio)
+    // Priority 3: File drop (image/video/audio)
     const files = e.dataTransfer.files;
     if (files.length === 0) return;
     await archiveAndInsert(files[0], lineIdx);

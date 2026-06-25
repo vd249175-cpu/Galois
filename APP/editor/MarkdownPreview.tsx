@@ -127,6 +127,7 @@ export function MermaidRenderer({ code }: { code: string }) {
 
 interface MarkdownPreviewProps {
   content: string;
+  onContentChange: (newContent: string) => void;
   areaId: string;
   projectPath: string;
   state: Record<string, any>;
@@ -141,6 +142,7 @@ interface MarkdownPreviewProps {
 
 export function MarkdownPreview({
   content,
+  onContentChange,
   areaId,
   projectPath,
   state,
@@ -152,13 +154,141 @@ export function MarkdownPreview({
   handleLineDrop,
   currentFile,
 }: MarkdownPreviewProps) {
+  const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
+  const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
+
+  const updateMarkdownLines = (startLineIdx: number, endLineIdx: number, newLines: string[]) => {
+    let frontmatterLinesOffset = 0;
+    const body = parseMarkdownBody(content);
+    if (body !== content) {
+      const bodyIndex = content.indexOf(body);
+      const prefix = content.substring(0, bodyIndex);
+      frontmatterLinesOffset = prefix.split('\n').length - 1;
+    }
+
+    const allLines = content.split('\n');
+    const absoluteStart = frontmatterLinesOffset + startLineIdx;
+    const absoluteEnd = frontmatterLinesOffset + endLineIdx;
+
+    allLines.splice(absoluteStart, absoluteEnd - absoluteStart + 1, ...newLines);
+    onContentChange(allLines.join('\n'));
+  };
+
+  const handleTableCellEdit = (lineIdx: number, colIdx: number, newCellVal: string) => {
+    const body = parseMarkdownBody(content);
+    const lines = body.split('\n');
+    const originalLine = lines[lineIdx];
+    if (!originalLine) return;
+
+    const cells = originalLine.split('|');
+    cells[colIdx + 1] = ` ${newCellVal.trim()} `;
+    const newLineText = cells.join('|');
+    updateMarkdownLines(lineIdx, lineIdx, [newLineText]);
+  };
+
+  const renderBlockEditor = (lineIdx: number, rawText: string) => {
+    return (
+      <div
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={(e) => {
+          const newText = e.currentTarget.textContent || '';
+          updateMarkdownLines(lineIdx, lineIdx, [newText]);
+          setEditingLineIdx(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+        }}
+        style={{
+          fontFamily: 'inherit',
+          fontSize: '13px',
+          color: 'var(--text-main)',
+          background: 'rgba(255,255,255,0.04)',
+          border: '1.2px dashed var(--accent-color, #7000ff)',
+          outline: 'none',
+          padding: '6px 10px',
+          borderRadius: '4px',
+          margin: '6px 0',
+          width: '100%',
+          boxSizing: 'border-box',
+          minHeight: '24px',
+        }}
+        ref={(el) => {
+          if (el) {
+            el.focus();
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            if (sel) {
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          }
+        }}
+      >
+        {rawText}
+      </div>
+    );
+  };
+
+  const wrapBlock = (element: React.ReactNode, fileLineIndex: number) => {
+    if (!isPreviewMode) return element;
+    const body = parseMarkdownBody(content);
+    
+    return (
+      <div key={`wrapper_${fileLineIndex}`} className="preview-block-wrapper" style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
+        <div
+          draggable
+          onDragStart={(e) => {
+            e.stopPropagation();
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/x-dnote-block-line', String(fileLineIndex));
+            const lines = body.split('\n');
+            e.dataTransfer.setData('text/plain', lines[fileLineIndex] || '');
+          }}
+          className="drag-handle"
+          style={{
+            position: 'absolute',
+            left: '-20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            cursor: 'grab',
+            opacity: 0,
+            transition: 'opacity 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            color: 'var(--text-muted, #888)',
+            fontSize: '14px',
+            zIndex: 10,
+            width: '16px',
+            justifyContent: 'center',
+          }}
+          title="拖拽以移动此区块"
+        >
+          ⣿
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {element}
+        </div>
+      </div>
+    );
+  };
+
   const getLineDragProps = (lineIdx: number) => {
     if (!isPreviewMode) return {};
     return {
       onDragOver: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/x-dnote-clip')) {
+        if (
+          e.dataTransfer.types.includes('Files') ||
+          e.dataTransfer.types.includes('text/x-dnote-clip') ||
+          e.dataTransfer.types.includes('text/x-dnote-block-line')
+        ) {
           setHoveredLineIndex(lineIdx);
         }
       },
@@ -194,7 +324,6 @@ export function MarkdownPreview({
     if (body !== md) {
       const bodyIndex = md.indexOf(body);
       const prefix = md.substring(0, bodyIndex);
-      // Split the prefix and count elements to get the correct line breaks offset
       frontmatterLinesOffset = prefix.split('\n').length - 1;
     }
 
@@ -217,32 +346,63 @@ export function MarkdownPreview({
         }
         const codeText = codeLines.join('\n');
         
-        if (lang.toLowerCase() === 'mermaid') {
-          elements.push(
-            <MermaidRenderer key={`mermaid_${i}`} code={codeText} />
-          );
-        } else {
-          elements.push(
-            <div key={`codeblock_${i}`} style={{ margin: '14px 0', overflowX: 'auto' }}>
-              <pre
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '12px',
-                  backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.03))',
-                  padding: '12px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-main)',
-                  margin: 0,
-                  whiteSpace: 'pre'
-                }}
-              >
-                <code>{codeText}</code>
-              </pre>
-            </div>
-          );
-        }
-
+        const isEditing = editingLineIdx === fileLineIndex;
+        
+        const blockEl = isEditing ? (
+          <textarea
+            defaultValue={codeText}
+            onBlur={(e) => {
+              const newCode = e.currentTarget.value;
+              const newLines = ['```' + lang, ...newCode.split('\n'), '```'];
+              updateMarkdownLines(fileLineIndex, fileLineIndex + codeLines.length + 1, newLines);
+              setEditingLineIdx(null);
+            }}
+            style={{
+              width: '100%',
+              minHeight: '120px',
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: '12px',
+              backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.05))',
+              padding: '12px',
+              borderRadius: '6px',
+              border: '1px solid var(--accent-color, #7000ff)',
+              color: 'var(--text-main)',
+              resize: 'vertical',
+              outline: 'none',
+              boxSizing: 'border-box',
+              margin: '12px 0',
+            }}
+            ref={(el) => {
+              if (el) el.focus();
+            }}
+          />
+        ) : (
+          <div onClick={() => setEditingLineIdx(fileLineIndex)} style={{ cursor: 'text', width: '100%' }}>
+            {lang.toLowerCase() === 'mermaid' ? (
+              <MermaidRenderer key={`mermaid_${i}`} code={codeText} />
+            ) : (
+              <div key={`codeblock_${i}`} style={{ margin: '14px 0', overflowX: 'auto' }}>
+                <pre
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '12px',
+                    backgroundColor: 'var(--bg-secondary, rgba(0, 0, 0, 0.03))',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    margin: 0,
+                    whiteSpace: 'pre'
+                  }}
+                >
+                  <code>{codeText}</code>
+                </pre>
+              </div>
+            )}
+          </div>
+        );
+        
+        elements.push(wrapBlock(blockEl, fileLineIndex));
         i = j + 1; // skip past closing backticks
         continue;
       }
@@ -250,7 +410,7 @@ export function MarkdownPreview({
       // ── Table Parsing ────────────────────────────────────────────────────────
       const isTableRow = (l: string) => l.trim().startsWith('|') && l.trim().endsWith('|');
       const isSeparatorRow = (l: string) => l.trim().startsWith('|') && /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l.trim());
-
+      
       if (i + 1 < lines.length && isTableRow(line) && isSeparatorRow(lines[i+1])) {
         const headerRow = line;
         const separatorRow = lines[i+1];
@@ -285,8 +445,8 @@ export function MarkdownPreview({
         }
 
         // Render table
-        elements.push(
-          <div key={`table_${i}`} style={{ overflowX: 'auto', margin: '14px 0' }}>
+        const tableEl = (
+          <div key={`table_${i}`} style={{ overflowX: 'auto', margin: '14px 0', width: '100%' }}>
             <table
               style={{
                 width: '100%',
@@ -298,20 +458,39 @@ export function MarkdownPreview({
             >
               <thead>
                 <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.015)' }}>
-                  {headerCells.map((cell, colIdx) => (
-                    <th
-                      key={`th_${colIdx}`}
-                      style={{
-                        padding: '8px 12px',
-                        fontWeight: '600',
-                        textAlign: (alignments[colIdx] || 'left') as any,
-                        color: 'var(--text-main)',
-                        borderBottom: '2px solid var(--border-color)'
-                      }}
-                    >
-                      {renderInline(cell, fileLineIndex)}
-                    </th>
-                  ))}
+                  {headerCells.map((cell, colIdx) => {
+                    const isCellActive = activeCell?.lineIdx === fileLineIndex && activeCell?.colIdx === colIdx;
+                    return (
+                      <th
+                        key={`th_${colIdx}`}
+                        contentEditable
+                        suppressContentEditableWarning
+                        onFocus={() => setActiveCell({ lineIdx: fileLineIndex, colIdx })}
+                        onBlur={(e) => {
+                          const newCellVal = e.currentTarget.textContent || '';
+                          handleTableCellEdit(fileLineIndex, colIdx, newCellVal);
+                          setActiveCell(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        style={{
+                          padding: '8px 12px',
+                          fontWeight: '600',
+                          textAlign: (alignments[colIdx] || 'left') as any,
+                          color: 'var(--text-main)',
+                          borderBottom: '2px solid var(--border-color)',
+                          outline: 'none',
+                          backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
+                        }}
+                      >
+                        {isCellActive ? cell : renderInline(cell, fileLineIndex)}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
@@ -325,16 +504,34 @@ export function MarkdownPreview({
                   >
                     {headerCells.map((_, colIdx) => {
                       const cellVal = rowCells[colIdx] || '';
+                      const cellLineIndex = fileLineIndex + 2 + rowIdx;
+                      const isCellActive = activeCell?.lineIdx === cellLineIndex && activeCell?.colIdx === colIdx;
                       return (
                         <td
                           key={`td_${rowIdx}_${colIdx}`}
+                          contentEditable
+                          suppressContentEditableWarning
+                          onFocus={() => setActiveCell({ lineIdx: cellLineIndex, colIdx })}
+                          onBlur={(e) => {
+                            const newCellVal = e.currentTarget.textContent || '';
+                            handleTableCellEdit(cellLineIndex, colIdx, newCellVal);
+                            setActiveCell(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            }
+                          }}
                           style={{
                             padding: '8px 12px',
                             textAlign: (alignments[colIdx] || 'left') as any,
-                            color: 'var(--text-main)'
+                            color: 'var(--text-main)',
+                            outline: 'none',
+                            backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
                           }}
                         >
-                          {renderInline(cellVal, fileLineIndex + 2 + rowIdx)}
+                          {isCellActive ? cellVal : renderInline(cellVal, cellLineIndex)}
                         </td>
                       );
                     })}
@@ -345,116 +542,168 @@ export function MarkdownPreview({
           </div>
         );
 
+        elements.push(wrapBlock(tableEl, fileLineIndex));
         i = j; // skip forward
         continue;
       }
 
       // Default line parsers
-      let content = line;
+      let contentVal = line;
       const isHorizontalRule = (l: string) => /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
 
-      if (isHorizontalRule(content)) {
+      if (isHorizontalRule(contentVal)) {
         elements.push(
-          <hr
-            key={i}
-            {...getLineDragProps(i)}
-            style={getLineStyle(i, {
-              border: 'none',
-              borderTop: '1px solid var(--border-color)',
-              margin: '16px 0'
-            })}
-          />
+          wrapBlock(
+            <hr
+              key={i}
+              {...getLineDragProps(i)}
+              style={getLineStyle(i, {
+                border: 'none',
+                borderTop: '1px solid var(--border-color)',
+                margin: '16px 0'
+              })}
+            />,
+            fileLineIndex
+          )
         );
-      } else if (content.startsWith('# ')) {
-        elements.push(
+      } else if (contentVal.startsWith('# ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <h1
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700' })}
+            style={getLineStyle(i, { borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700', cursor: 'text' })}
           >
-            {renderInline(content.substring(2), fileLineIndex)}
+            {renderInline(contentVal.substring(2), fileLineIndex)}
           </h1>
         );
-      } else if (content.startsWith('## ')) {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.startsWith('## ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <h2
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600' })}
+            style={getLineStyle(i, { borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600', cursor: 'text' })}
           >
-            {renderInline(content.substring(3), fileLineIndex)}
+            {renderInline(contentVal.substring(3), fileLineIndex)}
           </h2>
         );
-      } else if (content.startsWith('### ')) {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.startsWith('### ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <h3
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600' })}
+            style={getLineStyle(i, { margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600', cursor: 'text' })}
           >
-            {renderInline(content.substring(4), fileLineIndex)}
+            {renderInline(contentVal.substring(4), fileLineIndex)}
           </h3>
         );
-      } else if (content.startsWith('- [ ] ')) {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.startsWith('- [ ] ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <div
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0' })}
+            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text' })}
           >
             <input type="checkbox" disabled checked={false} />
-            <span>{renderInline(content.substring(6), fileLineIndex)}</span>
+            <span>{renderInline(contentVal.substring(6), fileLineIndex)}</span>
           </div>
         );
-      } else if (content.startsWith('- [x] ')) {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.startsWith('- [x] ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <div
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55 })}
+            style={getLineStyle(i, { display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', opacity: 0.55, cursor: 'text' })}
           >
             <input type="checkbox" disabled checked={true} />
-            <span style={{ textDecoration: 'line-through' }}>{renderInline(content.substring(6), fileLineIndex)}</span>
+            <span style={{ textDecoration: 'line-through' }}>{renderInline(contentVal.substring(6), fileLineIndex)}</span>
           </div>
         );
-      } else if (content.startsWith('- ')) {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.startsWith('- ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <li
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { marginLeft: '16px', margin: '4px 0', fontSize: '13px' })}
+            style={getLineStyle(i, { marginLeft: '16px', margin: '4px 0', fontSize: '13px', cursor: 'text' })}
           >
-            {renderInline(content.substring(2), fileLineIndex)}
+            {renderInline(contentVal.substring(2), fileLineIndex)}
           </li>
         );
-      } else if (content.startsWith('> ')) {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.startsWith('> ')) {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <blockquote
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0' })}
+            style={getLineStyle(i, { borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' })}
           >
-            {renderInline(content.substring(2), fileLineIndex)}
+            {renderInline(contentVal.substring(2), fileLineIndex)}
           </blockquote>
         );
-      } else if (content.trim() === '') {
-        elements.push(
+        elements.push(wrapBlock(blockEl, fileLineIndex));
+      } else if (contentVal.trim() === '') {
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <div
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { height: '14px', margin: '4px 0' })}
+            style={getLineStyle(i, { height: '18px', margin: '4px 0', cursor: 'text', border: '1px dashed transparent' })}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.04)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+            title="点击在此输入新内容..."
           />
         );
+        elements.push(wrapBlock(blockEl, fileLineIndex));
       } else {
-        elements.push(
+        const isEditing = editingLineIdx === fileLineIndex;
+        const blockEl = isEditing ? (
+          renderBlockEditor(fileLineIndex, line)
+        ) : (
           <p
             key={i}
+            onClick={() => setEditingLineIdx(fileLineIndex)}
             {...getLineDragProps(i)}
-            style={getLineStyle(i, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px' })}
+            style={getLineStyle(i, { margin: '6px 0', lineHeight: '1.6', fontSize: '13px', cursor: 'text' })}
           >
-            {renderInline(content, fileLineIndex)}
+            {renderInline(contentVal, fileLineIndex)}
           </p>
         );
+        elements.push(wrapBlock(blockEl, fileLineIndex));
       }
       i++;
     }
@@ -691,7 +940,29 @@ export function MarkdownPreview({
   };
 
   return (
-    <div style={{ flexGrow: 1, overflowY: 'auto', padding: '20px', backgroundColor: 'transparent', color: 'var(--text-main)', userSelect: 'text' }}>
+    <div className="markdown-preview-container" style={{ flexGrow: 1, overflowY: 'auto', padding: '20px 40px', backgroundColor: 'transparent', color: 'var(--text-main)', userSelect: 'text' }}>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .preview-block-wrapper {
+          position: relative;
+          width: 100%;
+          padding-left: 20px;
+          margin-left: -20px;
+        }
+        .preview-block-wrapper:hover .drag-handle {
+          opacity: 0.5 !important;
+        }
+        .drag-handle:hover {
+          opacity: 1 !important;
+          color: var(--accent-color, #7000ff) !important;
+        }
+        .drag-handle {
+          user-select: none;
+          -webkit-user-drag: element;
+        }
+        .wiki-link:hover {
+          opacity: 0.8;
+        }
+      ` }} />
       {content ? parseMarkdown(content) : <div style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>No content. Switch to edit mode to write.</div>}
     </div>
   );
