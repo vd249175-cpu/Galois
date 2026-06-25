@@ -140,33 +140,64 @@ DNOTE/
 ├── APP/                         # 仿生器官插件层 (Organ Plugins)
 │   ├── file-tree/               # 真实目录浏览器 (Lattice Explorer)
 │   │   ├── index.ts             # 插件入口与 manifest 依赖定义
-│   │   ├── FileTree.tsx         # Explorer UI 主组件 (支持 YAML 标签/正则/脚本解析展示)
+│   │   ├── FileTree.tsx         # Explorer UI 主组件 (连接并装配各拆分模块)
+│   │   ├── FileCard.tsx         # 单个笔记卡片渲染组件
+│   │   ├── searchHelpers.ts     # 关键字过滤与正则检索辅助函数
 │   │   ├── tagResolver.ts       # YAML 标签多轮循环与 Python 脚本计算引擎
+│   │   ├── useProjectHistory.ts # 管理打开的笔记本历史记录
 │   │   ├── useProjectLifecycle.ts# 项目生命周期工作流控制 (on_project_open / run / close)
-│   │   └── actions/             # 新建文件、切换目录动作定义
+│   │   ├── actions/             # 新建文件、切换目录动作定义
+│   │   └── [Modals]             # PromptModal, TemplateModal, IconPickerModal, HistoryProjectsMenu
+│   │
 │   ├── editor/                  # 实例隔离的代码编辑器 (Lattice Editor)
 │   │   ├── index.ts             # 插件入口
-│   │   ├── Editor.tsx           # 编辑器 UI 主组件 (支持 draft 模式、Yaml 标签显示与删除)
+│   │   ├── Editor.tsx           # 编辑器 UI 主组件 (布局与模态窗挂载)
 │   │   ├── MarkdownPreview.tsx  # 支持拖拽媒体文件、WikiLink 导航的预览组件
 │   │   ├── TagToolbar.tsx       # YAML / Regex / Python 标签交互管理条
 │   │   ├── editorUtils.ts       # YAML 标签内容替换工具
 │   │   ├── actions/             # 保存、切换编辑模式、删除文档动作定义
-│   │   └── hooks/               # useMediaDrop, useLinkNavigator 等逻辑钩子
+│   │   ├── hooks/               # useMediaDrop, useLinkNavigator, useEditorHistory
+│   │   └── [Modals/Menus]       # ShortcutsModal, CustomCommandsModal, TagGroupsModal, SlashMenu, PromptModal
+│   │
 │   ├── graph-view/              # 拓扑关系力导向图 (Lattice Graph)
 │   │   ├── index.ts             # 插件入口
-│   │   ├── GraphView.tsx        # 关系图 UI 主组件 (包含 Hill Node 衰减计算与 Palette 颜色管理)
+│   │   ├── GraphView.tsx        # 关系图 UI 主组件 (连接并装配物理模拟与控制)
 │   │   ├── GraphControls.tsx    # 浮动折叠参数调节面板
+│   │   ├── helpers.ts           # 节点物理坐标缩放/宽度计算辅助函数
+│   │   ├── types.ts             # Node 与 Link 接口定义
+│   │   ├── useLatticeData.ts    # FCA 拓扑格数据加载与节点度数计算 hook
+│   │   ├── usePhysicsSimulation.ts # D3-Force 粒子模拟与防震拖拽物理引擎 hook
 │   │   ├── actions/             # 缩放、居中、色板动作定义
+│   │   ├── SelectedNodeDrawer.tsx# 侧边选中节点详情抽屉
+│   │   ├── PaletteManagerModal.tsx# 调色盘管理器弹窗
 │   │   └── services/
 │   │       └── lattice.py       # Python 多维度层级极小化（Transitive Reduction）计算脚本
+│   │
+│   ├── agent/                   # 智能助理代理插件 (Antigravity CLI Agent)
+│   │   ├── index.ts             # 插件入口
+│   │   ├── Agent.tsx            # 智能代理 UI 主组件
+│   │   ├── MessageList.tsx      # 历史消息气泡流渲染
+│   │   ├── MessageInput.tsx     # 输入框与快捷发送组件
+│   │   ├── SettingsDrawer.tsx   # 大模型厂商与模型参数配置抽屉
+│   │   ├── types.ts             # ChatMessage 消息定义
+│   │   ├── useLLMSettings.ts    # LLM 状态与本地存储同步 hook
+│   │   └── actions/             # 快捷呼出代理、重置对话动作定义
+│   │
+│   ├── video-timeline/          # 视频时间轴剪辑插件 (Video Timeline & Slicer)
+│   │   ├── index.ts             # 插件入口与 manifest 依赖定义
+│   │   ├── VideoTimelineView.tsx# 视频播放器与时间轴剪辑 UI 主组件
+│   │   └── actions/             # 播放/暂停、切分视频、步进帧/跳转动作定义
+│   │
 │   ├── link-graph/              # 双链关系图谱 (Obsidian Link Graph)
 │   │   ├── index.ts             # 插件入口
 │   │   ├── LinkGraphView.tsx    # 2D力导向模拟与关系图谱主渲染组件
 │   │   └── actions/             # 缩放、重置视角动作定义
+│   │
 │   ├── terminal/                # 独立分页的 Shell 终端 (Terminal Console)
 │   │   ├── index.ts             # 插件入口
 │   │   ├── Terminal.tsx         # 终端 UI 主组件 (基于 xterm.js 桥接)
 │   │   └── actions/             # 清空终端动作定义
+│   │
 │   ├── settings/                # 首选项控制台 (Settings Panel)
 │   │   ├── index.ts             # 插件入口
 │   │   └── Settings.tsx         # 快捷键 Reset 和设置显示主组件

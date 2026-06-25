@@ -1,19 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { agentActions } from './actions';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { ChatMessage, Conversation } from './types';
+import { useLLMSettings } from './useLLMSettings';
+import { SettingsDrawer } from './SettingsDrawer';
+import { MessageList } from './MessageList';
+import { MessageInput } from './MessageInput';
 
-export interface ChatMessage {
-  id: string;
-  sender: 'user' | 'agent' | 'system' | 'tool';
-  text: string;
-  timestamp: number;
-}
-
-export interface Conversation {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-}
+export type { ChatMessage, Conversation } from './types';
 
 export const AgentComponent = {
   typeId: 'agent',
@@ -72,12 +66,20 @@ function AgentView({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeChatId, setActiveChatId] = useState<string>('');
   
-  // LLM Settings
-  const [provider, setProvider] = useState<string>('ollama');
-  const [apiKey, setApiKey] = useState<string>('');
-  const [baseURL, setBaseURL] = useState<string>('http://localhost:11434/v1');
-  const [model, setModel] = useState<string>('llama3');
-  const [showSettings, setShowSettings] = useState<boolean>(false);
+  // LLM Settings from custom hook
+  const {
+    provider,
+    setProvider,
+    apiKey,
+    setApiKey,
+    baseURL,
+    setBaseURL,
+    model,
+    setModel,
+    showSettings,
+    setShowSettings,
+    saveSetting,
+  } = useLLMSettings();
 
   // Chat UI states
   const [inputText, setInputText] = useState('');
@@ -92,21 +94,9 @@ function AgentView({
     }
   }, [inputText]);
 
-  // Initialize LLM Settings and Conversations from localStorage
+  // Initialize Conversations from localStorage
   useEffect(() => {
     console.log('[AgentView] Initializing default conversation and local storage settings.');
-    const savedProvider = localStorage.getItem('dnote_agent_provider');
-    if (savedProvider) setProvider(savedProvider);
-
-    const savedApiKey = localStorage.getItem('dnote_agent_api_key');
-    if (savedApiKey) setApiKey(savedApiKey);
-
-    const savedBaseURL = localStorage.getItem('dnote_agent_base_url');
-    if (savedBaseURL) setBaseURL(savedBaseURL);
-
-    const savedModel = localStorage.getItem('dnote_agent_model');
-    if (savedModel) setModel(savedModel);
-
     const savedChats = localStorage.getItem('dnote_agent_conversations');
     if (savedChats) {
       try {
@@ -182,12 +172,6 @@ function AgentView({
       </div>
     );
   }
-
-  // Settings modification savers
-  const saveSetting = (key: string, val: string, setter: (v: string) => void) => {
-    setter(val);
-    localStorage.setItem(key, val);
-  };
 
   // Conversation Actions
   const handleNewConversation = () => {
@@ -697,249 +681,39 @@ After calling the tool, briefly explain your edits in Chinese. Keep explanations
 
       {/* Model Settings Drawer Panel */}
       {showSettings && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '37px',
-            left: 0,
-            right: 0,
-            backgroundColor: 'var(--bg-header, #262630)',
-            borderBottom: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-            zIndex: 100,
-          }}
-        >
-          <div style={{ fontSize: '11px', fontWeight: 600, borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.06))', paddingBottom: '4px', color: 'var(--accent-color)' }}>
-            🤖 AI 接口及重构模型配置
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>API 供应商</label>
-              <select
-                value={provider}
-                onChange={(e) => saveSetting('dnote_agent_provider', e.target.value, setProvider)}
-                style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
-              >
-                <option value="ollama">Ollama (本地)</option>
-                <option value="openai">OpenAI (官方)</option>
-                <option value="openai-compatible">自定义 OpenAI 兼容 API</option>
-              </select>
-            </div>
-
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>模型名称</label>
-              <input
-                type="text"
-                value={model}
-                placeholder="e.g. gpt-4o-mini"
-                onChange={(e) => saveSetting('dnote_agent_model', e.target.value, setModel)}
-                style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>接口基础端点 (Base URL)</label>
-            <input
-              type="text"
-              value={baseURL}
-              placeholder="e.g. https://api.openai.com/v1"
-              onChange={(e) => saveSetting('dnote_agent_base_url', e.target.value, setBaseURL)}
-              style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <label style={{ fontSize: '9px', color: 'var(--text-muted, #94a3b8)' }}>API 密钥 (API Key)</label>
-            <input
-              type="password"
-              value={apiKey}
-              placeholder={provider === 'ollama' ? '本地 Ollama 不需要密钥' : '请输入 API 访问密钥'}
-              onChange={(e) => saveSetting('dnote_agent_api_key', e.target.value, setApiKey)}
-              style={{ backgroundColor: 'var(--bg-input, #1b1b22)', border: '1px solid var(--border-color, rgba(255,255,255,0.1))', color: 'var(--text-main, #e2e8f0)', borderRadius: '4px', padding: '4px', fontSize: '11px', outline: 'none' }}
-            />
-          </div>
-
-          <button
-            onClick={() => setShowSettings(false)}
-            style={{
-              backgroundColor: 'var(--accent-color, #3b82f6)',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '4px',
-              padding: '6px',
-              cursor: 'pointer',
-              fontSize: '11px',
-              fontWeight: 600,
-              marginTop: '4px'
-            }}
-          >
-            保存并关闭
-          </button>
-        </div>
+        <SettingsDrawer
+          provider={provider}
+          setProvider={setProvider}
+          model={model}
+          setModel={setModel}
+          baseURL={baseURL}
+          setBaseURL={setBaseURL}
+          apiKey={apiKey}
+          setApiKey={setApiKey}
+          saveSetting={saveSetting}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {/* Messages List Area */}
-      <div
-        style={{
-          flexGrow: 1,
-          overflowY: 'auto',
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-        }}
-      >
-        {activeChat?.messages.map((msg) => {
-          if (msg.sender === 'tool') {
-            return (
-              <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-color)', fontSize: '11px', padding: '0 4px', fontStyle: 'italic' }}>
-                {msg.text}
-              </div>
-            );
-          }
-          if (msg.sender === 'system') {
-            return (
-              <div key={msg.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--agent-system-color, #10b981)', fontSize: '11px', padding: '0 4px', fontStyle: 'italic' }}>
-                {msg.text}
-              </div>
-            );
-          }
-
-          const isUser = msg.sender === 'user';
-          return (
-            <div
-              key={msg.id}
-              style={{
-                alignSelf: isUser ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
-                backgroundColor: isUser ? 'var(--accent-color, #3b82f6)' : 'var(--bg-input, rgba(128, 128, 128, 0.08))',
-                color: isUser ? '#ffffff' : 'var(--text-main, #e2e8f0)',
-                padding: '8px 12px',
-                borderRadius: isUser ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                fontSize: '12px',
-                lineHeight: '1.5',
-                whiteSpace: 'pre-wrap',
-                border: isUser ? 'none' : '1px solid var(--border-color, rgba(255,255,255,0.06))'
-              }}
-            >
-              {msg.text}
-            </div>
-          );
-        })}
-
-        {/* Live streaming bubble */}
-        {streamText && (
-          <div
-            style={{
-              alignSelf: 'flex-start',
-              maxWidth: '85%',
-              backgroundColor: 'var(--bg-input, rgba(128, 128, 128, 0.08))',
-              color: 'var(--text-main, #e2e8f0)',
-              padding: '8px 12px',
-              borderRadius: '12px 12px 12px 2px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              fontSize: '12px',
-              lineHeight: '1.5',
-              whiteSpace: 'pre-wrap',
-              border: '1px solid var(--border-color, rgba(255,255,255,0.06))'
-            }}
-          >
-            {streamText}
-            <span style={{ display: 'inline-block', width: '4px', height: '14px', backgroundColor: 'var(--text-main, #e2e8f0)', marginLeft: '2px', animation: 'blink 1s step-end infinite' }}>|</span>
-          </div>
-        )}
-
-        {isProcessing && !streamText && (
-          <div style={{ alignSelf: 'flex-start', color: 'var(--text-muted, #94a3b8)', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', paddingLeft: '4px' }}>
-            <span>⚡ AI 正在思考中...</span>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* active file context tag indicator */}
-      {currentFile && (
-        <div style={{ fontSize: '10px', color: 'var(--text-muted, #94a3b8)', padding: '4px 12px', borderTop: '1px solid var(--border-color, rgba(255,255,255,0.05))', backgroundColor: 'var(--bg-header, rgba(0,0,0,0.1))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>📖 当前聚焦笔记: <strong style={{ color: 'var(--accent-color)' }}>{currentFile.split(/[/\\]/).pop()}</strong></span>
-          {cursorData && (
-            <span>📍 光标行: {cursorData.line}</span>
-          )}
-        </div>
-      )}
+      <MessageList
+        activeChat={activeChat}
+        streamText={streamText}
+        isProcessing={isProcessing}
+        messagesEndRef={messagesEndRef}
+        currentFile={currentFile}
+        cursorData={cursorData}
+      />
 
       {/* Message input bar */}
-      <form
-        onSubmit={handleSend}
-        style={{
-          display: 'flex',
-          padding: '8px',
-          borderTop: '1px solid var(--border-color, rgba(255, 255, 255, 0.08))',
-          backgroundColor: 'var(--bg-header, rgba(0, 0, 0, 0.15))',
-          gap: '8px',
-          alignItems: 'flex-end',
-        }}
-      >
-        <textarea
-          ref={textareaRef}
-          value={inputText}
-          onChange={(e) => {
-            setInputText(e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = `${Math.min(120, e.target.scrollHeight)}px`;
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              if (inputText.trim() && !isProcessing && currentFile) {
-                const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-                handleSend(fakeEvent);
-              }
-            }
-          }}
-          placeholder={currentFile ? "发送指令来重构当前打开的笔记..." : "请先在左侧树双击打开一个笔记文件..."}
-          disabled={isProcessing || !currentFile}
-          style={{
-            flexGrow: 1,
-            backgroundColor: 'var(--bg-input, #1b1b22)',
-            border: '1px solid var(--border-color, rgba(255, 255, 255, 0.15))',
-            color: 'var(--text-main, #e2e8f0)',
-            borderRadius: '6px',
-            padding: '6px 12px',
-            fontSize: '12px',
-            outline: 'none',
-            resize: 'none',
-            height: '32px',
-            minHeight: '32px',
-            maxHeight: '120px',
-            fontFamily: 'inherit',
-            lineHeight: '1.4',
-          }}
-        />
-        <button
-          type="submit"
-          disabled={isProcessing || !inputText.trim() || !currentFile}
-          style={{
-            backgroundColor: isProcessing || !inputText.trim() || !currentFile ? 'var(--bg-header, #262630)' : 'var(--accent-color, #3b82f6)',
-            color: isProcessing || !inputText.trim() || !currentFile ? 'var(--text-muted, #888)' : '#ffffff',
-            border: 'none',
-            borderRadius: '6px',
-            padding: '6px 14px',
-            fontSize: '12px',
-            cursor: isProcessing || !inputText.trim() || !currentFile ? 'default' : 'pointer',
-            fontWeight: 600,
-          }}
-        >
-          发送
-        </button>
-      </form>
+      <MessageInput
+        inputText={inputText}
+        setInputText={setInputText}
+        isProcessing={isProcessing}
+        currentFile={currentFile}
+        handleSend={handleSend}
+        textareaRef={textareaRef}
+      />
     </div>
   );
 }

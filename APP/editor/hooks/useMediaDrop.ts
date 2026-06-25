@@ -27,7 +27,9 @@ export function useMediaDrop({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     dragCounter.current++;
-    if (e.dataTransfer.types.includes('Files') && !isPreviewMode) {
+    const hasClip = e.dataTransfer.types.includes('text/x-dnote-clip');
+    const hasFile = e.dataTransfer.types.includes('Files');
+    if ((hasFile || hasClip) && !isPreviewMode) {
       setIsDraggingFile(true);
     }
   };
@@ -102,6 +104,22 @@ export function useMediaDrop({
     e.preventDefault();
     e.stopPropagation();
     setHoveredLineIndex(null);
+
+    // Priority 1: Video clip text (from timeline segment drag)
+    const clipText = e.dataTransfer.getData('text/x-dnote-clip');
+    if (clipText) {
+      const { getFrontmatterLineCount } = await import('../editorUtils');
+      const yamlLines = getFrontmatterLineCount(contentRef.current);
+      const lines = contentRef.current.split('\n');
+      lines.splice(yamlLines + lineIdx + 1, 0, clipText);
+      const nextContent = lines.join('\n');
+      setContent(nextContent);
+      saveNodeFile(nextContent);
+      setStatusMessage('剪辑片段已插入');
+      return;
+    }
+
+    // Priority 2: File drop (image/video/audio)
     const files = e.dataTransfer.files;
     if (files.length === 0) return;
     await archiveAndInsert(files[0], lineIdx);

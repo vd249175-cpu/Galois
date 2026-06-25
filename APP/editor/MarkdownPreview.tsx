@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ReactiveExpression } from './ReactiveExpression';
 import { parseMarkdownBody } from '../utils';
+import { InlineClipPlayer } from './InlineClipPlayer';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -157,7 +158,7 @@ export function MarkdownPreview({
       onDragOver: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (e.dataTransfer.types.includes('Files')) {
+        if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/x-dnote-clip')) {
           setHoveredLineIndex(lineIdx);
         }
       },
@@ -464,6 +465,24 @@ export function MarkdownPreview({
   const renderInline = (text: string, lineIndex: number) => {
     let parts: React.ReactNode[] = [text];
 
+    // -1. @video clip embeds — @video[label](filename#t=start,end)
+    parts = splitByRegex(parts, /@video\[([^\]]*)\]\(([^#)]+)#t=([\d.]+),([\d.]+)\)/g, (match, idx) => {
+      const label = match[1];
+      const fileName = match[2];
+      const start = parseFloat(match[3]);
+      const end = parseFloat(match[4]);
+      return (
+        <InlineClipPlayer
+          key={`clip_${fileName}_${start}_${idx}`}
+          label={label}
+          fileName={fileName}
+          start={start}
+          end={end}
+          projectPath={projectPath}
+        />
+      );
+    });
+
     // 0. Reactive template bindings {{ ... }}
     parts = splitByRegex(parts, /\{\{([\s\S]+?)\}\}/g, (match, idx) => {
       const rawExpression = match[1];
@@ -548,7 +567,8 @@ export function MarkdownPreview({
         finalSrc = `dnote-file://${absolutePath}`;
       }
 
-      const ext = url.split('.').pop()?.toLowerCase() || '';
+      const cleanUrl = url.split('#')[0].split('?')[0];
+      const ext = cleanUrl.split('.').pop()?.toLowerCase() || '';
       const isVideo = ['mp4', 'webm', 'ogg'].includes(ext);
       const isAudio = ['mp3', 'wav', 'aac', 'm4a'].includes(ext);
 

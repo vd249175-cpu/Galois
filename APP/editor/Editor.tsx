@@ -10,6 +10,13 @@ import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 import { ActionRegistry } from '../../CORE/ActionRegistry';
 import { Blood } from '../../CORE/Blood';
 
+import { ShortcutsModal } from './ShortcutsModal';
+import { CustomCommandsModal } from './CustomCommandsModal';
+import { TagGroupsModal } from './TagGroupsModal';
+import { PromptModal } from './PromptModal';
+import { SlashMenu } from './SlashMenu';
+import { useEditorHistory } from './hooks/useEditorHistory';
+
 /**
  * EditorComponent — 插件注册对象（完整契约）
  * 在 APP/editor/index.ts 重新导出，此处声明 manifest
@@ -37,7 +44,7 @@ export const EditorComponent = {
     BC_PREFIX.scriptJson,
   ],
   manifest: {
-    description: 'Markdown 笔记编辑器，支持 YAML frontmatter 标签和 WikiLink 导航',
+    description: 'Markdown 笔记编辑器，支持 YAML frontmatter 标签 and WikiLink 导航',
     reads: [
       BC.system.projectPath,        // 项目根目录（由 fileTree 写入）
       BC.system.resolvedTags,       // 解析后的全局标签 map（由 fileTree 写入）
@@ -89,55 +96,49 @@ function EditorView({
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
   const lastSavedContentRef = useRef<string>('');
-  const slashMenuRef = useRef<HTMLDivElement>(null);
   const triggeredImmediateRefs = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     triggeredImmediateRefs.current.clear();
   }, [currentFile]);
 
-  // Undo/Redo stacks
-  interface HistoryState {
-    content: string;
-    selectionStart: number;
-    selectionEnd: number;
-  }
-  const undoStackRef = useRef<HistoryState[]>([]);
-  const redoStackRef = useRef<HistoryState[]>([]);
-  const lastHistoryContentRef = useRef<string>('');
-  const historyTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    undoStackRef.current = [];
-    redoStackRef.current = [];
-    lastHistoryContentRef.current = content;
-    if (historyTimerRef.current) {
-      clearTimeout(historyTimerRef.current);
-      historyTimerRef.current = null;
-    }
-  }, [currentFile]);
-
-  useEffect(() => {
-    return () => {
-      if (historyTimerRef.current) {
-        clearTimeout(historyTimerRef.current);
+  // ── saveNodeFile ──────────────────────────────────────────────────────────
+  const saveNodeFile = async (customContent?: string) => {
+    if (!currentFile) { setStatusMessage('无打开的笔记可保存'); return; }
+    const fullContent = customContent !== undefined ? customContent : contentRef.current;
+    if (fullContent === lastSavedContentRef.current) return;
+    try {
+      await (window as any).electronAPI.writeFile(currentFile, fullContent);
+      lastSavedContentRef.current = fullContent;
+      setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
+      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+      
+      // If we are not in preview mode, detect and run any immediate scripts matching {{...}}
+      if (!isPreviewMode) {
+        triggerImmediateScripts(fullContent);
       }
-    };
-  }, []);
-
-  const pushStateToUndoStack = (txt: string, selStart: number, selEnd: number) => {
-    const last = undoStackRef.current[undoStackRef.current.length - 1];
-    if (last && last.content === txt) return;
-    undoStackRef.current.push({
-      content: txt,
-      selectionStart: selStart,
-      selectionEnd: selEnd
-    });
-    if (undoStackRef.current.length > 100) {
-      undoStackRef.current.shift();
+    } catch (err: any) {
+      console.error('[Editor] Save failed:', err);
+      setStatusMessage(`保存失败: ${err.message}`);
+      updateBloodKey(BC.events.scriptError('editor'), { message: err.message, ts: Date.now() });
     }
-    redoStackRef.current = [];
   };
+
+  // ── Undo/Redo History Hook ──────────────────────────────────────────────
+  const {
+    pushStateToUndoStack,
+    handleUndo,
+    handleRedo,
+    historyTimerRef,
+    lastHistoryContentRef,
+  } = useEditorHistory({
+    content,
+    setContent,
+    currentFile,
+    saveNodeFile,
+    textareaRef,
+    setStatusMessage,
+  });
 
   const projectPath = state[BC.system.projectPath] || '';
   const openedFile = state[BC.events.openFile(areaId)] || '';
@@ -429,24 +430,7 @@ function EditorView({
     return Array.from(set).sort();
   }, [state[BC.system.resolvedTags], state[BC.system.staticTags]]);
 
-  const [newCmdLabel, setNewCmdLabel] = useState('');
-  const [newCmdTrigger, setNewCmdTrigger] = useState('');
-  const [newCmdDesc, setNewCmdDesc] = useState('');
-  const [newCmdContent, setNewCmdContent] = useState('');
-  const [newGroupName, setNewGroupName] = useState('');
-
-  const handleAddCustomCommand = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trigger = newCmdTrigger.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const label = newCmdLabel.trim();
-    const desc = newCmdDesc.trim();
-    const bodyText = newCmdContent;
-
-    if (!trigger || !label || !bodyText) {
-      alert('Please fill in Label, Trigger word, and Content fields.');
-      return;
-    }
-
+  const handleAddCustomCommand = (trigger: string, label: string, desc: string, bodyText: string) => {
     const nextCmds = [
       ...customCommands.filter(c => c.id !== `custom.${trigger}`),
       {
@@ -458,11 +442,6 @@ function EditorView({
     ];
     setCustomCommands(nextCmds);
     localStorage.setItem('dnote_custom_commands', JSON.stringify(nextCmds));
-
-    setNewCmdLabel('');
-    setNewCmdTrigger('');
-    setNewCmdDesc('');
-    setNewCmdContent('');
     setStatusMessage(`Custom command /${trigger} created.`);
   };
 
@@ -473,24 +452,13 @@ function EditorView({
     setStatusMessage('Custom command deleted.');
   };
 
-  const handleSaveTagGroup = (e: React.FormEvent) => {
-    e.preventDefault();
-    const name = newGroupName.trim();
-    if (!name) {
-      alert('Please enter a name for the tag group.');
-      return;
-    }
-    if (tags.length === 0) {
-      alert('The current note has no tags to save.');
-      return;
-    }
+  const handleSaveTagGroup = (name: string) => {
     const nextGroups = {
       ...tagGroups,
       [name]: [...tags]
     };
     setTagGroups(nextGroups);
     localStorage.setItem('dnote_tag_groups', JSON.stringify(nextGroups));
-    setNewGroupName('');
     setStatusMessage(`Saved tag group: ${name}`);
   };
 
@@ -523,24 +491,6 @@ function EditorView({
   const [slashMenuQuery, setSlashMenuQuery] = useState('');
   const [slashMenuCoords, setSlashMenuCoords] = useState({ left: 0, top: 0 });
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
-
-  useEffect(() => {
-    if (showSlashMenu && slashMenuRef.current) {
-      const container = slashMenuRef.current;
-      const activeChild = container.children[slashMenuIndex] as HTMLElement;
-      if (activeChild) {
-        const containerHeight = container.clientHeight;
-        const childTop = activeChild.offsetTop;
-        const childHeight = activeChild.clientHeight;
-
-        if (childTop < container.scrollTop) {
-          container.scrollTop = childTop;
-        } else if (childTop + childHeight > container.scrollTop + containerHeight) {
-          container.scrollTop = childTop + childHeight - containerHeight;
-        }
-      }
-    }
-  }, [slashMenuIndex, showSlashMenu]);
 
   const SLASH_COMMANDS = [
     { id: 'bold', label: 'Bold', desc: 'Make text bold', icon: 'B' },
@@ -967,147 +917,6 @@ function EditorView({
     });
   };
 
-  const renderVisualKeycap = (part: string) => {
-    let label = part.toUpperCase();
-    if (part === 'meta') label = '⌘ Cmd';
-    if (part === 'control' || part === 'ctrl') label = '⌃ Ctrl';
-    if (part === 'shift') label = '⇧ Shift';
-    if (part === 'alt') label = '⌥ Opt';
-    return (
-      <kbd
-        key={part}
-        style={{
-          display: 'inline-block',
-          padding: '2px 5px',
-          fontSize: '9px',
-          fontFamily: 'monospace',
-          lineHeight: '1',
-          color: 'var(--text-main)',
-          backgroundColor: 'rgba(255,255,255,0.06)',
-          border: '1.2px solid var(--border-color)',
-          borderRadius: '4px',
-          boxShadow: '0 1px 0px var(--border-color), 0 1.5px 0px rgba(0,0,0,0.2)'
-        }}
-      >
-        {label}
-      </kbd>
-    );
-  };
-
-  const formatComboVisual = (combo: string | undefined) => {
-    if (!combo) return <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>None</span>;
-    const parts = combo.split('+');
-    return (
-      <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-        {parts.map((p) => renderVisualKeycap(p))}
-      </div>
-    );
-  };
-
-
-
-  // ── saveNodeFile ──────────────────────────────────────────────────────────
-  const saveNodeFile = async (customContent?: string) => {
-    if (!currentFile) { setStatusMessage('无打开的笔记可保存'); return; }
-    const fullContent = customContent !== undefined ? customContent : contentRef.current;
-    if (fullContent === lastSavedContentRef.current) return;
-    try {
-      await (window as any).electronAPI.writeFile(currentFile, fullContent);
-      lastSavedContentRef.current = fullContent;
-      setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
-      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
-      
-      // If we are not in preview mode, detect and run any immediate scripts matching {{...}}
-      if (!isPreviewMode) {
-        triggerImmediateScripts(fullContent);
-      }
-    } catch (err: any) {
-      console.error('[Editor] Save failed:', err);
-      setStatusMessage(`保存失败: ${err.message}`);
-      updateBloodKey(BC.events.scriptError('editor'), { message: err.message, ts: Date.now() });
-    }
-  };
-
-  const handleUndo = () => {
-    if (!textareaRef.current) return;
-
-    // Clear any pending autocomplete/debounce history timers and force push
-    if (historyTimerRef.current) {
-      clearTimeout(historyTimerRef.current);
-      historyTimerRef.current = null;
-    }
-
-    const currentText = contentRef.current;
-    const currentStart = textareaRef.current.selectionStart;
-    const currentEnd = textareaRef.current.selectionEnd;
-
-    if (currentText !== lastHistoryContentRef.current) {
-      pushStateToUndoStack(lastHistoryContentRef.current, currentStart, currentEnd);
-      lastHistoryContentRef.current = currentText;
-    }
-
-    const previousState = undoStackRef.current.pop();
-    if (!previousState) {
-      setStatusMessage('已是最旧版本');
-      return;
-    }
-
-    redoStackRef.current.push({
-      content: currentText,
-      selectionStart: currentStart,
-      selectionEnd: currentEnd
-    });
-
-    setContent(previousState.content);
-    lastHistoryContentRef.current = previousState.content;
-    saveNodeFile(previousState.content);
-
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(previousState.selectionStart, previousState.selectionEnd);
-      }
-    }, 0);
-    setStatusMessage('已撤销');
-  };
-
-  const handleRedo = () => {
-    if (!textareaRef.current) return;
-
-    if (historyTimerRef.current) {
-      clearTimeout(historyTimerRef.current);
-      historyTimerRef.current = null;
-    }
-
-    const currentText = contentRef.current;
-    const currentStart = textareaRef.current.selectionStart;
-    const currentEnd = textareaRef.current.selectionEnd;
-
-    const nextState = redoStackRef.current.pop();
-    if (!nextState) {
-      setStatusMessage('已最新版本');
-      return;
-    }
-
-    undoStackRef.current.push({
-      content: currentText,
-      selectionStart: currentStart,
-      selectionEnd: currentEnd
-    });
-
-    setContent(nextState.content);
-    lastHistoryContentRef.current = nextState.content;
-    saveNodeFile(nextState.content);
-
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(nextState.selectionStart, nextState.selectionEnd);
-      }
-    }, 0);
-    setStatusMessage('已重做');
-  };
-
   // ── Immediate Script execution in edit mode ──────────────────────────────
   const triggerImmediateScripts = async (fileContent: string) => {
     if (!projectPath || !currentFile) return;
@@ -1265,7 +1074,7 @@ function EditorView({
     };
   }, [areaId]);
 
-  // ── 2. Focus tracking ─────────────────────────────────────────────────────
+  // ── Focus tracking ─────────────────────────────────────────────────────
   useEffect(() => {
     if (isFocused) updateBloodKey(BC.system.lastFocusedEditorId, areaId);
   }, [isFocused, areaId]);
@@ -1313,7 +1122,7 @@ function EditorView({
     };
   }, [recordingActionId]);
 
-  // ── 3. File loading ───────────────────────────────────────────────────────
+  // ── File loading ───────────────────────────────────────────────────────
   const fileSavedEvent = state[BC.events.fileSaved(openedFile)] || 0;
 
   useEffect(() => {
@@ -1367,7 +1176,7 @@ function EditorView({
     loadMarkdownFile();
   }, [openedFile, fileSavedEvent]);
 
-  // ── 4. Tag resolver ───────────────────────────────────────────────────────
+  // ── Tag resolver ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentFile || !projectPath) return;
     const staticTags = tags.filter((t) => !t.startsWith('re:') && !t.startsWith('run:'));
@@ -1416,14 +1225,14 @@ function EditorView({
     setActiveTags(combinedActive);
   }, [tags, content, currentFile, projectPath, state[BC.system.resolvedTags]]);
 
-  // ── 5. Auto-save (debounced) ──────────────────────────────────────────────
+  // ── Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {
     if (!currentFile || isPreviewMode || content === '' || content === lastSavedContentRef.current) return;
     const timer = setTimeout(() => { saveNodeFile(content); }, 600);
     return () => clearTimeout(timer);
   }, [content, currentFile, isPreviewMode]);
 
-  // ── 6. Tag update helper ──────────────────────────────────────────────────
+  // ── Tag update helper ──────────────────────────────────────────────────
   const handleUpdateTags = async (nextTags: string[]) => {
     if (!currentFile) return;
     const cleanTags = Array.from(new Set(nextTags.map((t) => t.trim()).filter(Boolean))).sort();
@@ -1572,7 +1381,7 @@ function EditorView({
     });
   };
 
-  // ── 7. lastAction handler ─────────────────────────────────────────────────
+  // ── lastAction handler ─────────────────────────────────────────────────
   useEffect(() => {
     if (!lastAction) return;
     if (lastAction.id === 'editor.save') saveNodeFile();
@@ -1750,7 +1559,6 @@ function EditorView({
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div
       className="code-editor"
@@ -1926,78 +1734,16 @@ function EditorView({
         />
       )}
 
-      {showSlashMenu && filteredCommands.length > 0 && (
-        <div
-          ref={slashMenuRef}
-          style={{
-            position: 'absolute',
-            left: slashMenuCoords.left,
-            top: slashMenuCoords.top,
-            width: '320px',
-            maxHeight: '200px',
-            backgroundColor: 'var(--bg-main)',
-            border: '1.2px solid rgba(0, 0, 0, 0.12)',
-            borderRadius: '8px',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.16)',
-            overflowY: 'auto',
-            zIndex: 1000,
-            padding: '4px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px',
-          }}
-        >
-          {filteredCommands.map((cmd: any, idx: number) => {
-            const isSelected = idx === slashMenuIndex;
-            return (
-              <div
-                key={cmd.id}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleExecuteCommand(cmd);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
-                  color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
-                  transition: 'background-color 0.1s, color 0.1s',
-                }}
-                onMouseEnter={() => setSlashMenuIndex(idx)}
-              >
-                <div style={{
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '4px',
-                  backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.03)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 700,
-                  fontSize: '10px',
-                  flexShrink: 0,
-                }}>
-                  {cmd.icon}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexGrow: 1 }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, flexShrink: 0 }}>{cmd.label}</span>
-                  <span style={{ fontSize: '9px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1 }}>{cmd.desc}</span>
-                </div>
-                {getShortcutDisplay(cmd.id) && (
-                  <span style={{ fontSize: '9px', color: 'var(--accent-color)', opacity: 0.8, paddingLeft: '8px', flexShrink: 0, fontWeight: 700 }}>
-                    {getShortcutDisplay(cmd.id)}
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* Slash Menu */}
+      <SlashMenu
+        show={showSlashMenu}
+        filteredCommands={filteredCommands}
+        slashMenuIndex={slashMenuIndex}
+        setSlashMenuIndex={setSlashMenuIndex}
+        slashMenuCoords={slashMenuCoords}
+        handleExecuteCommand={handleExecuteCommand}
+        getShortcutDisplay={getShortcutDisplay}
+      />
 
       {/* Status Bar */}
       <div className="editor-statusbar">
@@ -2019,338 +1765,51 @@ function EditorView({
         </div>
       )}
 
-      {isShortcutsModalOpen && (
-        <div className="pane-modal-overlay" onClick={() => { setIsShortcutsModalOpen(false); setRecordingActionId(null); }}>
-          <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '340px', maxHeight: '420px' }}>
-            {/* Modal Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '10px', borderBottom: '1px solid var(--border-color)' }}>
-              <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.8 }}>
-                  <circle cx="8" cy="8" r="2.5" />
-                  <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
-                </svg>
-                Markdown 快捷键管理
-              </span>
-              <button
-                onClick={() => {
-                  setIsShortcutsModalOpen(false);
-                  setRecordingActionId(null);
-                }}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
-              >
-                ✕
-              </button>
-            </div>
+      {/* Shortcuts Modal */}
+      <ShortcutsModal
+        isOpen={isShortcutsModalOpen}
+        onClose={() => {
+          setIsShortcutsModalOpen(false);
+          setRecordingActionId(null);
+        }}
+        recordingActionId={recordingActionId}
+        setRecordingActionId={setRecordingActionId}
+        editorShortcuts={editorShortcuts}
+        allManageableActions={allManageableActions}
+        handleResetShortcut={handleResetShortcut}
+      />
 
-            {/* Modal Body */}
-            <div style={{ paddingTop: '10px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {allManageableActions.map((act) => {
-                const currentCombo = editorShortcuts[act.id] !== undefined ? editorShortcuts[act.id] : act.defaultCombo;
-                const isListening = recordingActionId === act.id;
-                return (
-                  <div
-                    key={act.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '6px 8px',
-                      backgroundColor: isListening ? 'rgba(255, 59, 48, 0.06)' : 'rgba(0,0,0,0.015)',
-                      border: isListening ? '1.2px solid var(--accent-color)' : '1.2px solid var(--border-color)',
-                      borderRadius: '5px',
-                      transition: 'border-color 0.15s, background-color 0.15s'
-                    }}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: 0 }}>
-                      <span style={{ fontWeight: 600, fontSize: '11px' }}>{act.label}</span>
-                      <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{act.id}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <div
-                        onClick={() => setRecordingActionId(act.id)}
-                        style={{
-                          minWidth: '60px',
-                          minHeight: '24px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          border: '1.2px solid var(--border-color)',
-                          backgroundColor: 'var(--bg-main)',
-                          cursor: 'pointer',
-                          fontSize: '10px',
-                          color: isListening ? 'var(--accent-color)' : 'var(--text-main)',
-                          transition: 'background-color 0.15s, color 0.15s',
-                        }}
-                      >
-                        {isListening ? (
-                          <span style={{ animation: 'pulse 1.2s infinite', fontSize: '9px' }}>录入中...</span>
-                        ) : (
-                          formatComboVisual(currentCombo)
-                        )}
-                      </div>
-                      {currentCombo !== act.defaultCombo && (
-                        <button
-                          onClick={() => handleResetShortcut(act.id, act.defaultCombo)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
-                        >
-                          重置
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Prompt Modal */}
+      <PromptModal
+        show={promptConfig.show}
+        title={promptConfig.title}
+        defaultValue={promptConfig.defaultValue}
+        onConfirm={(val) => {
+          promptConfig.onConfirm(val);
+          setPromptConfig(prev => ({ ...prev, show: false }));
+        }}
+        onCancel={() => setPromptConfig(prev => ({ ...prev, show: false }))}
+      />
 
-      {promptConfig.show && (
-        <div className="pane-modal-overlay">
-          <div className="pane-modal-content" style={{ width: '85%' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-main)', marginBottom: 12 }}>{promptConfig.title === 'Enter Hyperlink URL:' ? '输入超链接 URL:' : promptConfig.title}</span>
-            <input
-              type="text"
-              id="prompt-modal-input-editor"
-              defaultValue={promptConfig.defaultValue}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = e.currentTarget.value.trim();
-                  promptConfig.onConfirm(val);
-                  setPromptConfig(prev => ({ ...prev, show: false }));
-                } else if (e.key === 'Escape') {
-                  setPromptConfig(prev => ({ ...prev, show: false }));
-                }
-              }}
-              style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none', marginBottom: 12 }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
-              <button
-                className="area-btn text-btn"
-                onClick={() => setPromptConfig(prev => ({ ...prev, show: false }))}
-                style={{ height: '24px', fontSize: '10px', padding: '0 10px' }}
-              >
-                取消
-              </button>
-              <button
-                className="area-btn text-btn"
-                onClick={() => {
-                  const input = document.getElementById('prompt-modal-input-editor') as HTMLInputElement;
-                  if (input) {
-                    promptConfig.onConfirm(input.value.trim());
-                  }
-                  setPromptConfig(prev => ({ ...prev, show: false }));
-                }}
-                style={{ height: '24px', fontSize: '10px', padding: '0 10px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none' }}
-              >
-                确定
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Custom Commands Modal */}
+      <CustomCommandsModal
+        isOpen={isCustomCommandsOpen}
+        onClose={() => setIsCustomCommandsOpen(false)}
+        customCommands={customCommands}
+        handleDeleteCustomCommand={handleDeleteCustomCommand}
+        onAddCustomCommand={handleAddCustomCommand}
+      />
 
-      {isCustomCommandsOpen && (
-        <div className="pane-modal-overlay">
-          <div className="pane-modal-content" style={{ width: '560px', maxHeight: '460px', padding: 0 }}>
-            {/* Modal Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.02)' }}>
-              <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.8 }}>
-                  <circle cx="8" cy="8" r="2.5" />
-                  <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
-                </svg>
-                自定义命令管理器
-              </span>
-              <button
-                onClick={() => setIsCustomCommandsOpen(false)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: '16px', overflowY: 'auto', flex: 1, display: 'flex', gap: '16px' }}>
-              {/* Left Side: List */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', borderRight: '1px solid var(--border-color)', paddingRight: '16px' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>已有命令 ({customCommands.length})</span>
-                {customCommands.length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>尚未创建任何自定义命令。请在右侧表单添加！</div>
-                ) : (
-                  customCommands.map(cmd => (
-                    <div key={cmd.id} style={{ padding: '8px', border: '1.2px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)', display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, color: 'var(--accent-color)' }}>/{cmd.id.replace('custom.', '')}</span>
-                        <button
-                          onClick={() => handleDeleteCustomCommand(cmd.id)}
-                          style={{ border: 'none', background: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
-                        >
-                          删除
-                        </button>
-                      </div>
-                      <span style={{ fontWeight: 600, fontSize: '10.5px' }}>{cmd.label}</span>
-                      <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{cmd.desc}</span>
-                      <pre style={{ margin: '4px 0 0 0', padding: '4px', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: '4px', fontSize: '9px', fontFamily: 'var(--font-mono)', overflowX: 'auto', whiteSpace: 'pre-wrap', maxHeight: '50px' }}>{cmd.content}</pre>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Right Side: Add Form */}
-              <form onSubmit={handleAddCustomCommand} style={{ width: '220px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>新建自定义命令</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>命令名称</label>
-                  <input
-                    type="text"
-                    placeholder="例如: 签名"
-                    value={newCmdLabel}
-                    onChange={e => setNewCmdLabel(e.target.value)}
-                    style={{ padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>触发词 (例如 sig, 无前导斜杠)</label>
-                  <input
-                    type="text"
-                    placeholder="例如: sig"
-                    value={newCmdTrigger}
-                    onChange={e => setNewCmdTrigger(e.target.value)}
-                    style={{ padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>描述</label>
-                  <input
-                    type="text"
-                    placeholder="简短描述该命令"
-                    value={newCmdDesc}
-                    onChange={e => setNewCmdDesc(e.target.value)}
-                    style={{ padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                  <label style={{ fontSize: '10px', fontWeight: 600 }}>要插入的内容</label>
-                  <textarea
-                    placeholder="在此输入要插入的文本片段内容..."
-                    value={newCmdContent}
-                    onChange={e => setNewCmdContent(e.target.value)}
-                    style={{ flex: 1, minHeight: '80px', padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', fontFamily: 'var(--font-mono)', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none', resize: 'none' }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="area-btn text-btn"
-                  style={{ height: '28px', padding: '4px 12px', fontSize: '11px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none', fontWeight: 700, borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  创建命令
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isTagGroupsOpen && (
-        <div className="pane-modal-overlay">
-          <div className="pane-modal-content" style={{ width: '460px', maxHeight: '400px', padding: 0 }}>
-            {/* Modal Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.02)' }}>
-              <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.8 }}>
-                  <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
-                </svg>
-                标签组模板
-              </span>
-              <button
-                onClick={() => setIsTagGroupsOpen(false)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px', fontWeight: 600 }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div style={{ padding: '16px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {/* Save Current Tags Form */}
-              <form onSubmit={handleSaveTagGroup} style={{ padding: '10px', border: '1.2px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'rgba(0,0,0,0.015)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px' }}>保存当前笔记标签为组</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', padding: '4px 0' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>要保存的标签:</span>
-                  {tags.length === 0 ? (
-                    <span style={{ fontSize: '10px', fontStyle: 'italic', color: 'var(--text-muted)' }}>当前笔记没有标签。请先添加一些标签。</span>
-                  ) : (
-                    tags.map(t => (
-                      <span key={`group_save_pill_${t}`} style={{ fontSize: '9px', fontWeight: 600, backgroundColor: 'rgba(0,0,0,0.05)', color: 'var(--text-main)', padding: '1px 5px', borderRadius: '4px' }}>#{t}</span>
-                    ))
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <input
-                    type="text"
-                    placeholder="标签组名称 (例如: 每日回顾)"
-                    value={newGroupName}
-                    onChange={e => setNewGroupName(e.target.value)}
-                    disabled={tags.length === 0}
-                    style={{ flex: 1, padding: '4px 8px', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '11px', backgroundColor: 'var(--bg-input)', color: 'var(--text-main)', outline: 'none' }}
-                  />
-                  <button
-                    type="submit"
-                    className="area-btn text-btn"
-                    disabled={tags.length === 0}
-                    style={{ height: '24px', fontSize: '10.5px', padding: '0 12px', whiteSpace: 'nowrap' }}
-                  >
-                    保存标签组
-                  </button>
-                </div>
-              </form>
-
-              {/* Groups List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, overflowY: 'auto' }}>
-                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>已保存的标签组</span>
-                {Object.keys(tagGroups).length === 0 ? (
-                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>尚未保存任何标签组。请在上方创建！</div>
-                ) : (
-                  Object.entries(tagGroups).map(([name, groupTags]) => (
-                    <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', border: '1.2px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                        <span style={{ fontWeight: 700, fontSize: '11px' }}>{name}</span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                          {groupTags.map(t => (
-                            <span key={`pill_${name}_${t}`} style={{ fontSize: '9px', fontWeight: 600, color: 'var(--accent-color)', backgroundColor: 'var(--highlight-color)', padding: '1px 4px', borderRadius: '4px' }}>#{t}</span>
-                          ))}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                        <button
-                          onClick={() => {
-                            // Incremental add tags
-                            handleUpdateTags([...tags, ...groupTags]);
-                          }}
-                          className="area-btn text-btn"
-                          style={{ height: '22px', fontSize: '10px', padding: '0 8px' }}
-                        >
-                          添加 (增量)
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTagGroup(name)}
-                          style={{ border: 'none', background: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Tag Groups Modal */}
+      <TagGroupsModal
+        isOpen={isTagGroupsOpen}
+        onClose={() => setIsTagGroupsOpen(false)}
+        tags={tags}
+        tagGroups={tagGroups}
+        onSaveTagGroup={handleSaveTagGroup}
+        onDeleteTagGroup={handleDeleteTagGroup}
+        handleUpdateTags={handleUpdateTags}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { calculateAllResolvedTags } from './tagResolver';
 import { useProjectLifecycle } from './useProjectLifecycle';
 import { fileTreeActions } from './actions';
@@ -6,215 +6,19 @@ import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 import { updateYamlFrontmatterIcon } from '../utils';
 import { Blood } from '../../CORE/Blood';
 
-interface FileInfo {
-  name: string;
-  path: string;
-  isDir: boolean;
-  size: number;
-  tags: string[];
-  icon?: string;
-}
-
-// ── Tag expression tokenizer and boolean evaluator helpers ──────────────────
-
-function tokenizeQuery(query: string) {
-  const regex = /(#re:\S+|re:\S+|\(|\)|#\/[^\/]+\/[a-z]*|#[^\s()#]+|and|add|or|not|&&|\|\||!|\S+)/gi;
-  const rawTokens = query.match(regex) || [];
-  
-  const tokens: { type: 'tag' | 'operator' | 'filename'; value: string }[] = [];
-  
-  for (const token of rawTokens) {
-    const lower = token.toLowerCase();
-    if (lower === '(' || lower === ')') {
-      tokens.push({ type: 'operator', value: token });
-    } else if (lower === 'and' || lower === '&&' || lower === 'add') {
-      tokens.push({ type: 'operator', value: '&' });
-    } else if (lower === 'or' || lower === '||') {
-      tokens.push({ type: 'operator', value: '|' });
-    } else if (lower === 'not' || lower === '!') {
-      tokens.push({ type: 'operator', value: '!' });
-    } else if (token.startsWith('#')) {
-      if (token.startsWith('#/') || token.startsWith('#re:')) {
-        tokens.push({ type: 'tag', value: token });
-      } else {
-        const parts = token.split('#').filter(Boolean);
-        for (let i = 0; i < parts.length; i++) {
-          if (i > 0) {
-            tokens.push({ type: 'operator', value: '&' });
-          }
-          tokens.push({ type: 'tag', value: '#' + parts[i] });
-        }
-      }
-    } else {
-      tokens.push({ type: 'filename', value: token });
-    }
-  }
-  
-  return tokens;
-}
-
-function evaluateBoolean(tokens: string[]): boolean {
-  const outputQueue: string[] = [];
-  const operatorStack: string[] = [];
-  
-  const precedence: Record<string, number> = {
-    '|': 1,
-    '&': 2,
-    '!': 3
-  };
-
-  for (const token of tokens) {
-    if (token === 'true' || token === 'false') {
-      outputQueue.push(token);
-    } else if (token === '(') {
-      operatorStack.push(token);
-    } else if (token === ')') {
-      while (operatorStack.length > 0 && operatorStack[operatorStack.length - 1] !== '(') {
-        outputQueue.push(operatorStack.pop()!);
-      }
-      operatorStack.pop();
-    } else if (token === '&' || token === '|' || token === '!') {
-      while (
-        operatorStack.length > 0 &&
-        operatorStack[operatorStack.length - 1] !== '(' &&
-        precedence[operatorStack[operatorStack.length - 1]] >= precedence[token]
-      ) {
-        outputQueue.push(operatorStack.pop()!);
-      }
-      operatorStack.push(token);
-    }
-  }
-
-  while (operatorStack.length > 0) {
-    outputQueue.push(operatorStack.pop()!);
-  }
-
-  const stack: boolean[] = [];
-  for (const token of outputQueue) {
-    if (token === 'true') {
-      stack.push(true);
-    } else if (token === 'false') {
-      stack.push(false);
-    } else if (token === '!') {
-      const val = stack.pop();
-      if (val === undefined) return false;
-      stack.push(!val);
-    } else if (token === '&') {
-      const b = stack.pop();
-      const a = stack.pop();
-      if (a === undefined || b === undefined) return false;
-      stack.push(a && b);
-    } else if (token === '|') {
-      const b = stack.pop();
-      const a = stack.pop();
-      if (a === undefined || b === undefined) return false;
-      stack.push(a || b);
-    }
-  }
-
-  return stack[0] || false;
-}
-
-function checkSingleTagMatch(fileTags: string[], tagQuery: string): boolean {
-  let isRegex = false;
-  let pattern = '';
-  let flags = 'i';
-
-  if (tagQuery.startsWith('#re:')) {
-    isRegex = true;
-    pattern = tagQuery.slice(4);
-  } else if (tagQuery.startsWith('#/')) {
-    const lastSlash = tagQuery.lastIndexOf('/');
-    pattern = tagQuery.slice(2, lastSlash);
-    flags = tagQuery.slice(lastSlash + 1) || 'i';
-    isRegex = true;
-  } else {
-    // Auto-detect regex if common metacharacters are present (excluding ? and . to prevent false positives)
-    const plainTag = tagQuery.slice(1); // strip '#'
-    const regexMetachars = /[\^$()\[\]{}*+|\\]/;
-    if (regexMetachars.test(plainTag)) {
-      isRegex = true;
-      pattern = plainTag;
-    } else {
-      pattern = plainTag;
-    }
-  }
-
-  if (isRegex) {
-    try {
-      const re = new RegExp(pattern, flags.includes('i') ? flags : flags + 'i');
-      return fileTags.some(t => re.test(t));
-    } catch {
-      return fileTags.some(t => t.toLowerCase().includes(pattern.toLowerCase()));
-    }
-  } else {
-    return fileTags.some(t => t.toLowerCase().includes(pattern.toLowerCase()));
-  }
-}
-
-function matchesTagQuery(fileTags: string[], tagTokens: { type: 'tag' | 'operator'; value: string }[]): boolean {
-  if (tagTokens.length === 0) return true;
-
-  const exprTokens: string[] = [];
-  for (let i = 0; i < tagTokens.length; i++) {
-    const current = tagTokens[i];
-    if (i > 0) {
-      const prev = tagTokens[i - 1];
-      const prevIsOperand = prev.value === ')' || prev.type === 'tag';
-      const currentIsOperand = current.value === '(' || current.value === '!' || current.type === 'tag';
-      if (prevIsOperand && currentIsOperand) {
-        exprTokens.push('&');
-      }
-    }
-    
-    if (current.type === 'tag') {
-      const isMatch = checkSingleTagMatch(fileTags, current.value);
-      exprTokens.push(isMatch ? 'true' : 'false');
-    } else {
-      exprTokens.push(current.value);
-    }
-  }
-
-  return evaluateBoolean(exprTokens);
-}
-
-function matchesFilename(filename: string, filenameTokens: string[]): boolean {
-  if (filenameTokens.length === 0) return true;
-  const displayName = filename.endsWith('.md') ? filename.substring(0, filename.lastIndexOf('.md')) : filename;
-  const nameLower = displayName.toLowerCase();
-  return filenameTokens.every(token => {
-    let isRegex = false;
-    let pattern = '';
-    let flags = 'i';
-
-    if (token.startsWith('re:')) {
-      isRegex = true;
-      pattern = token.slice(3);
-    } else if (/^\/.*\/\w*$/.test(token)) {
-      const lastSlash = token.lastIndexOf('/');
-      pattern = token.slice(1, lastSlash);
-      flags = token.slice(lastSlash + 1) || 'i';
-      isRegex = true;
-    } else {
-      // Auto-detect regex if common metacharacters are present (excluding ? and . to prevent false positives)
-      const regexMetachars = /[\^$()\[\]{}*+|\\]/;
-      if (regexMetachars.test(token)) {
-        isRegex = true;
-        pattern = token;
-      }
-    }
-
-    if (isRegex) {
-      try {
-        const re = new RegExp(pattern, flags.includes('i') ? flags : flags + 'i');
-        return re.test(displayName);
-      } catch {
-        return nameLower.includes(pattern.toLowerCase());
-      }
-    }
-    return nameLower.includes(token.toLowerCase());
-  });
-}
+// Extracted modules
+import { FileInfo } from './types';
+import {
+  tokenizeQuery,
+  matchesTagQuery,
+  matchesFilename
+} from './searchHelpers';
+import { useProjectHistory } from './useProjectHistory';
+import { TemplateModal } from './TemplateModal';
+import { PromptModal } from './PromptModal';
+import { IconPickerModal } from './IconPickerModal';
+import { HistoryProjectsMenu } from './HistoryProjectsMenu';
+import { FileCard } from './FileCard';
 
 /**
  * FileTreeComponent — Lattice Explorer 插件注册对象
@@ -289,51 +93,15 @@ function FileTreeView({
   const [autocompleteIndex, setAutocompleteIndex] = useState(0);
 
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
-  const [historyList, setHistoryList] = useState<string[]>([]);
-  const [demoPath, setDemoPath] = useState<string>('');
 
-  // Load app path dynamically at mount to determine the absolute demo project path
-  useEffect(() => {
-    const fetchPaths = async () => {
-      try {
-        const appPath = await window.electronAPI.getAppPath();
-        if (appPath) {
-          const pathWithSlash = appPath.endsWith('/') ? appPath : `${appPath}/`;
-          setDemoPath(`${pathWithSlash}template-project`);
-        }
-      } catch (err) {
-        console.error('Failed to get app path:', err);
-      }
-    };
-    fetchPaths();
-  }, []);
+  // Hook for project history logic
+  const { displayedHistory, demoPath } = useProjectHistory(projectPath);
 
-  // Load project history list from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem('dnote_project_history');
-    let parsed: string[] = [];
-    if (stored) {
-      try {
-        parsed = JSON.parse(stored);
-      } catch (_) {}
-    }
-    if (!Array.isArray(parsed)) {
-      parsed = [];
-    }
-    setHistoryList(parsed);
-  }, []);
-
-  // Save projectPath to history and update dnote_last_project when it changes
-  useEffect(() => {
-    if (!projectPath) return;
-    localStorage.setItem('dnote_last_project', projectPath);
-    setHistoryList((prev) => {
-      const updated = [projectPath, ...prev.filter((p) => p !== projectPath)];
-      const capped = updated.slice(0, 10);
-      localStorage.setItem('dnote_project_history', JSON.stringify(capped));
-      return capped;
-    });
-  }, [projectPath]);
+  const handleSelectHistoryProject = (path: string) => {
+    updateBloodKey(BC.system.projectPath, path);
+    setSelectedPath('');
+    setShowHistoryMenu(false);
+  };
 
   // Click-outside listener for history projects dropdown menu
   useEffect(() => {
@@ -348,18 +116,6 @@ function FileTreeView({
     document.addEventListener('mousedown', handleGlobalClick);
     return () => document.removeEventListener('mousedown', handleGlobalClick);
   }, [showHistoryMenu]);
-
-  // Displayed history project list: ensure demoPath is always the last option and never duplicated
-  const displayedHistory = useMemo(() => {
-    const filtered = historyList.filter(p => p !== demoPath && p.trim() !== '');
-    return [...filtered, demoPath];
-  }, [historyList, demoPath]);
-
-  const handleSelectHistoryProject = (path: string) => {
-    updateBloodKey(BC.system.projectPath, path);
-    setSelectedPath('');
-    setShowHistoryMenu(false);
-  };
 
   const allProjectTags = useMemo(() => {
     const resolved = state[BC.system.resolvedTags] || {};
@@ -446,8 +202,6 @@ function FileTreeView({
 
   // Project lifecycle scripts (on_project_open.py, on_project_run.py, on_project_close.py)
   useProjectLifecycle(projectPath);
-
-
 
   const handleOpenTemplateModal = async () => {
     if (!projectPath) {
@@ -547,7 +301,6 @@ function FileTreeView({
           mdFiles,
           maxIterations,
           (errMsg: string) => {
-            // 脚本错误通过 Blood 广播，不再静默失败
             updateBloodKey(BC.events.scriptError('fileTree'), { message: errMsg, ts: Date.now() });
           }
         );
@@ -837,86 +590,13 @@ function FileTreeView({
         </div>
       </div>
 
-      {showHistoryMenu && (
-        <div
-          id="history-projects-menu"
-          style={{
-            position: 'absolute',
-            top: '44px',
-            right: '10px',
-            zIndex: 1100,
-            width: '240px',
-            maxHeight: '260px',
-            overflowY: 'auto',
-            backgroundColor: 'var(--bg-main)',
-            border: '1.2px solid var(--border-color)',
-            borderRadius: '12px',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
-            backdropFilter: 'blur(20px) saturate(150%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(150%)',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '6px',
-            gap: '2px',
-          }}
-        >
-          <div style={{ padding: '6px 8px', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', marginBottom: '4px', letterSpacing: '0.5px' }}>
-            历史笔记本
-          </div>
-          {displayedHistory.map((item) => {
-            const name = item.split('/').pop() || item;
-            const isCurrent = item === projectPath;
-            const isDemo = item === demoPath;
-            return (
-              <div
-                key={item}
-                onClick={() => handleSelectHistoryProject(item)}
-                style={{
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '11px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  backgroundColor: isCurrent ? 'var(--highlight-color)' : 'transparent',
-                  color: isCurrent ? 'var(--accent-color)' : 'var(--text-main)',
-                  transition: 'background-color 0.12s',
-                  fontWeight: isCurrent ? 700 : 500,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isCurrent) e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.04)';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isCurrent) e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-                title={item}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', marginRight: '6px' }}>
-                  <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                    {name}
-                  </span>
-                  <span style={{ fontSize: '8.5px', opacity: 0.5, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                    {item}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
-                  {isCurrent && (
-                    <span style={{ fontSize: '8px', padding: '1px 3px', borderRadius: '2px', backgroundColor: 'var(--accent-color)', color: '#fff' }}>
-                      当前
-                    </span>
-                  )}
-                  {isDemo && (
-                    <span style={{ fontSize: '8px', padding: '1px 3px', borderRadius: '2px', backgroundColor: 'rgba(255, 59, 48, 0.1)', color: 'var(--accent-color)' }}>
-                      演示
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <HistoryProjectsMenu
+        show={showHistoryMenu}
+        displayedHistory={displayedHistory}
+        projectPath={projectPath}
+        demoPath={demoPath}
+        onSelectHistoryProject={handleSelectHistoryProject}
+      />
 
       <div style={{ marginBottom: '10px', position: 'relative' }}>
         <input
@@ -1025,312 +705,46 @@ function FileTreeView({
           <div className="file-grid-container">
             {filteredFiles.map((file) => {
               const isSelected = selectedPath === file.path;
-              const displayName = file.name.substring(0, file.name.lastIndexOf('.md'));
               return (
-                <div
+                <FileCard
                   key={file.path}
-                  onClick={() => handleFileClick(file)}
-                  className={`file-card-item ${isSelected ? 'selected' : ''}`}
-                >
-                  {/* 右上角悬浮操作按钮 */}
-                  <div className="file-card-actions" style={{ position: 'absolute', top: '6px', right: '6px', display: 'flex', gap: '4px', zIndex: 10 }}>
-                    <button
-                      className="file-rename-btn"
-                      onClick={(e) => handleRenameFile(e, file)}
-                      title="重命名笔记"
-                      style={{
-                        background: 'rgba(0,0,0,0.05)',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '4px',
-                        borderRadius: '50%',
-                      }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z" fill="currentColor"/>
-                      </svg>
-                    </button>
-                    <button
-                      className="file-delete-btn"
-                      onClick={(e) => handleDeleteFile(e, file)}
-                      title="删除笔记"
-                      style={{
-                        background: 'rgba(0,0,0,0.05)',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '4px',
-                        borderRadius: '50%',
-                      }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M2 4h12M4 4v10a1 1 0 001 1h6a1 1 0 001-1V4M5.5 4V2.5a1 1 0 011-1h3a1 1 0 011-1V4M6.5 7.5v4.5M9.5 7.5v4.5" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {/* 文件头：图标 + 文件名 */}
-                  <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '4.5px', position: 'relative' }}>
-                    {/* Notion-style Icon Button */}
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIconPickerFile(file);
-                      }}
-                      style={{
-                        width: '18px',
-                        height: '18px',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        backgroundColor: isSelected ? 'rgba(255,59,48,0.1)' : 'rgba(0,0,0,0.03)',
-                        marginRight: '6px',
-                        fontSize: '11px',
-                        transition: 'background-color 0.12s, transform 0.12s',
-                        flexShrink: 0
-                      }}
-                      className="note-icon-btn"
-                      title="修改此笔记的图标"
-                      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.15)'}
-                      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      {file.icon || '📄'}
-                    </div>
-
-                    <span className="file-card-title" style={{
-                      fontWeight: 700,
-                      textAlign: 'left',
-                      flexGrow: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      marginRight: '44px', // Leave space for delete and rename buttons
-                    }} title={displayName}>
-                      {displayName}
-                    </span>
-                  </div>
-
-                  {/* 标签列表 */}
-                  {file.tags && file.tags.length > 0 && (
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '4px',
-                      width: '100%',
-                      marginTop: '2px'
-                    }}>
-                      {file.tags.map((t) => {
-                        const labelText = t.startsWith('re:') || t.startsWith('run:') ? `⚡️ ${t.split(':').pop()}` : `#${t}`;
-                        return (
-                          <span
-                            key={`${file.path}_tag_${t}`}
-                            className={`file-card-tag ${isSelected ? 'selected' : ''}`}
-                          >
-                            {labelText}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                  file={file}
+                  isSelected={isSelected}
+                  onFileClick={handleFileClick}
+                  onRenameFile={handleRenameFile}
+                  onDeleteFile={handleDeleteFile}
+                  onIconClick={(e, f) => {
+                    e.stopPropagation();
+                    setIconPickerFile(f);
+                  }}
+                />
               );
             })}
           </div>
         )}
       </div>
 
-      {showTemplateModal && (
-        <div className="pane-modal-overlay">
-          <div className="pane-modal-content" style={{ width: '85%', maxHeight: '80%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-main)' }}>模板选择</span>
-              <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-            </div>
-            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, flexGrow: 1, marginBottom: 12 }}>
-              {templateFiles.length === 0 ? (
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0', lineHeight: 1.5 }}>
-                  在 temple/ 目录下没有找到模板。<br/>在编辑器中使用“设为模板”来创建模板。
-                </div>
-              ) : (
-                templateFiles.map((t) => (
-                  <div
-                    key={t.path}
-                    onClick={() => handleUseTemplate(t)}
-                    style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-color)', cursor: 'pointer', fontSize: 12, color: 'var(--text-main)', fontWeight: 600, transition: 'background-color 0.15s' }}
-                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
-                  >
-                    {t.name.replace('.md', '')}
-                  </div>
-                ))
-              )}
-            </div>
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={handleOpenTempleFolder}
-                style={{ background: 'none', border: 'none', color: 'var(--accent-color)', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}
-              >
-                打开 temple/ 文件夹
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TemplateModal
+        show={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        templateFiles={templateFiles}
+        onUseTemplate={handleUseTemplate}
+        onOpenTempleFolder={handleOpenTempleFolder}
+      />
 
-      {promptConfig.show && (
-        <div className="pane-modal-overlay">
-          <div className="pane-modal-content" style={{ width: '85%' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-main)', marginBottom: 12 }}>{promptConfig.title === 'Enter file name:' ? '新建笔记名称:' : promptConfig.title}</span>
-            <input
-              type="text"
-              id="prompt-modal-input-tree"
-              defaultValue={promptConfig.defaultValue}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = e.currentTarget.value.trim();
-                  promptConfig.onConfirm(val);
-                  setPromptConfig(prev => ({ ...prev, show: false }));
-                } else if (e.key === 'Escape') {
-                  setPromptConfig(prev => ({ ...prev, show: false }));
-                }
-              }}
-              style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '6px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none', marginBottom: 12 }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
-              <button
-                className="area-btn text-btn"
-                onClick={() => setPromptConfig(prev => ({ ...prev, show: false }))}
-                style={{ height: '24px', fontSize: '10px', padding: '0 10px' }}
-              >
-                取消
-              </button>
-              <button
-                className="area-btn text-btn"
-                onClick={() => {
-                  const input = document.getElementById('prompt-modal-input-tree') as HTMLInputElement;
-                  if (input) {
-                    promptConfig.onConfirm(input.value.trim());
-                  }
-                  setPromptConfig(prev => ({ ...prev, show: false }));
-                }}
-                style={{ height: '24px', fontSize: '10px', padding: '0 10px', backgroundColor: 'var(--accent-color)', color: '#fff', border: 'none' }}
-              >
-                确定
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PromptModal
+        show={promptConfig.show}
+        title={promptConfig.title}
+        defaultValue={promptConfig.defaultValue}
+        onConfirm={promptConfig.onConfirm}
+        onClose={() => setPromptConfig(prev => ({ ...prev, show: false }))}
+      />
 
-      {/* Icon Picker Modal */}
-      {iconPickerFile && (
-        <div className="pane-modal-overlay" onClick={() => setIconPickerFile(null)}>
-          <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '280px', maxHeight: '280px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>
-              <span style={{ fontWeight: 700, fontSize: '11px' }}>选择笔记图标</span>
-              <button
-                onClick={() => setIconPickerFile(null)}
-                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '12px' }}
-              >
-                ✕
-              </button>
-            </div>
-            
-            {/* Quick Emojis Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(6, 1fr)',
-              gap: '6px',
-              padding: '4px 0',
-              maxHeight: '120px',
-              overflowY: 'auto'
-            }}>
-              {['📝', '🚀', '💡', '📅', '🌟', '🛠️', '📂', '🎨', '📓', '💻', '⚡', '🔍', '🎯', '🔥', '📌', '🎉', '💬', '❤️', '✅', '❌', '🔑', '🏷️', '📚', '🗺️'].map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={() => handleSaveIcon(iconPickerFile, emoji)}
-                  style={{
-                    fontSize: '16px',
-                    padding: '6px',
-                    border: 'none',
-                    borderRadius: '6px',
-                    backgroundColor: 'rgba(0,0,0,0.03)',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'background-color 0.15s, transform 0.1s'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--highlight-color)';
-                    e.currentTarget.style.transform = 'scale(1.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.03)';
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-            
-            {/* Custom Emoji input & Clear button */}
-            <div style={{ display: 'flex', gap: '6px', marginTop: '4px', alignItems: 'center' }}>
-              <input
-                type="text"
-                placeholder="输入任意 Emoji..."
-                maxLength={2}
-                onChange={(e) => {
-                  const val = e.target.value.trim();
-                  if (val) {
-                    handleSaveIcon(iconPickerFile, val);
-                  }
-                }}
-                style={{
-                  flexGrow: 1,
-                  backgroundColor: 'var(--bg-input)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-main)',
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  outline: 'none'
-                }}
-              />
-              {iconPickerFile.icon && (
-                <button
-                  className="area-btn text-btn"
-                  onClick={() => handleSaveIcon(iconPickerFile, '')}
-                  style={{
-                    height: '24px',
-                    padding: '0 8px',
-                    fontSize: '10px',
-                    backgroundColor: 'rgba(255, 59, 48, 0.1)',
-                    color: 'var(--accent-color)',
-                    border: '1px solid var(--accent-color)',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  移除图标
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <IconPickerModal
+        file={iconPickerFile}
+        onClose={() => setIconPickerFile(null)}
+        onSaveIcon={handleSaveIcon}
+      />
     </div>
   );
 }
