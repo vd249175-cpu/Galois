@@ -159,13 +159,12 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
         style={{
           position: 'relative',
           background: '#000',
-          aspectRatio: '16/9',
+          aspectRatio: loaded ? undefined : '16/9',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           width: '100%',
-          height: '100%',
         }}
         onClick={togglePlay}
       >
@@ -179,7 +178,7 @@ export function InlineClipPlayer({ label, fileName, start, end, projectPath }: I
           onTimeUpdate={handleTimeUpdate}
           onEnded={() => setIsPlaying(false)}
           onError={() => setError(true)}
-          style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
         />
 
         {/* Play Overlay Button */}
