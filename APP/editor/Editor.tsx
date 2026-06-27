@@ -1762,7 +1762,7 @@ function EditorView({
           onClick={() => updateCursorState()}
           placeholder="Start writing note..."
           spellCheck={false}
-          style={{ border: 'none', resize: 'none', overflowY: 'auto' }}
+          style={{ border: 'none', resize: 'none', overflowY: 'auto', height: 0, minHeight: 0 }}
         />
       )}
 

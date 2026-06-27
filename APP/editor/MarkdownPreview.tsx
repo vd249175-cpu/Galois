@@ -1204,6 +1204,8 @@ export function MarkdownPreview({
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
+        height: 0,
+        minHeight: 0,
       }}
     >
       <style dangerouslySetInnerHTML={{ __html: `
