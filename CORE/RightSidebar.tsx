@@ -44,46 +44,10 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
     });
   };
 
-  const renderActionIcon = (actionId: string, icon?: React.ReactNode) => {
+  const renderActionIcon = (icon?: React.ReactNode) => {
     if (icon) return icon;
 
-    if (actionId === 'panel.splitHorizontal') {
-      return (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <rect x="2" y="2" width="12" height="12" rx="1.5" />
-          <line x1="8" y1="2" x2="8" y2="14" />
-        </svg>
-      );
-    }
-
-    if (actionId === 'panel.splitVertical') {
-      return (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <rect x="2" y="2" width="12" height="12" rx="1.5" />
-          <line x1="2" y1="8" x2="14" y2="8" />
-        </svg>
-      );
-    }
-
-    if (actionId === 'panel.popOut') {
-      return (
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M7 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1V9" />
-          <path d="M10 2h4v4" />
-          <line x1="14" y1="2" x2="7.5" y2="8.5" />
-        </svg>
-      );
-    }
-
-    if (actionId === 'panel.close') {
-      return (
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" />
-        </svg>
-      );
-    }
-
-    // Generic fallback
+    // Generic fallback for actions without icons
     return (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
         <circle cx="8" cy="8" r="6" />
@@ -98,13 +62,10 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
     const shortcut = ActionRegistry.getShortcutForAction(actionId);
     const title = shortcut ? `${label} (${shortcut})` : label;
 
+    // In text mode, show a shortened version of the label
     let displayText = label;
     if (displayMode === 'text') {
-      if (actionId === 'panel.splitHorizontal') displayText = '横拆';
-      else if (actionId === 'panel.splitVertical') displayText = '竖拆';
-      else if (actionId === 'panel.popOut') displayText = '悬浮';
-      else if (actionId === 'panel.close') displayText = '关闭';
-      else if (label.includes('(')) {
+      if (label.includes('(')) {
         displayText = label.split('(')[0].trim();
       }
       if (displayText.length > 5) {
@@ -141,7 +102,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
         style={buttonStyle}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {renderActionIcon(actionId, icon)}
+          {renderActionIcon(icon)}
         </div>
         {displayMode === 'text' && (
           <span style={{

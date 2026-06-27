@@ -1,5 +1,6 @@
+import React from 'react';
 import { Blood } from './Blood';
-import type React from 'react';
+
 
 export interface ActionContext {
   areaId: string;
@@ -189,6 +190,12 @@ ActionRegistry.register({
   label: 'Split Horizontally',
   defaultShortcut: 'meta+d',
   isGlobal: true,
+  icon: React.createElement(
+    'svg',
+    { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 },
+    React.createElement('rect', { x: 2, y: 2, width: 12, height: 12, rx: 1.5 }),
+    React.createElement('line', { x1: 8, y1: 2, x2: 8, y2: 14 })
+  ),
   run: (context) => {
     Blood.updateKey(`layout.splitArea.${context.areaId}`, 'horizontal');
   },
@@ -199,6 +206,12 @@ ActionRegistry.register({
   label: 'Split Vertically',
   defaultShortcut: 'meta+shift+d',
   isGlobal: true,
+  icon: React.createElement(
+    'svg',
+    { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 },
+    React.createElement('rect', { x: 2, y: 2, width: 12, height: 12, rx: 1.5 }),
+    React.createElement('line', { x1: 2, y1: 8, x2: 14, y2: 8 })
+  ),
   run: (context) => {
     Blood.updateKey(`layout.splitArea.${context.areaId}`, 'vertical');
   },
@@ -209,6 +222,13 @@ ActionRegistry.register({
   label: 'Pop Out Panel',
   defaultShortcut: 'meta+shift+p',
   isGlobal: true,
+  icon: React.createElement(
+    'svg',
+    { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 },
+    React.createElement('path', { d: 'M7 3H3a1 1 0 00-1 1v9a1 1 0 001 1h9a1 1 0 001-1V9' }),
+    React.createElement('path', { d: 'M10 2h4v4' }),
+    React.createElement('line', { x1: 14, y1: 2, x2: 7.5, y2: 8.5 })
+  ),
   run: (context) => {
     Blood.updateKey(`layout.popArea.${context.areaId}`, Date.now());
   },
@@ -219,8 +239,13 @@ ActionRegistry.register({
   label: 'Close Panel',
   defaultShortcut: 'meta+w',
   isGlobal: true,
+  icon: React.createElement(
+    'svg',
+    { width: 12, height: 12, viewBox: '0 0 12 12', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 },
+    React.createElement('path', { d: 'M1.5 1.5l9 9M10.5 1.5l-9 9' })
+  ),
   run: (context) => {
-    // 必须使用 timestamp：同一按鈕连续单击也要触发，boolean 无法区分
+    // 必须使用 timestamp：同一按钮连续单击也要触发，boolean 无法区分
     Blood.updateKey(`layout.removeArea.${context.areaId}`, Date.now());
   },
 });
