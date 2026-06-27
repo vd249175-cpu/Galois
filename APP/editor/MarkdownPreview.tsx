@@ -171,6 +171,7 @@ export function MarkdownPreview({
   const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
   const [draggedBlockKey, setDraggedBlockKey] = useState<string | null>(null);
   const [dragContent, setDragContent] = useState<string | null>(null);
+  const [isDraggingOverBottom, setIsDraggingOverBottom] = useState(false);
   const isJumpingToNextLineRef = useRef(false);
 
   const effectiveContent = dragContent ?? content;
@@ -448,6 +449,10 @@ export function MarkdownPreview({
           position: 'relative',
           opacity: isCurrentlyDragged ? 0.35 : 1,
         })}
+        onClick={(e) => {
+          // Prevent click from bubbling to the container click handler
+          e.stopPropagation();
+        }}
       >
         <div
           draggable
@@ -1151,7 +1156,60 @@ export function MarkdownPreview({
   };
 
   return (
-    <div className="markdown-preview-container" style={{ flexGrow: 1, overflowY: 'auto', padding: '20px 40px', backgroundColor: 'transparent', color: 'var(--text-main)', userSelect: 'text' }}>
+    <div
+      className="markdown-preview-container"
+      onDragOver={(e) => {
+        e.preventDefault();
+        const hasClip = e.dataTransfer.types.includes('text/x-dnote-clip');
+        const hasFile = e.dataTransfer.types.includes('Files');
+        if (hasClip || hasFile) {
+          setIsDraggingOverBottom(true);
+        }
+      }}
+      onDragLeave={() => {
+        setIsDraggingOverBottom(false);
+      }}
+      onDrop={async (e) => {
+        e.preventDefault();
+        setIsDraggingOverBottom(false);
+
+        const clipText = e.dataTransfer.getData('text/x-dnote-clip');
+        if (clipText) {
+          const nextContent = content + '\n' + clipText + '\n';
+          onContentChange(nextContent);
+          return;
+        }
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+          const allLines = content.split('\n');
+          handleLineDrop(e, allLines.length - 1);
+        }
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          const allLines = content.split('\n');
+          const lastLineIdx = allLines.length - 1;
+          if (allLines[lastLineIdx].trim() !== '') {
+            updateMarkdownLines(lastLineIdx, lastLineIdx, [allLines[lastLineIdx], '']);
+            setEditingLineIdx(lastLineIdx + 1);
+          } else {
+            setEditingLineIdx(lastLineIdx);
+          }
+        }
+      }}
+      style={{
+        flexGrow: 1,
+        overflowY: 'auto',
+        padding: '20px 40px',
+        backgroundColor: 'transparent',
+        color: 'var(--text-main)',
+        userSelect: 'text',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+      }}
+    >
       <style dangerouslySetInnerHTML={{ __html: `
         .preview-block-wrapper {
           position: relative;
@@ -1210,6 +1268,25 @@ export function MarkdownPreview({
       ) : (
         <div style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>
           No content. Switch to edit mode to write.
+        </div>
+      )}
+      {isDraggingOverBottom && (
+        <div style={{
+          height: '40px',
+          border: '2px dashed var(--accent-color, #7000ff)',
+          borderRadius: '6px',
+          backgroundColor: 'rgba(112, 0, 255, 0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'var(--accent-color, #7000ff)',
+          fontSize: '12px',
+          fontWeight: 500,
+          marginTop: '16px',
+          marginBottom: '16px',
+          pointerEvents: 'none',
+        }}>
+          + 释放以追加到笔记末尾
         </div>
       )}
     </div>
