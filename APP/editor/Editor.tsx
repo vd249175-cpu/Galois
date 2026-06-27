@@ -16,6 +16,7 @@ import { TagGroupsModal } from './TagGroupsModal';
 import { PromptModal } from './PromptModal';
 import { SlashMenu } from './SlashMenu';
 import { useEditorHistory } from './hooks/useEditorHistory';
+import { useRuntimeSync } from './hooks/useRuntimeSync';
 
 /**
  * EditorComponent — 插件注册对象（完整契约）
@@ -97,6 +98,10 @@ function EditorView({
   const [newTagInput, setNewTagInput] = useState('');
   const [ruleMatches, setRuleMatches] = useState<Record<string, string[]>>({});
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
+
+  // Sync runtime coordinates to .dnote_runtime.json in the project root.
+  // Migrated from CORE/App.tsx to keep editor-specific logic inside the editor plugin.
+  useRuntimeSync(areaId);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef(content);

@@ -390,56 +390,8 @@ export function App() {
     return unsubscribe;
   }, [isPopped]);
 
-  // Write DNOTE runtime coordinates (.dnote_runtime.json) to the project root directory
-  useEffect(() => {
-    if (isPopped) return;
-
-    let writeTimeout: NodeJS.Timeout | null = null;
-    const unsubscribe = Blood.subscribe((changedKeys) => {
-      const isRelevant = Array.from(changedKeys).some(key =>
-        key === 'system.projectPath' ||
-        key === 'system.lastFocusedEditorId' ||
-        key.startsWith('system.editorCursor.') ||
-        key.startsWith('events.openFile.')
-      );
-
-      if (isRelevant) {
-        if (writeTimeout) clearTimeout(writeTimeout);
-        writeTimeout = setTimeout(async () => {
-          const projectPath = Blood.getValue<string>('system.projectPath', '');
-          if (!projectPath) return;
-
-          const lastFocusedEditorId = Blood.getValue<string | null>('system.lastFocusedEditorId', null);
-          const cursor = lastFocusedEditorId ? Blood.getValue<any>('system.editorCursor.' + lastFocusedEditorId, null) : null;
-          
-          const runtimeState = {
-            projectPath,
-            activeEditorId: lastFocusedEditorId,
-            activeFile: cursor?.filePath || null,
-            cursor: cursor ? {
-              line: cursor.line,
-              column: cursor.column,
-              selectedText: cursor.selectedText
-            } : null,
-            timestamp: Date.now()
-          };
-
-          const filePath = `${projectPath}/.dnote_runtime.json`;
-          try {
-            await (window as any).electronAPI.writeFile(filePath, JSON.stringify(runtimeState, null, 2));
-            console.log('[App] Updated .dnote_runtime.json at', filePath);
-          } catch (err) {
-            console.error('[App] Failed to write .dnote_runtime.json:', err);
-          }
-        }, 150);
-      }
-    });
-
-    return () => {
-      if (writeTimeout) clearTimeout(writeTimeout);
-      unsubscribe();
-    };
-  }, [isPopped]);
+  // NOTE: .dnote_runtime.json write logic was moved to APP/editor/hooks/useRuntimeSync.ts
+  // to eliminate CORE's dependency on editor-specific Blood channels (system.editorCursor.*).
 
   // Global keyboard shortcuts observer (反射弧)
   useEffect(() => {
