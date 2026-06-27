@@ -877,16 +877,14 @@ export function MarkdownPreview({
             minHeight: '26px',
             margin: '6px 0',
             cursor: 'text',
-            border: '1px dashed rgba(255, 255, 255, 0.1)',
+            border: '1px dashed transparent',
             borderRadius: '4px',
             width: '100%',
-            backgroundColor: 'rgba(255, 255, 255, 0.01)',
+            backgroundColor: 'transparent',
             display: 'flex',
             alignItems: 'center',
             padding: '0 8px',
             boxSizing: 'border-box',
-            color: 'var(--text-muted, #888)',
-            fontSize: '11px',
             transition: 'all 0.15s ease',
           }}
           onMouseEnter={(e) => {
@@ -894,13 +892,11 @@ export function MarkdownPreview({
             e.currentTarget.style.backgroundColor = 'rgba(112, 0, 255, 0.03)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.01)';
+            e.currentTarget.style.borderColor = 'transparent';
+            e.currentTarget.style.backgroundColor = 'transparent';
           }}
           title="点击在此输入新内容..."
-        >
-          <span style={{ opacity: 0.35, pointerEvents: 'none' }}>空白行 (点击或拖拽 CLIP 至此编辑)</span>
-        </div>
+        />
       );
       return wrapBlock(blockEl, block);
     }
