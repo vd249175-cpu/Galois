@@ -494,7 +494,7 @@ function LinkGraphView({
     if (!node.exists || !node.filePath) {
       // If it doesn't exist, create it!
       const newPath = `${projectPath}/${node.id}.md`;
-      const defaultContent = `---\ntags:\n  - ${node.id}\n---\n# ${node.id}\n\nStart writing here...\n`;
+      const defaultContent = `---\ntags:\n  - ${node.id}\n---\n# ${node.id}\n\n`;
       (window as any).electronAPI.writeFile(newPath, defaultContent).then(() => {
         updateBloodKey(BC.events.fileSaved(newPath), Date.now());
         const editorId = getTargetEditorId();

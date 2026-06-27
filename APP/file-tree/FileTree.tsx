@@ -356,7 +356,7 @@ function FileTreeView({
         return;
       }
 
-      const defaultContent = `---\ntags:\n  - ${name.trim()}\n---\n# ${name.trim()}\n\nStart writing here...\n`;
+      const defaultContent = `---\ntags:\n  - ${name.trim()}\n---\n# ${name.trim()}\n\n`;
       try {
         await (window as any).electronAPI.writeFile(fullPath, defaultContent);
         updateBloodKey(BC.events.fileSaved(fullPath), Date.now());
