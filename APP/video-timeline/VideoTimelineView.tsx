@@ -218,6 +218,9 @@ function VideoTimelineView({
   const [selectedSegmentIds, setSelectedSegmentIds] = useState<Set<string>>(new Set());
   const selectedSegmentId = selectedSegmentIds.size === 1 ? [...selectedSegmentIds][0] : null;
 
+  const [isDraggingVideo, setIsDraggingVideo] = useState<boolean>(false);
+  const dragCounter = useRef<number>(0);
+
   const [savedAssets, setSavedAssets] = useState<VideoAsset[]>([]);
 
   // Load saved video projects (assets) from project directory
@@ -1073,6 +1076,24 @@ function VideoTimelineView({
     return (file as any).path || '';
   };
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current++;
+    const hasFiles = e.dataTransfer.types.includes('Files');
+    if (hasFiles) {
+      setIsDraggingVideo(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDraggingVideo(false);
+    }
+  };
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
   };
@@ -1102,6 +1123,8 @@ function VideoTimelineView({
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
+    dragCounter.current = 0;
+    setIsDraggingVideo(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       const srcPath = getAbsoluteFilePath(file);
@@ -1247,6 +1270,7 @@ function VideoTimelineView({
         fontFamily: 'Outfit, Inter, sans-serif',
         userSelect: 'none',
         overflow: 'hidden',
+        position: 'relative',
       }}
       onMouseDown={() => {
         // Claim focus only if not already focused — timeline child handlers will stopPropagation
@@ -1255,7 +1279,52 @@ function VideoTimelineView({
           updateBloodKey(BC.system.focusedAreaId, areaId);
         }
       }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {isDraggingVideo && (
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(112, 0, 255, 0.12)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          border: '2.5px dashed var(--accent-color, #7000ff)',
+          margin: '8px',
+          borderRadius: '10px',
+          pointerEvents: 'none',
+          transition: 'all 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}>
+          <div style={{
+            padding: '20px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255,255,255,0.08)',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(112,0,255,0.2)',
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color, #7000ff)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8" />
+              <path d="M12 17v4" />
+              <path d="M12 7v6" />
+              <path d="M9 10l3-3 3 3" />
+            </svg>
+          </div>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main, #d4d4d4)' }}>
+            拖放视频文件以加载到时间轴中
+          </span>
+        </div>
+      )}
+
       {/* Dynamic Style Sheet Injected Client-Side */}
       <style dangerouslySetInnerHTML={{ __html: `
         .dropzone {
