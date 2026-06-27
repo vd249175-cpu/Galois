@@ -33,6 +33,7 @@ import { FileCard } from './FileCard';
 export const FileTreeComponent = {
   typeId: 'fileTree',
   displayName: '文本浏览器',
+  shortName: '浏览器',
   iconName: 'folder',
   icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

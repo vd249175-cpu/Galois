@@ -24,6 +24,7 @@ import { useEditorHistory } from './hooks/useEditorHistory';
 export const EditorComponent = {
   typeId: 'editor',
   displayName: '文本编辑器',
+  shortName: '编辑器',
   iconName: 'document',
   icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

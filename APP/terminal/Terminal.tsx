@@ -53,6 +53,7 @@ const BLOOD_ACTIVE_TAB = 'system.terminalActiveTabId';
 export const TerminalComponent = {
   typeId: 'terminal',
   displayName: '终端控制台',
+  shortName: '控制台',
   iconName: 'terminal',
   icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

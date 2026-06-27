@@ -22,6 +22,7 @@ interface LinkEdge {
 export const LinkGraphComponent = {
   typeId: 'linkGraph',
   displayName: '双链关系图谱',
+  shortName: '关系图',
   iconName: 'network',
   icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

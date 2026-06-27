@@ -12,6 +12,7 @@ export type { ChatMessage, Conversation } from './types';
 export const AgentComponent = {
   typeId: 'agent',
   displayName: 'AI 智能副驾驶',
+  shortName: '副驾驶',
   iconName: 'cpu',
   icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

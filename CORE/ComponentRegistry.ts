@@ -61,6 +61,11 @@ export interface AreaComponent {
    * @example ['custom.', 'project.']  // editor 插件的动态命令前缀
    */
   dynamicActionPrefixes?: string[];
+  /**
+   * 在左侧活动栏等 UI 场景下使用的简短中文名称。
+   * 不填时回退到 displayName。插件自己声明，CORE 无需 hardcode。
+   */
+  shortName?: string;
 }
 
 class ComponentRegistryClass {

@@ -22,6 +22,7 @@ import { Blood } from '../../CORE/Blood';
 export const GraphViewComponent = {
   typeId: 'graphView',
   displayName: '标签拓扑图',
+  shortName: '拓扑图',
   iconName: 'git-branch',
   icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

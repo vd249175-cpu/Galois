@@ -46,16 +46,10 @@ function LeftActivityBar() {
 
   const availableTypes = ComponentRegistry.getAvailableTypes().filter(t => t !== 'settings');
 
-  const getShortName = (typeId: string, displayName: string) => {
-    const map: Record<string, string> = {
-      editor: '编辑器',
-      fileTree: '浏览器',
-      graphView: '拓扑图',
-      linkGraph: '关系图',
-      terminal: '控制台',
-      agent: '副驾驶'
-    };
-    return map[typeId] || displayName;
+  const getShortName = (_typeId: string, comp: { displayName: string; shortName?: string }) => {
+    // Each plugin declares its own shortName in its manifest.
+    // CORE no longer hardcodes plugin-specific display names.
+    return comp.shortName || comp.displayName;
   };
 
   const barWidth = isTextMode ? '96px' : '44px';
@@ -82,7 +76,7 @@ function LeftActivityBar() {
           if (!comp) return null;
           
           const isActive = focusedType === typeId;
-          const shortName = getShortName(typeId, comp.displayName);
+          const shortName = getShortName(typeId, comp);
           
           return (
             <button
