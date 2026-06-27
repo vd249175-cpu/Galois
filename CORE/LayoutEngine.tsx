@@ -11,14 +11,15 @@ interface LayoutEngineProps {
 
 export function isNodeCollapsed(node: AreaLayout): boolean {
   if (node.type === 'area') {
-    return Blood.getValue(BC.layout.removeArea(node.id), false);
+    // removeArea can be a timestamp (truthy) = collapsed, or false/undefined = visible
+    return !!Blood.getValue(BC.layout.removeArea(node.id), false);
   }
   return isNodeCollapsed(node.first) && isNodeCollapsed(node.second);
 }
 
 export function getCollapsedNodeIds(node: AreaLayout): string {
   if (node.type === 'area') {
-    return Blood.getValue(BC.layout.removeArea(node.id), false) ? node.id : '';
+    return !!Blood.getValue(BC.layout.removeArea(node.id), false) ? node.id : '';
   }
   const f = getCollapsedNodeIds(node.first);
   const s = getCollapsedNodeIds(node.second);
@@ -42,6 +43,7 @@ export function LayoutEngine({ layout, onLayoutChange }: LayoutEngineProps) {
           }
         } else if (channel.startsWith(BC_PREFIX.removeArea)) {
           const areaId = channel.replace(BC_PREFIX.removeArea, '');
+          // removeArea value is a timestamp (truthy) = remove, or false = restore
           if (Blood.getValue(channel, false)) {
             const after = exciseNode(nextLayout, areaId);
             if (after === null) {

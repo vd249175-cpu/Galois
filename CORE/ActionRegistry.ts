@@ -220,7 +220,8 @@ ActionRegistry.register({
   defaultShortcut: 'meta+w',
   isGlobal: true,
   run: (context) => {
-    Blood.updateKey(`layout.removeArea.${context.areaId}`, true);
+    // 必须使用 timestamp：同一按鈕连续单击也要触发，boolean 无法区分
+    Blood.updateKey(`layout.removeArea.${context.areaId}`, Date.now());
   },
 });
 

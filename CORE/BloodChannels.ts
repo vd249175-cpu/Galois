@@ -45,6 +45,18 @@ export const BC = {
     /** 拖拽状态（draggedId + location）。Writer: AreaShell → Reader: AreaShell(overlay) */
     dragState: 'system.dragState' as const,
 
+    /** 当前正在被拖拽的 areaId。Writer: AreaShell(dragStart/dragEnd) → Reader: AreaShell(dragOver) */
+    activeDraggedId: 'system.activeDraggedId' as const,
+
+    /** 终端 Tab 列表。Writer: terminal → Reader: terminal */
+    terminalTabs: 'system.terminalTabs' as const,
+
+    /** 当前活跃的终端 Tab ID。Writer: terminal → Reader: terminal */
+    terminalActiveTabId: 'system.terminalActiveTabId' as const,
+
+    /** Editor 光标位置（按 areaId 区分）。Writer: editor → Reader: agent, App(runtimeSync) */
+    editorCursor: (areaId: string) => `system.editorCursor.${areaId}` as const,
+
     /** 记录每个 componentType 最后聚焦的 areaId。Writer: AreaShell → Reader: fileTree,graphView */
     lastFocused: (componentType: string) => `system.lastFocused.${componentType}Id` as const,
 
@@ -101,11 +113,17 @@ export const BC = {
     /** 文件已保存通知（timestamp）。Writer: editor(save) | fileTree(createFile) → Reader: fileTree, graphView */
     fileSaved: (filePath: string) => `events.fileSaved.${filePath}` as const,
 
-    /** 主题变更事件（timestamp）。Writer: SettingsModal → Reader: App */
+    /**
+     * 主题变更信号（timestamp）。Writer: SettingsModal → Reader: App
+     * ⚠️ 主题名称字符串存储于 system.config.theme，此频道仅作触发信号使用。
+     */
     themeChanged: 'events.themeChanged' as const,
 
     /** 脚本执行错误（包含 message 和 scriptName）。Writer: fileTree(tagResolver) | graphView(lattice) → Reader: 任意订阅者 */
     scriptError: (pluginName: string) => `events.scriptError.${pluginName}` as const,
+
+    /** 项目自定义命令执行完成。Writer: 任意器官(execCommand) → Reader: 触发方器官 */
+    commandExecuted: (commandId: string) => `events.commandExecuted.${commandId}` as const,
   },
 } as const;
 

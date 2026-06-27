@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import { Blood, useBloodChannel } from './Blood';
 import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
+import { BC } from './BloodChannels';
 
 // Component wrapper middleware to subscribe to Blood keys and inject dependencies
 function ComponentWrapper({
@@ -238,7 +239,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     }));
     e.dataTransfer.effectAllowed = 'move';
 
-    Blood.updateKey('system.activeDraggedId', areaId);
+    Blood.updateKey(BC.system.activeDraggedId, areaId);
     Blood.updateKey('system.dragState', {
       draggedId: areaId,
       location: { x: e.clientX, y: e.clientY }
@@ -247,7 +248,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    const activeDraggedId = Blood.getValue<string>('system.activeDraggedId', '');
+    const activeDraggedId = Blood.getValue<string>(BC.system.activeDraggedId, '');
     if (!activeDraggedId || activeDraggedId === areaId) return;
 
     Blood.updateKey('system.dragState', {
@@ -293,12 +294,12 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
     }
 
     Blood.updateKey('system.dragState', null);
-    Blood.updateKey('system.activeDraggedId', '');
+    Blood.updateKey(BC.system.activeDraggedId, '');
   };
 
   const handleDragEnd = (e: React.DragEvent) => {
     Blood.updateKey('system.dragState', null);
-    Blood.updateKey('system.activeDraggedId', '');
+    Blood.updateKey(BC.system.activeDraggedId, '');
 
     // Check if dropped outside window boundaries to trigger popOut (only if not already popped)
     if (!isPopped) {
@@ -315,7 +316,8 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
 
   const popOut = () => {
     Blood.updateKey(`layout.poppedAreas.${areaId}`, componentType);
-    Blood.updateKey(`layout.removeArea.${areaId}`, true);
+    // 必须使用 timestamp：同一按钮连续单击也要触发，boolean 无法区分
+    Blood.updateKey(`layout.removeArea.${areaId}`, Date.now());
 
     const title = ComponentRegistry.getComponent(componentType)?.displayName || '工作区面板';
     (window as any).electronAPI.openSecondaryWindow(areaId, componentType, title);
@@ -326,7 +328,8 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
 
 
   const closePanel = () => {
-    Blood.updateKey(`layout.removeArea.${areaId}`, true);
+    // 必须使用 timestamp：同一按钮连续单击也要触发，boolean 无法区分
+    Blood.updateKey(`layout.removeArea.${areaId}`, Date.now());
   };
 
   const focusMe = () => {
