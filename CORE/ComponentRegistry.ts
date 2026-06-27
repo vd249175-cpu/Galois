@@ -53,6 +53,14 @@ export interface AreaComponent {
   bloodChannels?: string[] | ((areaId: string) => string[]);
   /** 插件契约声明（明文 reads/writes/dependsOn）*/
   manifest: PluginManifest;
+  /**
+   * 该插件支持的动态 action ID 前缀列表。
+   * ComponentWrapper 收到以这些前缀开头的 action 信号时，会将其注入到该插件的 lastAction prop。
+   * 这使 CORE 框架层无需感知具体插件名称即可支持动态 action。
+   *
+   * @example ['custom.', 'project.']  // editor 插件的动态命令前缀
+   */
+  dynamicActionPrefixes?: string[];
 }
 
 class ComponentRegistryClass {

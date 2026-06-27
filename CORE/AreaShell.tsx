@@ -67,10 +67,12 @@ function ComponentWrapper({
         const actionId = withoutPrefix.slice(0, -(`.${areaIdRef.current}`.length));
 
         const isMyStaticAction = myActions.includes(key);
-        const isDynamicEditorAction = currentComponent.typeId === 'editor' && 
-          (actionId.startsWith('custom.') || actionId.startsWith('project.'));
+        // Use manifest-declared dynamicActionPrefixes instead of hardcoding plugin typeIds
+        const isDynamicAction = (currentComponent.dynamicActionPrefixes || []).some(
+          (prefix: string) => actionId.startsWith(prefix)
+        );
 
-        if (!isMyStaticAction && !isDynamicEditorAction) return;
+        if (!isMyStaticAction && !isDynamicAction) return;
 
         const ts = Blood.getValue<number | undefined>(key, undefined);
         if (ts === undefined || ts === null) return; // ignore the clear-signal

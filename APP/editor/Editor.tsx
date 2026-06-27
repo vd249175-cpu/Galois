@@ -64,6 +64,13 @@ export const EditorComponent = {
     ],
     dependsOn: ['fileTree'],           // 需要 fileTree 提供 system.resolvedTags
   },
+  /**
+   * Editor 支持的动态 action 前缀：
+   * - 'custom.'  : 项目自定义命令（来自 commands.json 的 content 类型）
+   * - 'project.' : 项目级脚本动作（来自 commands.json 的 script 类型）
+   * AreaShell 的 ComponentWrapper 会将这些前缀的 action 信号注入到 lastAction prop。
+   */
+  dynamicActionPrefixes: ['custom.', 'project.'],
 };
 
 function EditorView({
