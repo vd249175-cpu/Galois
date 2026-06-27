@@ -7,7 +7,10 @@
  * Design: we never cut the original video. Each asset stores the full
  * video path plus an ordered list of { start, end } segments.
  */
+import { formatTimestamp } from '../utils';
 
+// Re-export so existing callers that imported from this module don't break
+export { formatTimestamp };
 export interface VideoSegment {
   id: string;
   start: number;
@@ -104,14 +107,4 @@ export function parseClipSyntax(text: string): {
   };
 }
 
-export function formatTimestamp(seconds: number): string {
-  if (isNaN(seconds)) return '00:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  const cs = Math.floor((seconds % 1) * 100);
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  }
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
-}
+// formatTimestamp is now re-exported from the import above (shared APP/utils)

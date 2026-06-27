@@ -9,7 +9,7 @@
  * - Mutes audio during scrubbing for performance
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { formatTimestamp } from '../video-timeline/VideoAssetManager';
+import { formatTimestamp } from '../utils';
 
 interface InlineClipPlayerProps {
   label: string;

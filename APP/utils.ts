@@ -159,3 +159,24 @@ export function updateYamlFrontmatterIcon(content: string, nextIcon: string): st
   const cleanYaml = newYamlLines.join('\n');
   return `---\n${cleanYaml}\n---\n${bodyText}`;
 }
+
+/**
+ * formatTimestamp — 将秒数转换为可读时间字符串
+ *
+ * 移动自 video-timeline/VideoAssetManager.ts，对所有插件共享。
+ *
+ * @example
+ *   formatTimestamp(3661)  // => '1:01:01'
+ *   formatTimestamp(90.5)  // => '01:30.50'
+ */
+export function formatTimestamp(seconds: number): string {
+  if (isNaN(seconds)) return '00:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const cs = Math.floor((seconds % 1) * 100);
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
