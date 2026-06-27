@@ -417,8 +417,10 @@ ipcMain.handle('window:closeSecondary', async (_, id: string) => {
 // Shared Blood state store across windows
 let sharedState: Record<string, any> = {};
 
-let projectWatcher: fs.FSWatcher | null = null;
-let currentWatchedPath: string | null = null;
+// NOTE: fs.watch project path watcher was intentionally removed.
+// Per AGENTS.md §3: business-level file watching must be implemented inside
+// APP organ components (e.g. file-tree plugin), not in CORE main process.
+// The file-tree plugin broadcasts events.fileSaved.* when it saves files.
 
 function updateSharedStateAndBroadcast(values: Record<string, any>) {
   sharedState = { ...sharedState, ...values };
@@ -437,64 +439,6 @@ function updateSharedStateAndBroadcast(values: Record<string, any>) {
   }
 }
 
-function watchProjectPath(projectPath: string) {
-  if (currentWatchedPath === projectPath) return;
-  
-  if (projectWatcher) {
-    projectWatcher.close();
-    projectWatcher = null;
-  }
-  
-  if (!projectPath) {
-    currentWatchedPath = null;
-    return;
-  }
-  
-  try {
-    if (!fs.existsSync(projectPath)) return;
-    
-    currentWatchedPath = projectPath;
-    console.log(`[Watcher] Starting recursive watch on: ${projectPath}`);
-    
-    const debounceMap = new Map<string, NodeJS.Timeout>();
-    
-    projectWatcher = fs.watch(projectPath, { recursive: true }, (_eventType, filename) => {
-      if (!filename) return;
-      
-      // Ignore git, venv, cache and temporary files
-      if (filename.includes('.git') || filename.includes('.venv') || filename.includes('.dnote_cache') || filename.includes('.DS_Store')) {
-        return;
-      }
-      
-      // Watch for markdown files and commands config files
-      const cleanFilename = filename.replace(/\\/g, '/');
-      const isConfig = cleanFilename.endsWith('command/commands.json') || cleanFilename.endsWith('commands.json');
-      if (!filename.endsWith('.md') && !isConfig) {
-        return;
-      }
-      
-      const absolutePath = path.resolve(projectPath, filename);
-      
-      if (debounceMap.has(absolutePath)) {
-        clearTimeout(debounceMap.get(absolutePath)!);
-      }
-      
-      const timeout = setTimeout(() => {
-        debounceMap.delete(absolutePath);
-        
-        console.log(`[Watcher] File change detected: ${absolutePath}`);
-        const key = `events.fileSaved.${absolutePath}`;
-        updateSharedStateAndBroadcast({ [key]: Date.now() });
-      }, 150);
-      
-      debounceMap.set(absolutePath, timeout);
-    });
-    
-  } catch (err) {
-    console.error(`[Watcher] Failed to start watch on ${projectPath}:`, err);
-  }
-}
-
 ipcMain.handle('blood:getInitialState', () => {
   return sharedState;
 });
@@ -502,10 +446,6 @@ ipcMain.handle('blood:getInitialState', () => {
 ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
   sharedState = { ...sharedState, ...values };
   console.log('[Blood Main Sync] State updated:', JSON.stringify(values));
-  
-  if (values['system.projectPath'] !== undefined) {
-    watchProjectPath(values['system.projectPath']);
-  }
   
   // Broadcast updates to all other open windows
   const senderWebContents = event.sender;
