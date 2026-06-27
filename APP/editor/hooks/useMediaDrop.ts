@@ -93,9 +93,43 @@ export function useMediaDrop({
     e.preventDefault();
     dragCounter.current = 0;
     setIsDraggingFile(false);
+
+    const clipText = e.dataTransfer.getData('text/x-dnote-clip');
+    if (clipText) {
+      const target = e.target as HTMLElement;
+      if (target && target.tagName === 'TEXTAREA') {
+        const textarea = target as HTMLTextAreaElement;
+        const insertIndex = textarea.selectionStart;
+        const val = contentRef.current;
+        const before = val.substring(0, insertIndex);
+        const after = val.substring(insertIndex);
+        const nextContent = before + clipText + after;
+        setContent(nextContent);
+        saveNodeFile(nextContent);
+        setStatusMessage('剪辑片段已插入');
+      } else {
+        const nextContent = contentRef.current + '\n' + clipText + '\n';
+        setContent(nextContent);
+        saveNodeFile(nextContent);
+        setStatusMessage('剪辑片段已追加到末尾');
+      }
+      return;
+    }
+
     const files = e.dataTransfer.files;
     if (files.length === 0) return;
-    await archiveAndInsert(files[0]);
+    
+    const target = e.target as HTMLElement;
+    if (target && target.tagName === 'TEXTAREA') {
+      const textarea = target as HTMLTextAreaElement;
+      const insertIndex = textarea.selectionStart;
+      // For files, we can also insert at the drop line if we split by newline
+      const linesBefore = contentRef.current.substring(0, insertIndex).split('\n');
+      const lineIdx = linesBefore.length - 1;
+      await archiveAndInsert(files[0], lineIdx);
+    } else {
+      await archiveAndInsert(files[0]);
+    }
   };
 
   const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {
