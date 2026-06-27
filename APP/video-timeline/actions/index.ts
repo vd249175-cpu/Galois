@@ -1,8 +1,10 @@
 import React from 'react';
 import type { OrganAction } from '../../../CORE/ComponentRegistry';
 
+// Action IDs use camelCase prefix "videoTimeline." (consistent with fileTree., graphView., etc.)
+
 export const playPauseAction: OrganAction = {
-  id: 'video-timeline.playPause',
+  id: 'videoTimeline.playPause',
   label: '播放/暂停 (Space)',
   defaultShortcut: 'space',
   isToolbar: true,
@@ -15,7 +17,7 @@ export const playPauseAction: OrganAction = {
 };
 
 export const splitAction: OrganAction = {
-  id: 'video-timeline.split',
+  id: 'videoTimeline.split',
   label: '切分视频 (C)',
   defaultShortcut: 'c',
   isToolbar: true,
@@ -30,7 +32,7 @@ export const splitAction: OrganAction = {
 };
 
 export const jumpBackwardAction: OrganAction = {
-  id: 'video-timeline.jumpBackward',
+  id: 'videoTimeline.jumpBackward',
   label: '后退秒数 (Left)',
   defaultShortcut: 'left',
   isToolbar: true,
@@ -43,7 +45,7 @@ export const jumpBackwardAction: OrganAction = {
 };
 
 export const jumpForwardAction: OrganAction = {
-  id: 'video-timeline.jumpForward',
+  id: 'videoTimeline.jumpForward',
   label: '前进秒数 (Right)',
   defaultShortcut: 'right',
   isToolbar: true,
@@ -56,7 +58,7 @@ export const jumpForwardAction: OrganAction = {
 };
 
 export const stepBackwardAction: OrganAction = {
-  id: 'video-timeline.stepBackward',
+  id: 'videoTimeline.stepBackward',
   label: '后退1帧 (Comma)',
   defaultShortcut: 'comma',
   isToolbar: true,
@@ -69,7 +71,7 @@ export const stepBackwardAction: OrganAction = {
 };
 
 export const stepForwardAction: OrganAction = {
-  id: 'video-timeline.stepForward',
+  id: 'videoTimeline.stepForward',
   label: '前进1帧 (Period)',
   defaultShortcut: 'period',
   isToolbar: true,

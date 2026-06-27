@@ -695,22 +695,22 @@ function VideoTimelineView({
     if (!isFocused) return;
 
     switch (lastAction.id) {
-      case 'video-timeline.playPause':
+      case 'videoTimeline.playPause':
         handlePlayPause();
         break;
-      case 'video-timeline.split':
+      case 'videoTimeline.split':
         handleSplit();
         break;
-      case 'video-timeline.jumpForward':
+      case 'videoTimeline.jumpForward':
         handleJump('forward');
         break;
-      case 'video-timeline.jumpBackward':
+      case 'videoTimeline.jumpBackward':
         handleJump('backward');
         break;
-      case 'video-timeline.stepForward':
+      case 'videoTimeline.stepForward':
         handleStepFrame('forward');
         break;
-      case 'video-timeline.stepBackward':
+      case 'videoTimeline.stepBackward':
         handleStepFrame('backward');
         break;
       default:
