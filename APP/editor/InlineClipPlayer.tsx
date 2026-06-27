@@ -73,7 +73,8 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
     syncUI(t);
     if (t >= end - 0.05) {
       v.currentTime = start;
-      if (!isPlaying) v.pause();
+      v.pause();
+      setIsPlaying(false);
     }
   };
 
