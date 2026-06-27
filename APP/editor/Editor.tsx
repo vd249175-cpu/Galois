@@ -476,6 +476,11 @@ function EditorView({
     setStatusMessage(`Saved tag group: ${name}`);
   };
 
+  const handleUpdateTagGroups = (nextGroups: Record<string, string[]>) => {
+    setTagGroups(nextGroups);
+    localStorage.setItem('dnote_tag_groups', JSON.stringify(nextGroups));
+  };
+
   const handleDeleteTagGroup = (name: string) => {
     const nextGroups = { ...tagGroups };
     delete nextGroups[name];
@@ -1834,6 +1839,7 @@ function EditorView({
         tags={tags}
         tagGroups={tagGroups}
         onSaveTagGroup={handleSaveTagGroup}
+        onUpdateTagGroups={handleUpdateTagGroups}
         onDeleteTagGroup={handleDeleteTagGroup}
         handleUpdateTags={handleUpdateTags}
       />

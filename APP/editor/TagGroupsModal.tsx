@@ -6,6 +6,7 @@ interface TagGroupsModalProps {
   tags: string[];
   tagGroups: Record<string, string[]>;
   onSaveTagGroup: (name: string) => void;
+  onUpdateTagGroups: (nextGroups: Record<string, string[]>) => void;
   onDeleteTagGroup: (name: string) => void;
   handleUpdateTags: (nextTags: string[]) => void;
 }
@@ -16,6 +17,7 @@ export function TagGroupsModal({
   tags,
   tagGroups,
   onSaveTagGroup,
+  onUpdateTagGroups,
   onDeleteTagGroup,
   handleUpdateTags,
 }: TagGroupsModalProps) {
@@ -40,7 +42,7 @@ export function TagGroupsModal({
 
   return (
     <div className="pane-modal-overlay" onClick={onClose}>
-      <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '460px', maxHeight: '400px', padding: 0 }}>
+      <div className="pane-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '460px', maxHeight: '450px', padding: 0 }}>
         {/* Modal Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.02)' }}>
           <span style={{ fontWeight: 700, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -93,22 +95,43 @@ export function TagGroupsModal({
           </form>
 
           {/* Groups List */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto' }}>
             <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--text-muted)' }}>已保存的标签组</span>
             {Object.keys(tagGroups).length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '11px', padding: '12px 0' }}>尚未保存任何标签组。请在上方创建！</div>
             ) : (
               Object.entries(tagGroups).map(([name, groupTags]) => (
-                <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', border: '1.2px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: 0 }}>
-                    <span style={{ fontWeight: 700, fontSize: '11px' }}>{name}</span>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px' }}>
-                      {groupTags.map(t => (
-                        <span key={`pill_${name}_${t}`} style={{ fontSize: '9px', fontWeight: 600, color: 'var(--accent-color)', backgroundColor: 'var(--highlight-color)', padding: '1px 4px', borderRadius: '4px' }}>#{t}</span>
-                      ))}
-                    </div>
+                <div key={name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', border: '1.2px solid var(--border-color)', borderRadius: '6px', backgroundColor: 'var(--bg-main)', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: '11.5px' }}>{name}</span>
+                    <input
+                      type="text"
+                      defaultValue={groupTags.join(' ')}
+                      placeholder="标签，空格分隔 (可编辑/排序)"
+                      onBlur={(e) => {
+                        const val = e.target.value;
+                        const nextTags = val
+                          .split(/[\s,，]+/)
+                          .map(t => t.trim().replace(/^#/, ''))
+                          .filter(Boolean);
+                        onUpdateTagGroups({
+                          ...tagGroups,
+                          [name]: nextTags
+                        });
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '4px 8px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        backgroundColor: 'var(--bg-input)',
+                        color: 'var(--text-main)',
+                        outline: 'none',
+                      }}
+                    />
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: '6px', flexShrink: 0, alignItems: 'center', alignSelf: 'flex-end' }}>
                     <button
                       onClick={() => {
                         // Incremental add tags
@@ -121,7 +144,7 @@ export function TagGroupsModal({
                     </button>
                     <button
                       onClick={() => onDeleteTagGroup(name)}
-                      style={{ border: 'none', background: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '10px', fontWeight: 600 }}
+                      style={{ border: 'none', background: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '10px', fontWeight: 600, padding: '4px' }}
                     >
                       ✕
                     </button>
