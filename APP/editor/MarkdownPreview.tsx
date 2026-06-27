@@ -194,21 +194,29 @@ export function MarkdownPreview({
   };
 
   const renderBlockEditor = (lineIdx: number, rawText: string) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter') {
+        if (e.shiftKey) {
+          // Allow Shift+Enter for single line breaks
+        } else {
+          // Enter submits the change
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }
+    };
+
     return (
-      <div
-        contentEditable
-        suppressContentEditableWarning
+      <textarea
+        defaultValue={rawText}
+        placeholder="输入文字..."
         onBlur={(e) => {
-          const newText = e.currentTarget.textContent || '';
-          updateMarkdownLines(lineIdx, lineIdx, [newText]);
+          const newText = e.currentTarget.value || '';
+          const newLines = newText.split('\n');
+          updateMarkdownLines(lineIdx, lineIdx, newLines);
           setEditingLineIdx(null);
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            e.currentTarget.blur();
-          }
-        }}
+        onKeyDown={handleKeyDown}
         style={{
           fontFamily: 'inherit',
           fontSize: '13px',
@@ -221,24 +229,25 @@ export function MarkdownPreview({
           margin: '6px 0',
           width: '100%',
           boxSizing: 'border-box',
-          minHeight: '24px',
+          resize: 'none',
+          minHeight: '28px',
+          overflow: 'hidden',
+          display: 'block',
         }}
         ref={(el) => {
           if (el) {
             el.focus();
-            const range = document.createRange();
-            const sel = window.getSelection();
-            range.selectNodeContents(el);
-            range.collapse(false);
-            if (sel) {
-              sel.removeAllRanges();
-              sel.addRange(range);
-            }
+            el.selectionStart = el.selectionEnd = el.value.length;
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
           }
         }}
-      >
-        {rawText}
-      </div>
+        onInput={(e) => {
+          const el = e.currentTarget;
+          el.style.height = 'auto';
+          el.style.height = `${el.scrollHeight}px`;
+        }}
+      />
     );
   };
 
