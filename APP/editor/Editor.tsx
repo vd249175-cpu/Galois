@@ -109,6 +109,7 @@ function EditorView({
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
   const lastSavedContentRef = useRef<string>('');
+  const isComposingRef = useRef<boolean>(false);
   const triggeredImmediateRefs = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -1156,7 +1157,7 @@ function EditorView({
     const loadMarkdownFile = async () => {
       try {
         const rawContent = await (window as any).electronAPI.readFile(openedFile);
-        if (rawContent === contentRef.current) return;
+        if (rawContent === contentRef.current || rawContent === lastSavedContentRef.current) return;
         const parsedTags = parseFrontmatterTags(rawContent);
         lastSavedContentRef.current = rawContent;
         setTags(parsedTags);
@@ -1245,7 +1246,7 @@ function EditorView({
 
   // ── Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {
-    if (!currentFile || isPreviewMode || content === '' || content === lastSavedContentRef.current) return;
+    if (!currentFile || isPreviewMode || content === '' || content === lastSavedContentRef.current || isComposingRef.current) return;
     const timer = setTimeout(() => { saveNodeFile(content); }, 600);
     return () => clearTimeout(timer);
   }, [content, currentFile, isPreviewMode]);
@@ -1692,6 +1693,13 @@ function EditorView({
           ref={textareaRef}
           className="code-textarea"
           value={content}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            isComposingRef.current = false;
+            setContent(e.currentTarget.value);
+          }}
           onChange={(e) => {
             const nextVal = e.target.value;
             const start = e.target.selectionStart;
