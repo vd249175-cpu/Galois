@@ -171,6 +171,7 @@ export function MarkdownPreview({
   const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
   const [draggedBlockKey, setDraggedBlockKey] = useState<string | null>(null);
   const [dragContent, setDragContent] = useState<string | null>(null);
+  const isJumpingToNextLineRef = useRef(false);
 
   const effectiveContent = dragContent ?? content;
 
@@ -199,9 +200,21 @@ export function MarkdownPreview({
         if (e.shiftKey) {
           // Allow Shift+Enter for single line breaks
         } else {
-          // Enter submits the change
+          // Enter submits and jumps to next line
           e.preventDefault();
-          e.currentTarget.blur();
+          isJumpingToNextLineRef.current = true;
+          const newText = e.currentTarget.value || '';
+          const newLines = newText.split('\n');
+          updateMarkdownLines(lineIdx, lineIdx, newLines);
+
+          const nextLineIdx = lineIdx + newLines.length;
+          const allLines = content.split('\n');
+          // If we are at the last line, append an empty line so we can keep editing
+          if (nextLineIdx >= allLines.length) {
+            updateMarkdownLines(allLines.length - 1, allLines.length - 1, [allLines[allLines.length - 1], '']);
+          }
+
+          setEditingLineIdx(nextLineIdx);
         }
       }
     };
@@ -211,6 +224,10 @@ export function MarkdownPreview({
         defaultValue={rawText}
         placeholder="输入文字..."
         onBlur={(e) => {
+          if (isJumpingToNextLineRef.current) {
+            isJumpingToNextLineRef.current = false;
+            return;
+          }
           const newText = e.currentTarget.value || '';
           const newLines = newText.split('\n');
           updateMarkdownLines(lineIdx, lineIdx, newLines);
@@ -851,11 +868,34 @@ export function MarkdownPreview({
         <div
           key={idx}
           onClick={() => setEditingLineIdx(block.startLine)}
-          style={{ height: '18px', margin: '4px 0', cursor: 'text', border: '1px dashed transparent', width: '100%' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'transparent'; }}
+          style={{
+            minHeight: '26px',
+            margin: '6px 0',
+            cursor: 'text',
+            border: '1px dashed rgba(255, 255, 255, 0.1)',
+            borderRadius: '4px',
+            width: '100%',
+            backgroundColor: 'rgba(255, 255, 255, 0.01)',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 8px',
+            boxSizing: 'border-box',
+            color: 'var(--text-muted, #888)',
+            fontSize: '11px',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'var(--accent-color, #7000ff)';
+            e.currentTarget.style.backgroundColor = 'rgba(112, 0, 255, 0.03)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.01)';
+          }}
           title="点击在此输入新内容..."
-        />
+        >
+          <span style={{ opacity: 0.35, pointerEvents: 'none' }}>空白行 (点击或拖拽 CLIP 至此编辑)</span>
+        </div>
       );
       return wrapBlock(blockEl, block);
     }
