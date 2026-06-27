@@ -38,7 +38,8 @@ export const AgentComponent = {
       BC_PREFIX.editorCursorAll
     ],
     writes: [
-      BC.events.fileSaved(''),
+      // agent 在工具调用中可能写入任意文件并广播 fileSaved，路径在运行时确定
+      // BC.events.fileSaved('<runtime-path>') — 实际频道由 executeTool() 动态广播
     ],
     dependsOn: ['editor'],
   },

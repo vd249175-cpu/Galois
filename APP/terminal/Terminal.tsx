@@ -44,9 +44,9 @@ const xtermInstances = new Map<string, XTermInstance>();
 /** Tab IDs that have already had their auto-start commands sent */
 const startedTabIds = new Set<string>();
 
-/** Blood keys for terminal state */
-const BLOOD_TABS       = 'system.terminalTabs';
-const BLOOD_ACTIVE_TAB = 'system.terminalActiveTabId';
+/** Blood keys for terminal state — use BC constants from BloodChannels */
+const BLOOD_TABS       = BC.system.terminalTabs;
+const BLOOD_ACTIVE_TAB = BC.system.terminalActiveTabId;
 
 // ─── Plugin manifest ──────────────────────────────────────────────────────────
 
@@ -68,7 +68,10 @@ export const TerminalComponent = {
   manifest: {
     description: '原生 PTY 终端（xterm.js + node-pty），自动启动 agy 并同步笔记项目',
     reads: [BC.system.projectPath],
-    writes: [],
+    writes: [
+      BC.system.terminalTabs,         // Tab 列表持久化到 Blood
+      BC.system.terminalActiveTabId,  // 活跃 Tab ID
+    ],
     dependsOn: [],
   },
 };
