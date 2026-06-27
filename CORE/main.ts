@@ -1,10 +1,9 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { exec } from 'child_process';
 import * as pty from 'node-pty';
-import { pathToFileURL } from 'url';
 
 // Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
 protocol.registerSchemesAsPrivileged([
@@ -422,22 +421,6 @@ let sharedState: Record<string, any> = {};
 // APP organ components (e.g. file-tree plugin), not in CORE main process.
 // The file-tree plugin broadcasts events.fileSaved.* when it saves files.
 
-function updateSharedStateAndBroadcast(values: Record<string, any>) {
-  sharedState = { ...sharedState, ...values };
-  
-  const broadcast = (win: BrowserWindow) => {
-    if (!win.isDestroyed()) {
-      win.webContents.send('blood:stateChanged', values);
-    }
-  };
-  
-  if (mainWindow) {
-    broadcast(mainWindow);
-  }
-  for (const [_, win] of secondaryWindows) {
-    broadcast(win);
-  }
-}
 
 ipcMain.handle('blood:getInitialState', () => {
   return sharedState;

@@ -9,16 +9,16 @@
  */
 
 import { useEffect } from 'react';
-import { Blood } from '../../CORE/Blood';
-import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { Blood } from '../../../CORE/Blood';
+import { BC, BC_PREFIX } from '../../../CORE/BloodChannels';
 
 export function useRuntimeSync(areaId: string) {
   useEffect(() => {
     let writeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const unsubscribe = Blood.subscribe((changedKeys) => {
+    const unsubscribe = Blood.subscribe((changedKeys: Set<string>) => {
       const isRelevant = Array.from(changedKeys).some(
-        (key) =>
+        (key: string) =>
           key === BC.system.projectPath ||
           key === BC.system.lastFocusedEditorId ||
           key.startsWith(BC_PREFIX.editorCursorAll) ||

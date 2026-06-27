@@ -5,8 +5,6 @@
  * 从 CORE/App.tsx 拆分至此。
  */
 
-import React from 'react';
-
 export function TitleBar({ title = 'DNOTE Workspace' }: { title?: string }) {
   const isMac = typeof window !== 'undefined' && navigator.userAgent.includes('Mac');
   return (

@@ -19,7 +19,7 @@ interface InlineClipPlayerProps {
   projectPath: string;
 }
 
-export function InlineClipPlayer({ label, fileName, start, end, projectPath }: InlineClipPlayerProps) {
+export function InlineClipPlayer({ label: _label, fileName, start, end, projectPath }: InlineClipPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scrubBarRef = useRef<HTMLDivElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);

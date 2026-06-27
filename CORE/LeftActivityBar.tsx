@@ -7,7 +7,7 @@
  * 从 CORE/App.tsx 拆分至此（减小 App.tsx 体积，提升可读性）。
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Blood, useBloodChannel } from './Blood';
 import { ComponentRegistry } from './ComponentRegistry';
 
