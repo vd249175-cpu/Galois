@@ -451,6 +451,7 @@ export function MarkdownPreview({
         key={`editor_${lineIdx}_${rawText}`}
         defaultValue={rawText}
         placeholder="输入文字..."
+        rows={1}
         onBlur={(e) => {
           if (isExecutingPreviewSlashRef.current) {
             isExecutingPreviewSlashRef.current = false;
@@ -480,7 +481,6 @@ export function MarkdownPreview({
           width: '100%',
           boxSizing: 'border-box',
           resize: 'none',
-          minHeight: '28px',
           overflow: 'hidden',
           display: 'block',
         }}
