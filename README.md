@@ -252,10 +252,6 @@ DNOTE/
 │   ├── settings/                # 首选项控制台 (Settings Panel)
 │   │   ├── index.ts             # 插件入口
 │   │   └── Settings.tsx         # 快捷键展示与局部设置控制主组件
-│   ├── extension-lab/           # 侧载扩展实验室 (Extension Lab)
-│   │   ├── index.ts             # 插件入口
-│   │   ├── ExtensionLab.tsx     # 扩展发现、命令运行与开发路径管理主组件
-│   │   └── actions/             # 刷新扩展列表动作定义
 │   └── utils.ts                 # 共享的 yaml 标签解析和同步标签计算工具
 │
 ├── dnote_shortcuts.json         # 用户自定义键盘快捷键配置文件

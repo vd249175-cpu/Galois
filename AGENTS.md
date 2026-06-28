@@ -93,7 +93,7 @@ APP/[plugin-name]/
 
 视图主文件直接放在插件根目录。不要随意新增 `components/`，除非该插件已有明确约定。
 
-当前已注册的内置 APP 插件（`typeId`）：`editor`、`fileTree`、`graphView`、`linkGraph`、`terminal`、`settings`、`agent`、`extensionLab`、`videoTimeline`。
+当前已注册的内置 APP 插件（`typeId`）：`editor`、`fileTree`、`graphView`、`linkGraph`、`terminal`、`settings`、`agent`、`videoTimeline`。
 
 `APP/env-check/` 目录**不是**内置注册插件（无 index.ts），它是 side-loaded script extension 的开发示例，使用 `extensions/env-check/` 的资产结构。
 

@@ -113,12 +113,9 @@ the runtime. Dynamic UI bundle loading from that directory is a migration target
 source `APP/*/index.ts` remains the current auto-registration path.
 
 Currently registered built-in APP plugins (typeId): `editor`, `fileTree`,
-`graphView`, `linkGraph`, `terminal`, `settings`, `agent`, `extensionLab`,
+`graphView`, `linkGraph`, `terminal`, `settings`, `agent`,
 `videoTimeline`. The `APP/env-check/` directory contains a side-loaded script
 extension development example (no `index.ts`); it is not a registered APP plugin.
-
-The built-in `extensionLab` organ (`APP/extension-lab/`) manages discovery,
-path configuration, and script execution for side-loaded extensions.
 
 Plugin scripts should not assume a notebook project's `.venv` unless they are
 explicitly operating as project scripts. Plugin code should prefer the shared

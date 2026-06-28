@@ -127,7 +127,6 @@ description: Guidelines on how to locate, read, and write DNOTE workspace config
 | `terminal` | Terminal Console 终端控制台 |
 | `settings` | Preferences 偏好设置 |
 | `agent` | Antigravity 助手 |
-| `extensionLab` | 侧载扩展实验室 |
 | `videoTimeline` | 视频时间轴剪辑 |
 
 ### 2.4 主窗口状态 (`window-state.json`)
