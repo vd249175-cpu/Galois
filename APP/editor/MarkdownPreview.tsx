@@ -266,7 +266,6 @@ export function MarkdownPreview({
     onExecuteSlashCommand(cmd, previewSlashMenu.start, previewSlashMenu.end, previewSlashDraftRef.current || content);
     closePreviewSlashMenu();
     previewSlashDraftRef.current = null;
-    setEditingLineIdx(null);
   };
 
   const handleTableCellEdit = (lineIdx: number, colIdx: number, newCellVal: string) => {
@@ -671,6 +670,7 @@ export function MarkdownPreview({
       (trimText.startsWith('![') && trimText.endsWith(')')) ||
       (trimText.startsWith('@video[') && trimText.endsWith(')'))
     );
+    const isDeletable = isMedia || block.type === 'table' || block.type === 'code';
 
     return (
       <div
@@ -730,14 +730,14 @@ export function MarkdownPreview({
         <div style={{ flex: 1, minWidth: 0 }}>
           {element}
         </div>
-        {isMedia && (
+        {isDeletable && (
           <button
             className="media-delete-btn"
             onClick={(e) => {
               e.stopPropagation();
               handleDeleteBlock(block);
             }}
-            title="清除此媒体文件"
+            title={block.type === 'table' ? "删除此表格" : block.type === 'code' ? "删除此代码块" : "清除此媒体文件"}
           >
             ✕
           </button>
