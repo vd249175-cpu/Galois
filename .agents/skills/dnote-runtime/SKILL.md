@@ -45,6 +45,7 @@ DNOTE 当前由 `APP/editor/hooks/useRuntimeSync.ts` 维护一个防抖写入器
 | `projectPath` | `string` | 当前加载的笔记项目根目录绝对路径 |
 | `activeEditorId` | `string \| null` | 当前聚焦编辑器的 `areaId`（如 `"editor-root"`） |
 | `activeFile` | `string \| null` | 编辑器中当前打开文件的绝对路径；无文件时为 `null` |
+| `cursor` | `object \| null` | 光标状态对象；无光标数据时为 `null` |
 | `cursor.line` | `number` | 光标所在行号（当前 editor 运行时状态为 **1 indexed**） |
 | `cursor.column` | `number` | 光标所在列字符索引（当前 editor 运行时状态为 **1 indexed**） |
 | `cursor.selectedText` | `string` | 当前高亮选中的文本片段；无选区时为 `""` |

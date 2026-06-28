@@ -127,6 +127,8 @@ description: Guidelines on how to locate, read, and write DNOTE workspace config
 | `terminal` | Terminal Console 终端控制台 |
 | `settings` | Preferences 偏好设置 |
 | `agent` | Antigravity 助手 |
+| `extensionLab` | 侧载扩展实验室 |
+| `videoTimeline` | 视频时间轴剪辑 |
 
 ### 2.4 主窗口状态 (`window-state.json`)
 
@@ -171,15 +173,28 @@ await window.electronAPI.setLayout(layout);            // => Promise<boolean>
 
 ## 4. 运行时配置启动顺序
 
-App.tsx 在主窗口初始化时按以下顺序加载配置：
+`CORE/App.tsx` 在主窗口初始化时（`initApp()`）按以下顺序加载配置：
 
 ```
-1. electronAPI.getConfig()       → 写入 Blood: system.config
-                                  → 调用 applyTheme(config.theme)
-2. localStorage('dnote_last_project') → 写入 Blood: system.projectPath
-   或 electronAPI.getDevDefaultProject()（开发环境 fallback）
-3. electronAPI.getShortcuts()    → ActionRegistry.loadShortcuts(shortcuts)
-4. electronAPI.getLayout()       → setLayout(savedLayout)（还原面板布局）
+0. electronAPI.getRuntimeInfo() + electronAPI.getEnvironmentStatus()（并行）
+      → Blood: system.runtimeMode, system.extensionPath, system.sourcePluginPath,
+               system.canWriteSourcePlugins, system.agentWorkspace, system.environmentStatus
+
+1. electronAPI.getConfig()
+      → Blood: system.config
+      （主题应用在 App 挂载时的独立 useEffect 中，监听 events.themeChanged 和 system.config）
+
+2. 项目路径恢复：
+   - 读取 localStorage('dnote_last_project')
+   - 调用 electronAPI.pathExists() 验证路径有效性
+   - 若无效则 electronAPI.getDevDefaultProject()（开发/首次启动 fallback）
+      → Blood: system.projectPath
+
+3. electronAPI.getShortcuts()
+      → ActionRegistry.loadShortcuts(shortcuts)
+
+4. electronAPI.getLayout()
+      → setLayout(savedLayout)（还原面板布局，空布局时回退 defaultLayout）
 ```
 
 ---

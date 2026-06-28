@@ -114,10 +114,12 @@ Action IDs use `[plugin-name].[actionName]`, for example `editor.save` or
 `graphView.recenter`.
 
 `ComponentRegistry` registers plugin actions with `ActionRegistry`. When an
-action runs, it writes a timestamp signal:
+action runs, it writes a timestamp signal via `Blood.updateKey`. Because `act.id`
+is already in `[plugin-name].[actionName]` form, the resulting key is:
 
 ```text
-actions.[actionId].[areaId] = Date.now()
+actions.[plugin-name].[actionName].[areaId] = Date.now()
+// example: actions.editor.save.editor-root = 1718000000000
 ```
 
 `AreaShell` listens for matching `actions.*` signals and injects `lastAction`

@@ -76,6 +76,8 @@ At startup the app publishes runtime facts into Blood:
 - `system.canWriteSourcePlugins`
 - `system.agentWorkspace`
 - `system.environmentStatus`
+- `system.projectEnvironmentRepair` (written by FirstRunSetup during environment
+  repair, not at startup; read by settings and onboarding components)
 
 The terminal assistant uses `system.agentWorkspace` to add the notebook project,
 the user extension directory, and readable plugin context. See
@@ -109,6 +111,14 @@ User-developed extensions live under Electron `userData/extensions/`. This
 directory is writable in installed app mode and is now created and exposed by
 the runtime. Dynamic UI bundle loading from that directory is a migration target;
 source `APP/*/index.ts` remains the current auto-registration path.
+
+Currently registered built-in APP plugins (typeId): `editor`, `fileTree`,
+`graphView`, `linkGraph`, `terminal`, `settings`, `agent`, `extensionLab`,
+`videoTimeline`. The `APP/env-check/` directory contains a side-loaded script
+extension development example (no `index.ts`); it is not a registered APP plugin.
+
+The built-in `extensionLab` organ (`APP/extension-lab/`) manages discovery,
+path configuration, and script execution for side-loaded extensions.
 
 Plugin scripts should not assume a notebook project's `.venv` unless they are
 explicitly operating as project scripts. Plugin code should prefer the shared

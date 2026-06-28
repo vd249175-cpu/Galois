@@ -67,7 +67,9 @@ DNOTE 是 TypeScript / Electron / Vite / React 同仓项目：
 动作信号必须写 timestamp：
 
 ```typescript
-Blood.updateKey(`actions.${actionId}.${areaId}`, Date.now());
+// ComponentRegistry.ts 内部，action.id 已经是 "[plugin-name].[actionName]" 形式
+// 最终键格式为：actions.[plugin-name].[actionName].[areaId]
+Blood.updateKey(`actions.${act.id}.${context.areaId}`, Date.now());
 ```
 
 不要用 boolean。连续点击同一个按钮时 boolean 无法表达新事件。
@@ -83,15 +85,19 @@ APP/[plugin-name]/
 ├── actions/
 │   ├── [ActionName]Action.ts
 │   └── index.ts
-├── hooks/
-├── services/
-├── README.md
-└── plugin.json
+├── hooks/            （可选）
+├── services/         （可选，Python/脚本辅助）
+├── README.md         （可选）
+└── plugin.json       （可选，解释器声明等元数据）
 ```
 
 视图主文件直接放在插件根目录。不要随意新增 `components/`，除非该插件已有明确约定。
 
-动作声明接口：
+当前已注册的内置 APP 插件（`typeId`）：`editor`、`fileTree`、`graphView`、`linkGraph`、`terminal`、`settings`、`agent`、`extensionLab`、`videoTimeline`。
+
+`APP/env-check/` 目录**不是**内置注册插件（无 index.ts），它是 side-loaded script extension 的开发示例，使用 `extensions/env-check/` 的资产结构。
+
+动作声明接口（定义在 `CORE/ComponentRegistry.ts`）：
 
 ```typescript
 export interface OrganAction {
@@ -99,7 +105,7 @@ export interface OrganAction {
   label: string;
   defaultShortcut?: string;
   isToolbar?: boolean;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;  // 可选
 }
 ```
 

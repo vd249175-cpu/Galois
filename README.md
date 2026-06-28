@@ -186,7 +186,7 @@ DNOTE/
 │   ├── RightSidebar.tsx         # 统一动作工具栏 (右侧边栏)
 │   ├── SettingsModal.tsx        # 键盘热键录制弹窗与快捷键个性化设定
 │   ├── index.css                # 全局 UI 样式系统 (高级暗黑、毛玻璃、3D 实体键帽)
-│   └── index.tsx                # React 挂载入口
+│   └── index.tsx                # 弹出辅助窗口的 React 挂载入口（无插件自动注册）
 │
 ├── APP/                         # 仿生器官插件层 (Organ Plugins)
 │   ├── file-tree/               # 真实目录浏览器 (Lattice Explorer)
@@ -207,7 +207,7 @@ DNOTE/
 │   │   ├── TagToolbar.tsx       # YAML / Regex / Python 标签交互管理条
 │   │   ├── editorUtils.ts       # YAML 标签内容替换工具
 │   │   ├── actions/             # 保存、切换编辑模式、删除文档动作定义
-│   │   ├── hooks/               # useMediaDrop, useLinkNavigator, useEditorHistory
+│   │   ├── hooks/               # useMediaDrop, useLinkNavigator, useEditorHistory, useRuntimeSync
 │   │   └── [Modals/Menus]       # ShortcutsModal, CustomCommandsModal, TagGroupsModal, SlashMenu, PromptModal
 │   │
 │   ├── graph-view/              # 拓扑关系力导向图 (Lattice Graph)
@@ -251,7 +251,11 @@ DNOTE/
 │   │
 │   ├── settings/                # 首选项控制台 (Settings Panel)
 │   │   ├── index.ts             # 插件入口
-│   │   └── Settings.tsx         # 快捷键 Reset 和设置显示主组件
+│   │   └── Settings.tsx         # 快捷键展示与局部设置控制主组件
+│   ├── extension-lab/           # 侧载扩展实验室 (Extension Lab)
+│   │   ├── index.ts             # 插件入口
+│   │   ├── ExtensionLab.tsx     # 扩展发现、命令运行与开发路径管理主组件
+│   │   └── actions/             # 刷新扩展列表动作定义
 │   └── utils.ts                 # 共享的 yaml 标签解析和同步标签计算工具
 │
 ├── dnote_shortcuts.json         # 用户自定义键盘快捷键配置文件
