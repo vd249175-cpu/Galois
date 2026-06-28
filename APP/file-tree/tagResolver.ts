@@ -1,4 +1,4 @@
-import { parseFrontmatterTags, resolveTagsSync, parseFrontmatterIcon } from '../utils';
+import { parseFrontmatterTags, resolveTagsSync, parseFrontmatterIcon, isUvProgressStderr } from '../utils';
 
 /**
  * calculateAllResolvedTags — 计算所有笔记文件的已解析标签
@@ -78,9 +78,16 @@ export async function calculateAllResolvedTags(
           }
 
           if (result && result.stderr && result.stderr.trim()) {
-            const msg = `Script "${scriptName}" (${file.name}): ${result.stderr.trim()}`;
-            console.warn('[tagResolver]', msg);
-            onError?.(msg);
+            // uv writes normal first-run progress (venv creation, package installs) to stderr.
+            // Use shared filter to avoid false "脚本执行错误" toasts.
+            const stderrTrimmed = result.stderr.trim();
+            if (!isUvProgressStderr(stderrTrimmed)) {
+              const msg = `Script "${scriptName}" (${file.name}): ${stderrTrimmed}`;
+              console.warn('[tagResolver]', msg);
+              onError?.(msg);
+            } else {
+              console.log('[tagResolver] uv setup progress (not an error):', stderrTrimmed.split('\n')[0]);
+            }
           }
         } catch (err: any) {
           const msg = `Script "${scriptName}" failed for "${file.name}": ${err.message || err}`;

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Node, Link } from './types';
 import { contractVirtualNodes } from './helpers';
 import { BC } from '../../CORE/BloodChannels';
+import { isUvProgressStderr } from '../utils';
 
 interface UseLatticeDataProps {
   projectPath: string;
@@ -68,7 +69,14 @@ export function useLatticeData({
         const result = await (window as any).electronAPI.runScript(scriptPath, latticePayload, projectPath);
 
         if (result.stderr && result.stderr.trim()) {
-          updateBloodKey(BC.events.scriptError('graphView'), { message: result.stderr.trim(), ts: Date.now() });
+          // uv writes normal first-run progress (venv creation, package installs) to stderr.
+          // Use shared filter to avoid false "脚本执行错误" toasts.
+          const stderrTrimmed = result.stderr.trim();
+          if (!isUvProgressStderr(stderrTrimmed)) {
+            updateBloodKey(BC.events.scriptError('graphView'), { message: stderrTrimmed, ts: Date.now() });
+          } else {
+            console.log('[useLatticeData] uv setup progress (not an error):', stderrTrimmed.split('\n')[0]);
+          }
         }
 
         let calculatedEdges: Link[] = [];

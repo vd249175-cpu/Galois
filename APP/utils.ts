@@ -180,3 +180,24 @@ export function formatTimestamp(seconds: number): string {
   }
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
 }
+
+/**
+ * isUvProgressStderr — 判断 stderr 是否只是 uv 正常进度输出
+ *
+ * `uv run` 在首次执行时会向 stderr 写入安装进度（创建 venv、下载包等），
+ * 这些是正常信息流而非错误。不应因此触发"脚本执行错误"弹窗。
+ *
+ * 返回 true 表示 stderr 内容是 uv 的正常进度，调用方应忽略而非报错。
+ */
+export function isUvProgressStderr(stderr: string): boolean {
+  if (!stderr) return false;
+  return (
+    /creating virtual environment/i.test(stderr) ||
+    /installed \d+ packages? in/i.test(stderr) ||
+    /using cpython/i.test(stderr) ||
+    /using python/i.test(stderr) ||
+    /downloading/i.test(stderr) ||
+    /resolving dependencies/i.test(stderr) ||
+    /audited \d+ packages?/i.test(stderr)
+  );
+}
