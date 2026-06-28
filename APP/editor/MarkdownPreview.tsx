@@ -191,6 +191,7 @@ export function MarkdownPreview({
     end: number;
   }>({ show: false, query: '', index: 0, coords: { left: 0, top: 0 }, start: -1, end: -1 });
   const isJumpingToNextLineRef = useRef(false);
+  const pendingCaretPosRef = useRef<number | null>(null);
   const previewSlashDraftRef = useRef<string | null>(null);
   const isExecutingPreviewSlashRef = useRef(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -403,6 +404,24 @@ export function MarkdownPreview({
           const nextLineIdx = smart.text.substring(0, smart.newStart).split('\n').length - 1;
           setEditingLineIdx(nextLineIdx);
         }
+      } else if (e.key === 'Backspace') {
+        const selectionStart = e.currentTarget.selectionStart ?? 0;
+        const selectionEnd = e.currentTarget.selectionEnd ?? 0;
+        if (selectionStart === 0 && selectionEnd === 0 && lineIdx > 0) {
+          e.preventDefault();
+          const currentLines = content.split('\n');
+          const currentText = e.currentTarget.value || '';
+          const prevText = currentLines[lineIdx - 1] || '';
+          
+          isJumpingToNextLineRef.current = true;
+          pendingCaretPosRef.current = prevText.length;
+          
+          currentLines[lineIdx - 1] = prevText + currentText;
+          currentLines.splice(lineIdx, 1);
+          
+          onContentChange(currentLines.join('\n'));
+          setEditingLineIdx(lineIdx - 1);
+        }
       } else if (e.key === '/') {
         const textarea = e.currentTarget;
         const selectionStart = textarea.selectionStart ?? 0;
@@ -467,7 +486,9 @@ export function MarkdownPreview({
         ref={(el) => {
           if (el) {
             el.focus();
-            el.selectionStart = el.selectionEnd = el.value.length;
+            const targetPos = pendingCaretPosRef.current !== null ? pendingCaretPosRef.current : el.value.length;
+            el.selectionStart = el.selectionEnd = targetPos;
+            pendingCaretPosRef.current = null;
             el.style.height = 'auto';
             el.style.height = `${el.scrollHeight}px`;
           }
