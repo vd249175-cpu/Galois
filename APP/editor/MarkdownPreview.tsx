@@ -352,7 +352,11 @@ export function MarkdownPreview({
           const newText = e.currentTarget.value || '';
           const selectionStart = e.currentTarget.selectionStart ?? newText.length;
           const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart;
-          const draft = replaceLineInDraft(newText);
+          
+          const currentLines = content.split('\n');
+          currentLines[lineIdx] = newText;
+          const draft = currentLines.join('\n');
+
           const absoluteStart = getAbsoluteIndex(lineIdx, selectionStart);
           const absoluteEnd = getAbsoluteIndex(lineIdx, selectionEnd);
           const smart = handleSmartEnter(draft, absoluteStart, absoluteEnd);
@@ -366,13 +370,23 @@ export function MarkdownPreview({
           }
 
           isJumpingToNextLineRef.current = true;
-          const newLines = newText.split('\n');
-          updateMarkdownLines(lineIdx, lineIdx, newLines);
-          const nextLineIdx = lineIdx + newLines.length;
+          const caretPos = selectionStart;
+          const caretEndPos = selectionEnd;
+          const updatedText = newText.substring(0, caretPos) + '\n' + newText.substring(caretEndPos);
+          const newLines = updatedText.split('\n');
+
           const allLines = content.split('\n');
+          allLines.splice(lineIdx, 1, ...newLines);
+
+          const linesBeforeCaret = updatedText.substring(0, caretPos + 1).split('\n');
+          let nextLineIdx = lineIdx + linesBeforeCaret.length - 1;
+
           if (nextLineIdx >= allLines.length) {
-            updateMarkdownLines(allLines.length - 1, allLines.length - 1, [allLines[allLines.length - 1], '']);
+            allLines.push('');
+            nextLineIdx = allLines.length - 1;
           }
+
+          onContentChange(allLines.join('\n'));
           setEditingLineIdx(nextLineIdx);
         }
       } else if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
