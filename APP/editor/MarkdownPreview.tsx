@@ -670,7 +670,7 @@ export function MarkdownPreview({
       (trimText.startsWith('![') && trimText.endsWith(')')) ||
       (trimText.startsWith('@video[') && trimText.endsWith(')'))
     );
-    const isDeletable = isMedia || block.type === 'table' || block.type === 'code';
+    const isDeletable = isMedia || block.type === 'code';
 
     return (
       <div
@@ -909,6 +909,29 @@ export function MarkdownPreview({
               transition: 'opacity 0.14s ease',
             }}
           >
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleDeleteBlock(block);
+              }}
+              style={{
+                border: '1px solid rgba(255, 59, 48, 0.25)',
+                background: 'rgba(255, 59, 48, 0.08)',
+                color: '#ff3b30',
+                borderRadius: '6px',
+                padding: '3px 8px',
+                fontSize: '11px',
+                cursor: 'pointer',
+              }}
+            >
+              删除表格
+            </button>
             <button
               type="button"
               onMouseDown={(e) => {
