@@ -429,6 +429,7 @@ export function MarkdownPreview({
 
     return (
       <textarea
+        key={`editor_${lineIdx}_${rawText}`}
         defaultValue={rawText}
         placeholder="输入文字..."
         onBlur={(e) => {
@@ -639,7 +640,7 @@ export function MarkdownPreview({
   };
 
   const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
-    if (!isPreviewMode) return element;
+    if (!isPreviewMode) return <React.Fragment key={block.key}>{element}</React.Fragment>;
 
     const isCurrentlyDragged = draggedBlockKey === block.key;
 
