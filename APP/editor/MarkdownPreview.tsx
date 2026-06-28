@@ -469,6 +469,7 @@ export function MarkdownPreview({
         style={{
           fontFamily: 'inherit',
           fontSize: '13px',
+          lineHeight: '1.6',
           color: 'var(--text-main)',
           background: 'rgba(255,255,255,0.04)',
           border: '1.2px dashed var(--accent-color, #7000ff)',
@@ -490,13 +491,13 @@ export function MarkdownPreview({
             el.selectionStart = el.selectionEnd = targetPos;
             pendingCaretPosRef.current = null;
             el.style.height = 'auto';
-            el.style.height = `${el.scrollHeight}px`;
+            el.style.height = `${el.scrollHeight + 3}px`;
           }
         }}
         onInput={(e) => {
           const el = e.currentTarget;
           el.style.height = 'auto';
-          el.style.height = `${el.scrollHeight}px`;
+          el.style.height = `${el.scrollHeight + 3}px`;
           updatePreviewSlashQuery(el, lineIdx);
         }}
       />
