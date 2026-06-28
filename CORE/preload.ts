@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:renameFile', oldPath, newPath),
   listDir: (dirPath: string) =>
     ipcRenderer.invoke('fs:listDir', dirPath),
+  pathExists: (targetPath: string) =>
+    ipcRenderer.invoke('fs:pathExists', targetPath),
   openDirectory: () =>
     ipcRenderer.invoke('dialog:openDirectory'),
   archiveMedia: (srcPath: string, projectPath: string) =>
@@ -57,6 +59,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('shell:getServiceScriptPath', pluginFolder, scriptName),
   getExtensionServiceScriptPath: (extensionId: string, scriptName: string) =>
     ipcRenderer.invoke('shell:getExtensionServiceScriptPath', extensionId, scriptName),
+  diagnoseExtensionService: (extensionId: string, serviceName: string) =>
+    ipcRenderer.invoke('shell:diagnoseExtensionService', extensionId, serviceName),
 
   /** 获取 Electron app 根目录（DNOTE 程序目录） */
   getAppPath: () =>
@@ -75,8 +79,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:removeExtensionDevPath', devPath),
   openPath: (targetPath: string) =>
     ipcRenderer.invoke('app:openPath', targetPath),
+  importExtensionArchive: (archivePath: string) =>
+    ipcRenderer.invoke('app:importExtensionArchive', archivePath),
   getEnvironmentStatus: () =>
     ipcRenderer.invoke('app:getEnvironmentStatus'),
+  inspectProjectEnvironment: (projectPath: string) =>
+    ipcRenderer.invoke('app:inspectProjectEnvironment', projectPath),
+  repairProjectEnvironment: (projectPath: string) =>
+    ipcRenderer.invoke('app:repairProjectEnvironment', projectPath),
+  ensureNotebookProjectDeclaration: (projectPath: string) =>
+    ipcRenderer.invoke('app:ensureNotebookProjectDeclaration', projectPath),
+  inspectPluginEnvironment: (extensionId: string) =>
+    ipcRenderer.invoke('app:inspectPluginEnvironment', extensionId),
+  repairPluginEnvironment: (extensionId: string) =>
+    ipcRenderer.invoke('app:repairPluginEnvironment', extensionId),
 
   logRendererError: (errorMsg: any) =>
     ipcRenderer.invoke('app:logRendererError', errorMsg),

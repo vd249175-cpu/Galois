@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { getSlashCommandCategory } from './slashCommandSearch';
 
 interface SlashMenuProps {
   show: boolean;
@@ -41,6 +42,8 @@ export function SlashMenu({
 
   if (!show || filteredCommands.length === 0) return null;
 
+  let lastCategory = '';
+
   return (
     <div
       ref={containerRef}
@@ -49,7 +52,7 @@ export function SlashMenu({
         left: slashMenuCoords.left,
         top: slashMenuCoords.top,
         width: '320px',
-        maxHeight: '200px',
+        maxHeight: '260px',
         backgroundColor: 'var(--bg-main)',
         border: '1.2px solid rgba(0, 0, 0, 0.12)',
         borderRadius: '8px',
@@ -64,50 +67,66 @@ export function SlashMenu({
     >
       {filteredCommands.map((cmd, idx) => {
         const isSelected = idx === slashMenuIndex;
+        const category = getSlashCommandCategory(cmd);
+        const showCategory = category !== lastCategory;
+        lastCategory = category;
         return (
-          <div
-            key={cmd.id}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              handleExecuteCommand(cmd);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '4px 8px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
-              color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
-              transition: 'background-color 0.1s, color 0.1s',
-            }}
-            onMouseEnter={() => setSlashMenuIndex(idx)}
-          >
-            <div style={{
-              width: '20px',
-              height: '20px',
-              borderRadius: '4px',
-              backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.03)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 700,
-              fontSize: '10px',
-              flexShrink: 0,
-            }}>
-              {cmd.icon}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexGrow: 1 }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, flexShrink: 0 }}>{cmd.label}</span>
-              <span style={{ fontSize: '9px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexGrow: 1 }}>{cmd.desc}</span>
-            </div>
-            {getShortcutDisplay(cmd.id) && (
-              <span style={{ fontSize: '9px', color: 'var(--accent-color)', opacity: 0.8, paddingLeft: '8px', flexShrink: 0, fontWeight: 700 }}>
-                {getShortcutDisplay(cmd.id)}
-              </span>
+          <div key={cmd.id}>
+            {showCategory && (
+              <div style={{
+                padding: '7px 8px 3px',
+                fontSize: '9px',
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'var(--text-muted)',
+              }}>
+                {category}
+              </div>
             )}
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleExecuteCommand(cmd);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 8px',
+                borderRadius: '7px',
+                cursor: 'pointer',
+                backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
+                color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
+                transition: 'background-color 0.1s, color 0.1s',
+              }}
+              onMouseEnter={() => setSlashMenuIndex(idx)}
+            >
+              <div style={{
+                width: '22px',
+                height: '22px',
+                borderRadius: '6px',
+                backgroundColor: isSelected ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.03)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: '10px',
+                flexShrink: 0,
+              }}>
+                {cmd.icon}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0, flexGrow: 1 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.label}</span>
+                <span style={{ fontSize: '9px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.desc}</span>
+              </div>
+              {getShortcutDisplay(cmd.id) && (
+                <span style={{ fontSize: '9px', color: 'var(--accent-color)', opacity: 0.8, paddingLeft: '8px', flexShrink: 0, fontWeight: 700 }}>
+                  {getShortcutDisplay(cmd.id)}
+                </span>
+              )}
+            </div>
           </div>
         );
       })}

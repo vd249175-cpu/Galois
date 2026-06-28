@@ -165,12 +165,15 @@ export function App() {
     Blood.updateKey(BC.system.focusedAreaId, 'editor-root');
 
     const initApp = async () => {
+      let runtimeInfoSnapshot: Awaited<ReturnType<typeof window.electronAPI.getRuntimeInfo>> | null = null;
+
       // 0. Bootstrap runtime facts used by terminal, settings, and extension tooling.
       try {
         const [runtimeInfo, environmentStatus] = await Promise.all([
           window.electronAPI.getRuntimeInfo(),
           window.electronAPI.getEnvironmentStatus(),
         ]);
+        runtimeInfoSnapshot = runtimeInfo;
         Blood.updateKey(BC.system.runtimeMode, runtimeInfo.mode);
         Blood.updateKey(BC.system.extensionPath, runtimeInfo.extensionPath);
         Blood.updateKey(BC.system.sourcePluginPath, runtimeInfo.sourcePluginPath);
@@ -191,9 +194,18 @@ export function App() {
         }
       } catch (_) {}
 
-      // 2. Restore last opened project from localStorage, fallback to dev default path via IPC
+      // 2. Restore a valid user project, falling back to the Documents starter project.
       const saved = localStorage.getItem('dnote_last_project');
-      if (saved) {
+      const pointsAtPackagedTemplate = Boolean(
+        saved &&
+        runtimeInfoSnapshot?.isPackaged &&
+        saved.includes('/Contents/Resources/template-project')
+      );
+      const savedExists = saved && !pointsAtPackagedTemplate
+        ? await window.electronAPI.pathExists(saved)
+        : false;
+
+      if (saved && savedExists) {
         Blood.updateKey(BC.system.projectPath, saved);
       } else {
         try {
@@ -305,7 +317,7 @@ export function App() {
 
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'shortcuts'>('general');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'shortcuts'>('general');
   const [showFirstRunSetup, setShowFirstRunSetup] = useState(() => !isPopped && shouldShowFirstRunSetup());
 
   // Initial layout tree
@@ -368,7 +380,7 @@ export function App() {
 
   const handleOpenEnvironmentSettings = () => {
     setShowFirstRunSetup(false);
-    setSettingsInitialTab('environment');
+    setSettingsInitialTab('general');
     setIsSettingsOpen(true);
   };
 

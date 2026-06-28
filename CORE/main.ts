@@ -4,6 +4,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { exec } from 'child_process';
 import * as pty from 'node-pty';
+import { inspectProjectEnvironment, repairProjectEnvironment } from './projectEnvironment';
+import { inspectPluginEnvironment, repairPluginEnvironment } from './pluginEnvironment';
 
 // Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
 protocol.registerSchemesAsPrivileged([
@@ -177,6 +179,7 @@ ipcMain.handle('fs:readFile', async (_, filePath: string) => {
 
 ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string) => {
   try {
+    assertWritableTarget(filePath, 'writeFile');
     console.log('[fs:writeFile] Writing file:', filePath, 'content length:', content.length);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, content, 'utf-8');
@@ -189,6 +192,7 @@ ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string) => {
 
 ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
   try {
+    assertWritableTarget(filePath, 'deleteFile');
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
@@ -200,6 +204,8 @@ ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
 
 ipcMain.handle('fs:renameFile', async (_, oldPath: string, newPath: string) => {
   try {
+    assertWritableTarget(oldPath, 'renameFile source');
+    assertWritableTarget(newPath, 'renameFile target');
     const parentDir = path.dirname(newPath);
     if (!fs.existsSync(parentDir)) {
       fs.mkdirSync(parentDir, { recursive: true });
@@ -229,6 +235,10 @@ ipcMain.handle('fs:listDir', async (_, dirPath: string) => {
   }
 });
 
+ipcMain.handle('fs:pathExists', async (_, targetPath: string) => {
+  return Boolean(targetPath && fs.existsSync(targetPath));
+});
+
 // Native folder opener dialog IPC handler
 ipcMain.handle('dialog:openDirectory', async () => {
   if (!mainWindow) return null;
@@ -246,6 +256,7 @@ ipcMain.handle('dialog:openDirectory', async () => {
 ipcMain.handle('fs:archiveMedia', async (_, { srcPath, projectPath }: { srcPath: string; projectPath: string }) => {
   try {
     const destDir = path.join(projectPath, 'media');
+    assertWritableTarget(destDir, 'archiveMedia');
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
     }
@@ -296,6 +307,32 @@ function getSecureEnv() {
 
 function quoteShellArg(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function isInsidePath(parentPath: string, targetPath: string): boolean {
+  const relative = path.relative(parentPath, targetPath);
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function getReadOnlyAppRoots(): string[] {
+  if (!app.isPackaged) return [];
+  return Array.from(new Set([
+    app.getAppPath(),
+    process.resourcesPath,
+  ].filter(Boolean).map((rootPath) => path.resolve(rootPath))));
+}
+
+function assertWritableTarget(targetPath: string, operation: string) {
+  if (!targetPath) {
+    throw new Error(`Missing target path for ${operation}`);
+  }
+  const resolvedTarget = path.resolve(targetPath);
+  const readOnlyRoot = getReadOnlyAppRoots().find((rootPath) => isInsidePath(rootPath, resolvedTarget));
+  if (readOnlyRoot) {
+    throw new Error(
+      `${operation} blocked: packaged app resources are read-only. Target ${resolvedTarget} is inside ${readOnlyRoot}.`
+    );
+  }
 }
 
 function getSourcePluginPath(): string {
@@ -475,11 +512,6 @@ async function checkTool(command: string, versionArgs = '--version') {
   }
 }
 
-function isInsidePath(parentPath: string, targetPath: string): boolean {
-  const relative = path.relative(parentPath, targetPath);
-  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
-}
-
 function runShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv, stdinPayload?: string) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
     const child = exec(command, { cwd, env }, (error, stdout, stderr) => {
@@ -609,6 +641,10 @@ function getMatchingExtensionManifestPaths(pluginFolder: string): string[] {
 }
 
 function getPluginInterpreter(ext: string, pluginFolder: string, scriptPath?: string): string {
+  return getPluginInterpreterResolution(ext, pluginFolder, scriptPath).interpreter;
+}
+
+function getPluginInterpreterResolution(ext: string, pluginFolder: string, scriptPath?: string) {
   const appPath = app.isPackaged ? path.join(process.resourcesPath, 'APP') : path.join(app.getAppPath(), 'APP');
   const userExtPath = path.join(app.getPath('userData'), 'extensions');
   
@@ -621,10 +657,20 @@ function getPluginInterpreter(ext: string, pluginFolder: string, scriptPath?: st
 
   for (const configPath of Array.from(new Set(searchPaths))) {
     const interpreter = getInterpreterFromManifest(configPath, ext);
-    if (interpreter) return interpreter;
+    if (interpreter) {
+      return {
+        interpreter,
+        source: configPath,
+        fallback: false,
+      };
+    }
   }
 
-  return getGlobalInterpreter(ext);
+  return {
+    interpreter: getGlobalInterpreter(ext),
+    source: 'global/default',
+    fallback: true,
+  };
 }
 
 function getProjectInterpreter(ext: string, projectPath: string): string {
@@ -714,6 +760,7 @@ ipcMain.handle('shell:runProjectScript', async (_, projectPath: string, request:
   }
 
   const normalizedProjectPath = path.resolve(projectPath);
+  assertWritableTarget(normalizedProjectPath, 'runProjectScript projectPath');
   const cwd = path.resolve(request.cwd || (request.scriptName ? path.join(normalizedProjectPath, 'script') : normalizedProjectPath));
   if (!isInsidePath(normalizedProjectPath, cwd)) {
     throw new Error('Project script cwd must stay inside the notebook project');
@@ -761,6 +808,36 @@ ipcMain.handle('shell:getExtensionServiceScriptPath', async (_, extensionId: str
     throw new Error(`Extension service script not found: ${scriptName}`);
   }
   return scriptPath;
+});
+
+ipcMain.handle('shell:diagnoseExtensionService', async (_, extensionId: string, serviceName: string) => {
+  const extension = listUserExtensions().find((candidate) => candidate.id === extensionId);
+  if (!extension) {
+    throw new Error(`Extension not found: ${extensionId}`);
+  }
+
+  const scriptPath = path.resolve(extension.path, 'services', serviceName);
+  if (!isInsidePath(path.join(extension.path, 'services'), scriptPath)) {
+    throw new Error('Extension service script must stay inside its services directory');
+  }
+
+  const ext = path.extname(scriptPath).toLowerCase();
+  const pluginFolder = getPluginFolderFromPath(scriptPath) || extension.id;
+  const resolution = getPluginInterpreterResolution(ext, pluginFolder, scriptPath);
+
+  return {
+    extensionId: extension.id,
+    extensionPath: extension.path,
+    manifestPath: extension.manifestPath,
+    serviceName,
+    scriptPath,
+    scriptExists: fs.existsSync(scriptPath),
+    runtime: extension.manifest?.services?.find((service: any) => service?.name === serviceName)?.runtime || ext.replace('.', '') || 'script',
+    interpreter: resolution.interpreter,
+    interpreterSource: resolution.source,
+    usingFallbackInterpreter: resolution.fallback,
+    cwd: getDefaultNotebookProjectPath(),
+  };
 });
 
 // IPC Window Manager APIs for Popped-out panels
@@ -883,6 +960,63 @@ ipcMain.handle('app:openPath', async (_, targetPath: string) => {
   return true;
 });
 
+function findPluginManifest(rootPath: string): string | null {
+  const directManifest = path.join(rootPath, 'plugin.json');
+  if (fs.existsSync(directManifest)) return directManifest;
+  for (const entry of fs.readdirSync(rootPath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const manifestPath = path.join(rootPath, entry.name, 'plugin.json');
+    if (fs.existsSync(manifestPath)) return manifestPath;
+  }
+  return null;
+}
+
+ipcMain.handle('app:importExtensionArchive', async (_, archivePath: string) => {
+  const resolvedArchivePath = path.resolve(archivePath);
+  if (!fs.existsSync(resolvedArchivePath)) {
+    throw new Error(`Archive not found: ${resolvedArchivePath}`);
+  }
+  if (path.extname(resolvedArchivePath).toLowerCase() !== '.zip') {
+    throw new Error('Only .zip extension packages are supported right now');
+  }
+
+  const extensionRoot = getUserExtensionsPath();
+  fs.mkdirSync(extensionRoot, { recursive: true });
+  const tempRoot = fs.mkdtempSync(path.join(app.getPath('temp'), 'dnote-extension-'));
+  await runShellCommand(
+    `ditto -x -k ${quoteShellArg(resolvedArchivePath)} ${quoteShellArg(tempRoot)}`,
+    tempRoot,
+    getSecureEnv()
+  );
+
+  const manifestPath = findPluginManifest(tempRoot);
+  if (!manifestPath) {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+    throw new Error('Extension package must contain plugin.json at root or inside one top-level folder');
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  const extensionId = String(manifest.id || path.basename(path.dirname(manifestPath))).trim();
+  if (!extensionId) {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+    throw new Error('Extension plugin.json must declare an id');
+  }
+
+  const packageRoot = path.dirname(manifestPath);
+  let targetPath = path.join(extensionRoot, extensionId);
+  let index = 2;
+  while (fs.existsSync(targetPath)) {
+    targetPath = path.join(extensionRoot, `${extensionId}-${index}`);
+    index += 1;
+  }
+  fs.renameSync(packageRoot, targetPath);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+  return {
+    extensionPath: targetPath,
+    extensions: listUserExtensions(),
+  };
+});
+
 ipcMain.handle('app:getEnvironmentStatus', async () => {
   const [uv, python, python3, agy, node] = await Promise.all([
     checkTool('uv'),
@@ -904,6 +1038,64 @@ ipcMain.handle('app:getEnvironmentStatus', async () => {
   };
 });
 
+ipcMain.handle('app:inspectProjectEnvironment', async (_, projectPath: string) => {
+  return inspectProjectEnvironment(projectPath, getSecureEnv());
+});
+
+ipcMain.handle('app:repairProjectEnvironment', async (_, projectPath: string) => {
+  assertWritableTarget(projectPath, 'repairProjectEnvironment');
+  return repairProjectEnvironment(projectPath, getSecureEnv());
+});
+
+ipcMain.handle('app:ensureNotebookProjectDeclaration', async (_, projectPath: string) => {
+  const resolvedProjectPath = path.resolve(projectPath);
+  assertWritableTarget(resolvedProjectPath, 'ensureNotebookProjectDeclaration');
+  fs.mkdirSync(resolvedProjectPath, { recursive: true });
+
+  const pyprojectPath = path.join(resolvedProjectPath, 'pyproject.toml');
+  const commandDir = path.join(resolvedProjectPath, 'command');
+  const commandsPath = path.join(commandDir, 'commands.json');
+  const scriptDir = path.join(resolvedProjectPath, 'script');
+  const created: string[] = [];
+
+  if (!fs.existsSync(pyprojectPath)) {
+    const projectName = path.basename(resolvedProjectPath).toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+    fs.writeFileSync(pyprojectPath, `[project]
+name = "${projectName || 'dnote-project'}"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+`, 'utf-8');
+    created.push(pyprojectPath);
+  }
+
+  if (!fs.existsSync(commandsPath)) {
+    fs.mkdirSync(commandDir, { recursive: true });
+    fs.writeFileSync(commandsPath, JSON.stringify({ commands: [] }, null, 2), 'utf-8');
+    created.push(commandsPath);
+  }
+
+  if (!fs.existsSync(scriptDir)) {
+    fs.mkdirSync(scriptDir, { recursive: true });
+    created.push(scriptDir);
+  }
+
+  return { projectPath: resolvedProjectPath, created };
+});
+
+ipcMain.handle('app:inspectPluginEnvironment', async (_, extensionId: string) => {
+  const extension = listUserExtensions().find((item) => item.id === extensionId);
+  if (!extension) throw new Error(`Extension not found: ${extensionId}`);
+  return inspectPluginEnvironment(extension.id, extension.path, extension.manifestPath, getSecureEnv());
+});
+
+ipcMain.handle('app:repairPluginEnvironment', async (_, extensionId: string) => {
+  const extension = listUserExtensions().find((item) => item.id === extensionId);
+  if (!extension) throw new Error(`Extension not found: ${extensionId}`);
+  assertWritableTarget(extension.path, 'repairPluginEnvironment');
+  return repairPluginEnvironment(extension.id, extension.path, extension.manifestPath, getSecureEnv());
+});
+
 ipcMain.handle('app:logRendererError', (_, errorMsg: any) => {
   try {
     const logPath = path.join(app.getPath('userData'), 'renderer_error.log');
@@ -915,16 +1107,7 @@ ipcMain.handle('app:logRendererError', (_, errorMsg: any) => {
   }
 });
 
-ipcMain.handle('app:getDevDefault', () => {
-  const docsDir = app.getPath('documents');
-  const userProject = path.join(docsDir, 'DNOTE Projects', 'Getting Started');
-  if (fs.existsSync(userProject)) {
-    return userProject;
-  }
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'template-project')
-    : path.join(app.getAppPath(), 'template-project');
-});
+ipcMain.handle('app:getDevDefault', () => ensureDefaultNotebookProject());
 
 ipcMain.handle('app:getConfig', () => {
   const configPath = path.join(app.getPath('userData'), 'dnote.config.json');
@@ -1042,6 +1225,106 @@ function copyFolderRecursiveSync(src: string, dest: string) {
   }
 }
 
+function shouldSkipTemplateItem(relativePath: string): boolean {
+  const normalized = relativePath.split(path.sep).join('/');
+  const segments = normalized.split('/');
+  return (
+    normalized === '.dnote_runtime.json' ||
+    normalized.endsWith('/.dnote_runtime.json') ||
+    segments.includes('.venv') ||
+    segments.includes('.dnote_cache') ||
+    normalized.endsWith('/.DS_Store') ||
+    normalized === '.DS_Store'
+  );
+}
+
+function removePathIfExists(targetPath: string) {
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true });
+  }
+}
+
+function shouldRemoveStarterVenv(projectPath: string): boolean {
+  const venvPath = path.join(projectPath, '.venv');
+  const pyvenvPath = path.join(venvPath, 'pyvenv.cfg');
+  if (!fs.existsSync(venvPath)) return false;
+  if (!fs.existsSync(pyvenvPath)) return true;
+
+  try {
+    const pyvenv = fs.readFileSync(pyvenvPath, 'utf-8');
+    const homeMatch = pyvenv.match(/^home\s*=\s*(.+)$/m);
+    if (homeMatch && !fs.existsSync(homeMatch[1].trim())) return true;
+
+    const versionMatch = pyvenv.match(/^version_info\s*=\s*(\d+\.\d+)/m);
+    if (versionMatch) {
+      const linkedDylib = path.join(venvPath, 'lib', `libpython${versionMatch[1]}.dylib`);
+      const pythonBin = path.join(venvPath, 'bin', 'python3');
+      if (fs.existsSync(pythonBin) && !fs.existsSync(linkedDylib)) return true;
+    }
+
+    return false;
+  } catch (_) {
+    return true;
+  }
+}
+
+function repairStarterProjectRuntimeState(projectPath: string) {
+  if (shouldRemoveStarterVenv(projectPath)) {
+    removePathIfExists(path.join(projectPath, '.venv'));
+  }
+  removePathIfExists(path.join(projectPath, '.dnote_cache'));
+  removePathIfExists(path.join(projectPath, '.dnote_runtime.json'));
+}
+
+function copyMissingTemplateFilesSync(src: string, dest: string, relativePath = '') {
+  if (!fs.existsSync(src) || shouldSkipTemplateItem(relativePath)) return;
+
+  const stats = fs.statSync(src);
+  if (stats.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true });
+    fs.readdirSync(src).forEach((childItemName) => {
+      copyMissingTemplateFilesSync(
+        path.join(src, childItemName),
+        path.join(dest, childItemName),
+        path.join(relativePath, childItemName)
+      );
+    });
+    return;
+  }
+
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+  }
+}
+
+function getTemplateProjectSourcePath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'template-project')
+    : path.join(app.getAppPath(), 'template-project');
+}
+
+function getDefaultNotebookProjectPath(): string {
+  return path.join(app.getPath('documents'), 'DNOTE Projects', 'Getting Started');
+}
+
+function ensureDefaultNotebookProject(): string {
+  const src = getTemplateProjectSourcePath();
+  const dest = getDefaultNotebookProjectPath();
+
+  if (fs.existsSync(src)) {
+    try {
+      repairStarterProjectRuntimeState(dest);
+      copyMissingTemplateFilesSync(src, dest);
+      return dest;
+    } catch (err) {
+      console.error('[initUserData] Failed to seed default notebook project:', err);
+    }
+  }
+
+  return fs.existsSync(dest) ? dest : src;
+}
+
 function seedSideLoadedExtensions() {
   const bundledExtensionsPath = getBundledExtensionsPath();
   const userExtensionsPath = getUserExtensionsPath();
@@ -1111,22 +1394,8 @@ async function initUserData() {
     fs.writeFileSync(shortcutsPath, JSON.stringify(defaultShortcuts, null, 2), 'utf-8');
   }
 
-  // 3. Initial project template copy
-  const docsDir = app.getPath('documents');
-  const dest = path.join(docsDir, 'DNOTE Projects', 'Getting Started');
-  if (!fs.existsSync(dest)) {
-    const src = app.isPackaged 
-      ? path.join(process.resourcesPath, 'template-project')
-      : path.join(app.getAppPath(), 'template-project');
-    if (fs.existsSync(src)) {
-      try {
-        copyFolderRecursiveSync(src, dest);
-        console.log('[initUserData] Copied template project to documents folder.');
-      } catch (err) {
-        console.error('[initUserData] Failed to copy template project:', err);
-      }
-    }
-  }
+  // 3. Seed or repair the user-facing starter project in Documents.
+  ensureDefaultNotebookProject();
 
   // 4. Seed side-loaded extension examples into writable userData.
   seedSideLoadedExtensions();

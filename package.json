@@ -4,15 +4,17 @@
   "description": "",
   "main": "dist-electron/main.js",
   "scripts": {
+    "clean:template": "node scripts/clean-template.js",
+    "build:icon": "python3 scripts/generate_app_icon.py",
     "build:vite": "vite build",
     "build:electron": "tsc CORE/main.ts CORE/preload.ts --outDir dist-electron --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop true --ignoreConfig",
     "dev:vite": "vite",
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "dev": "concurrently -k \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
-    "build": "npm run build:vite && npm run build:electron",
+    "build": "npm run build:icon && npm run build:vite && npm run build:electron",
     "start": "NODE_ENV=production electron .",
-    "package": "npm run build && electron-builder",
-    "package:mac": "npm run build && electron-builder --mac"
+    "package": "npm run clean:template && npm run build && electron-builder",
+    "package:mac": "npm run clean:template && npm run build && electron-builder --mac"
   },
   "keywords": [],
   "author": "",
@@ -47,6 +49,8 @@
   "build": {
     "appId": "com.dnote.app",
     "productName": "DNOTE",
+    "icon": "assets/app-icon.icns",
+    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": ".build"
     },
@@ -63,7 +67,14 @@
           "**/*",
           "!**/.DS_Store",
           "!**/.venv",
-          "!**/.venv/**/*"
+          "!**/.venv/**/*",
+          "!**/.dnote_runtime.json",
+          "!**/.dnote_cache",
+          "!**/.dnote_cache/**/*",
+          "!**/on_project_run.json",
+          "!**/output.json",
+          "!**/run_once_demo.json",
+          "!**/sys_monitor.json"
         ]
       },
       {
@@ -84,6 +95,7 @@
       }
     ],
     "mac": {
+      "icon": "assets/app-icon.icns",
       "category": "public.app-category.productivity",
       "identity": null,
       "target": [

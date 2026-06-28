@@ -3,15 +3,14 @@ import { ActionRegistry } from './ActionRegistry';
 import { Blood, useBloodChannel } from './Blood';
 import { BC } from './BloodChannels';
 import { themes, applyTheme } from './themes';
-import { EnvironmentPanel } from './EnvironmentPanel';
 
 interface SettingsModalProps {
   onClose: () => void;
-  initialTab?: 'general' | 'environment' | 'shortcuts';
+  initialTab?: 'general' | 'shortcuts';
 }
 
 export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'environment' | 'shortcuts'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'general' | 'shortcuts'>(initialTab);
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [, setUpdateTrigger] = useState<number>(0);
 
@@ -88,10 +87,6 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
           ...config.appearance,
           ...updatedFields.appearance,
         },
-        interpreters: {
-          ...config.interpreters,
-          ...updatedFields.interpreters,
-        }
       };
       await window.electronAPI.setConfig(mergedConfig);
       // Update Blood state
@@ -219,21 +214,6 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
             }}
           >
             🎨 常规设置
-          </button>
-          <button
-            onClick={() => setActiveTab('environment')}
-            style={{
-              padding: '8px 16px',
-              background: 'none',
-              border: 'none',
-              borderBottom: activeTab === 'environment' ? '2px solid var(--accent-color)' : 'none',
-              color: activeTab === 'environment' ? 'var(--text-main)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontWeight: activeTab === 'environment' ? 'bold' : 'normal',
-              fontSize: '13px'
-            }}
-          >
-            🧰 环境与扩展
           </button>
           <button
             onClick={() => setActiveTab('shortcuts')}
@@ -505,8 +485,6 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
               </div>
 
             </div>
-          ) : activeTab === 'environment' ? (
-            <EnvironmentPanel />
           ) : (
             <div>
               <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>

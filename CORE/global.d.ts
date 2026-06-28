@@ -4,6 +4,7 @@ export interface ElectronAPI {
   deleteFile: (filePath: string) => Promise<boolean>;
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>;
   listDir: (dirPath: string) => Promise<Array<{ name: string; path: string; isDir: boolean; size: number }>>;
+  pathExists: (targetPath: string) => Promise<boolean>;
   openDirectory: () => Promise<string | null>;
   archiveMedia: (srcPath: string, projectPath: string) => Promise<string>;
   getPathForFile: (file: File) => string;
@@ -22,6 +23,19 @@ export interface ElectronAPI {
   }) => Promise<{ stdout: string; stderr: string }>;
   getServiceScriptPath: (pluginFolder: string, scriptName: string) => Promise<string>;
   getExtensionServiceScriptPath: (extensionId: string, scriptName: string) => Promise<string>;
+  diagnoseExtensionService: (extensionId: string, serviceName: string) => Promise<{
+    extensionId: string;
+    extensionPath: string;
+    manifestPath: string;
+    serviceName: string;
+    scriptPath: string;
+    scriptExists: boolean;
+    runtime: string;
+    interpreter: string;
+    interpreterSource: string;
+    usingFallbackInterpreter: boolean;
+    cwd: string;
+  }>;
   getAppPath: () => Promise<string>;
   getRuntimeInfo: () => Promise<{
     mode: 'source-dev' | 'installed-app';
@@ -89,7 +103,64 @@ export interface ElectronAPI {
     writable?: boolean;
   }>>;
   openPath: (targetPath: string) => Promise<boolean>;
+  importExtensionArchive: (archivePath: string) => Promise<{
+    extensionPath: string;
+    extensions: Array<{
+      id: string;
+      name: string;
+      path: string;
+      manifestPath: string;
+      manifest: any;
+      source?: 'userData' | 'development';
+      developmentPath?: string;
+      writable?: boolean;
+    }>;
+  }>;
   getEnvironmentStatus: () => Promise<Record<string, any>>;
+  inspectProjectEnvironment: (projectPath: string) => Promise<{
+    projectPath: string;
+    usesUv: boolean;
+    hasPyproject: boolean;
+    manifestPath: string | null;
+    pyprojectPath: string | null;
+    packages: Array<{
+      name: string;
+      importName: string;
+      source: string;
+      installed: boolean;
+    }>;
+  }>;
+  repairProjectEnvironment: (projectPath: string) => Promise<{
+    projectPath: string;
+    commands: string[];
+    before: any;
+    after: any;
+    repaired: boolean;
+  }>;
+  ensureNotebookProjectDeclaration: (projectPath: string) => Promise<{
+    projectPath: string;
+    created: string[];
+  }>;
+  inspectPluginEnvironment: (extensionId: string) => Promise<{
+    extensionId: string;
+    extensionPath: string;
+    manifestPath: string;
+    interpreter: string;
+    packages: Array<{
+      name: string;
+      importName: string;
+      source: string;
+      installed: boolean;
+    }>;
+  }>;
+  repairPluginEnvironment: (extensionId: string) => Promise<{
+    extensionId: string;
+    extensionPath: string;
+    commands: string[];
+    before: any;
+    after: any;
+    repaired: boolean;
+  }>;
   logRendererError: (errorMsg: any) => Promise<boolean>;
 
   openSecondaryWindow: (id: string, componentType: string, title: string) => Promise<void>;

@@ -37,11 +37,17 @@ Recommended shape:
     "typescript": "node --experimental-strip-types",
     "bash": "bash"
   },
+  "packages": {
+    "python": [
+      { "name": "numpy>=1.26", "import": "numpy" }
+    ]
+  },
   "services": [
     {
       "name": "lattice.py",
       "runtime": "python",
-      "entry": "services/lattice.py"
+      "entry": "services/lattice.py",
+      "dependencies": ["networkx"]
     }
   ],
   "triggerConditions": {}
@@ -101,9 +107,21 @@ await window.electronAPI.runScript(scriptPath, stdinPayload, projectPath, env);
 Prefer one of these styles:
 
 - Python PEP 723 inline metadata for single-file service scripts.
-- A plugin-local dependency manifest when the plugin grows beyond one script.
+- `plugin.json` package declarations for side-loaded plugin packages:
+  `packages.python[*]` for plugin-wide packages, and
+  `services[*].dependencies` for service-local packages.
 - Global interpreter fallback only for simple scripts with standard-library
   dependencies.
+
+Extension Lab treats `plugin.json` as the plugin environment contract. When a
+`.zip` extension package is dropped into Extension Lab, DNOTE imports it into
+Electron `userData/extensions/`, reads `plugin.json`, creates a plugin-local
+`uv` environment, and installs missing packages declared by the plugin.
+
+Notebook project dependencies are not used for plugin service scripts. A plugin
+service receives the selected notebook path through `DNOTE_PROJECT_PATH`, but
+its process `cwd` is the plugin root so `uv` resolves the plugin's own
+environment.
 
 Use `uv run` rather than `uv run python` for Python service scripts that contain
 PEP 723 metadata. `uv run script.py` lets uv read the script's inline

@@ -32,6 +32,20 @@ export interface RuntimeInfo {
   };
 }
 
+export interface ExtensionServiceDiagnostic {
+  extensionId: string;
+  extensionPath: string;
+  manifestPath: string;
+  serviceName: string;
+  scriptPath: string;
+  scriptExists: boolean;
+  runtime: string;
+  interpreter: string;
+  interpreterSource: string;
+  usingFallbackInterpreter: boolean;
+  cwd: string;
+}
+
 export const IPlatformService = createDecorator<IPlatformService>('platformService');
 
 export interface IPlatformService {
@@ -44,6 +58,7 @@ export interface IPlatformService {
   openDirectory(): Promise<string | null>;
   openPath(targetPath: string): Promise<boolean>;
   getExtensionServiceScriptPath(extensionId: string, scriptName: string): Promise<string>;
+  diagnoseExtensionService(extensionId: string, serviceName: string): Promise<ExtensionServiceDiagnostic>;
   runScript(scriptPath: string, stdin: string, cwd: string, envExtra?: Record<string, string>): Promise<{ stdout: string; stderr: string }>;
 }
 
@@ -80,6 +95,10 @@ export class PlatformService implements IPlatformService {
 
   getExtensionServiceScriptPath(extensionId: string, scriptName: string): Promise<string> {
     return window.electronAPI.getExtensionServiceScriptPath(extensionId, scriptName);
+  }
+
+  diagnoseExtensionService(extensionId: string, serviceName: string): Promise<ExtensionServiceDiagnostic> {
+    return window.electronAPI.diagnoseExtensionService(extensionId, serviceName);
   }
 
   runScript(scriptPath: string, stdin: string, cwd: string, envExtra?: Record<string, string>): Promise<{ stdout: string; stderr: string }> {

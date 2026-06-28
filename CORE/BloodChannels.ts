@@ -30,6 +30,9 @@ export const BC = {
     /** 所有文件的原始/静态标签 map。Writer: fileTree(tagResolver) → Reader: editor */
     staticTags: 'system.staticTags' as const,
 
+    /** 左侧文件树搜索查询。Writer: fileTree/graphView → Reader: fileTree, graphView */
+    fileSearchQuery: 'system.fileSearchQuery' as const,
+
     /** tag 解析的最大迭代次数（可通过 settings 修改）。Writer: settings → Reader: fileTree */
     maxIterations: 'system.maxIterations' as const,
 
@@ -53,6 +56,9 @@ export const BC = {
 
     /** 外部依赖探测结果（uv/python/agy/shell）。Writer: App(runtime bootstrap) → Reader: settings */
     environmentStatus: 'system.environmentStatus' as const,
+
+    /** 当前项目声明驱动环境修复结果。Writer: FirstRun/settings → Reader: settings/onboarding */
+    projectEnvironmentRepair: 'system.projectEnvironmentRepair' as const,
 
     /** 每个 area 的组件类型映射。Writer: AreaShell(mount) → Reader: RightSidebar, ActionRegistry */
     areaComponentTypes: (areaId: string) => `system.areaComponentTypes.${areaId}` as const,

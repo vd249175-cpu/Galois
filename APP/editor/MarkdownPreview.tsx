@@ -3,6 +3,9 @@ import { ReactiveExpression } from './ReactiveExpression';
 import { parseMarkdownBody } from '../utils';
 import { InlineClipPlayer } from './InlineClipPlayer';
 import { SlashMenu } from './SlashMenu';
+import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } from './tableEditing';
+import { handleSmartEnter, handleSmartTab } from './markdownEditing';
+import { filterAndRankSlashCommands } from './slashCommandSearch';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -209,46 +212,25 @@ export function MarkdownPreview({
     return index + offset;
   };
 
-  const normalizeTableRow = (cells: string[]) => `| ${cells.map((cell) => cell.trim()).join(' | ')} |`;
-
-  const normalizeSeparatorRow = (alignments: string[]) => {
-    const cells = alignments.map((alignment) => {
-      if (alignment === 'center') return ':---:';
-      if (alignment === 'right') return '---:';
-      return '---';
-    });
-    return normalizeTableRow(cells);
-  };
-
   const handleAddTableRow = (block: ParsedBlock) => {
-    const colCount = Math.max(block.tableHeaders?.length || 0, 1);
-    const row = normalizeTableRow(Array(colCount).fill(''));
-    const allLines = content.split('\n');
-    allLines.splice(block.endLine + 1, 0, row);
-    onContentChange(allLines.join('\n'));
+    onContentChange(insertTableRow(content.split('\n'), block).join('\n'));
   };
 
   const handleAddTableColumn = (block: ParsedBlock) => {
-    const headers = [...(block.tableHeaders || [])];
-    const alignments = [...(block.tableAlignments || [])];
-    const rows = (block.tableRows || []).map((row) => [...row]);
-    const nextIndex = headers.length + 1;
-
-    headers.push(`Column ${nextIndex}`);
-    alignments.push('left');
-    rows.forEach((row) => row.push(''));
-
-    const rebuilt = [
-      normalizeTableRow(headers),
-      normalizeSeparatorRow(alignments),
-      ...rows.map((row) => normalizeTableRow(row)),
-    ];
-    updateMarkdownLines(block.startLine, block.endLine, rebuilt);
+    updateMarkdownLines(block.startLine, block.endLine, addTableColumn(block));
   };
 
-  const filteredPreviewCommands = slashCommands.filter((cmd: any) =>
-    cmd.label?.toLowerCase().includes(previewSlashMenu.query.toLowerCase()) ||
-    cmd.id?.toLowerCase().includes(previewSlashMenu.query.toLowerCase())
+  const handleDeleteTableRow = (block: ParsedBlock, rowLineIndex: number) => {
+    onContentChange(deleteTableRow(content.split('\n'), block, rowLineIndex).join('\n'));
+  };
+
+  const handleDeleteTableColumn = (block: ParsedBlock, colIdx: number) => {
+    updateMarkdownLines(block.startLine, block.endLine, deleteTableColumn(block, colIdx));
+  };
+
+  const filteredPreviewCommands = filterAndRankSlashCommands(
+    slashCommands,
+    previewSlashMenu.query
   );
 
   const closePreviewSlashMenu = () => {
@@ -299,7 +281,42 @@ export function MarkdownPreview({
     updateMarkdownLines(lineIdx, lineIdx, [newLineText]);
   };
 
+  const focusTableCell = (tableKey: string, order: number) => {
+    requestAnimationFrame(() => {
+      const root = previewContainerRef.current;
+      if (!root) return;
+      const cells = Array.from(root.querySelectorAll<HTMLElement>('[data-dnote-table-key]'))
+        .filter((cell) => cell.dataset.dnoteTableKey === tableKey)
+        .sort((a, b) => Number(a.dataset.dnoteCellOrder || 0) - Number(b.dataset.dnoteCellOrder || 0));
+      const nextCell = cells[Math.max(0, Math.min(order, cells.length - 1))];
+      nextCell?.focus();
+    });
+  };
+
+  const handleTableCellKeyDown = (
+    e: React.KeyboardEvent<HTMLElement>,
+    tableKey: string,
+    order: number,
+    maxOrder: number
+  ) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      focusTableCell(tableKey, Math.min(order + 1, maxOrder));
+      return;
+    }
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      focusTableCell(tableKey, e.shiftKey ? Math.max(order - 1, 0) : Math.min(order + 1, maxOrder));
+    }
+  };
+
   const renderBlockEditor = (lineIdx: number, rawText: string) => {
+    const replaceLineInDraft = (lineText: string) => {
+      const lines = content.split('\n');
+      lines.splice(lineIdx, 1, ...lineText.split('\n'));
+      return lines.join('\n');
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (previewSlashMenu.show) {
         const cmds = filteredPreviewCommands;
@@ -331,20 +348,45 @@ export function MarkdownPreview({
         if (e.shiftKey) {
           // Allow Shift+Enter for single line breaks
         } else {
-          // Enter submits and jumps to next line
           e.preventDefault();
-          isJumpingToNextLineRef.current = true;
           const newText = e.currentTarget.value || '';
+          const selectionStart = e.currentTarget.selectionStart ?? newText.length;
+          const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart;
+          const draft = replaceLineInDraft(newText);
+          const absoluteStart = getAbsoluteIndex(lineIdx, selectionStart);
+          const absoluteEnd = getAbsoluteIndex(lineIdx, selectionEnd);
+          const smart = handleSmartEnter(draft, absoluteStart, absoluteEnd);
+
+          if (smart.handled) {
+            isJumpingToNextLineRef.current = true;
+            onContentChange(smart.text);
+            const nextLineIdx = smart.text.substring(0, smart.newStart).split('\n').length - 1;
+            setEditingLineIdx(nextLineIdx);
+            return;
+          }
+
+          isJumpingToNextLineRef.current = true;
           const newLines = newText.split('\n');
           updateMarkdownLines(lineIdx, lineIdx, newLines);
-
           const nextLineIdx = lineIdx + newLines.length;
           const allLines = content.split('\n');
-          // If we are at the last line, append an empty line so we can keep editing
           if (nextLineIdx >= allLines.length) {
             updateMarkdownLines(allLines.length - 1, allLines.length - 1, [allLines[allLines.length - 1], '']);
           }
-
+          setEditingLineIdx(nextLineIdx);
+        }
+      } else if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        const newText = e.currentTarget.value || '';
+        const selectionStart = e.currentTarget.selectionStart ?? newText.length;
+        const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart;
+        const draft = replaceLineInDraft(newText);
+        const absoluteStart = getAbsoluteIndex(lineIdx, selectionStart);
+        const absoluteEnd = getAbsoluteIndex(lineIdx, selectionEnd);
+        const smart = handleSmartTab(draft, absoluteStart, absoluteEnd, e.shiftKey);
+        if (smart.handled) {
+          onContentChange(smart.text);
+          const nextLineIdx = smart.text.substring(0, smart.newStart).split('\n').length - 1;
           setEditingLineIdx(nextLineIdx);
         }
       } else if (e.key === '/') {
@@ -810,6 +852,7 @@ export function MarkdownPreview({
       const headerCells = block.tableHeaders || [];
       const alignments = block.tableAlignments || [];
       const dataRows = block.tableRows || [];
+      const maxCellOrder = Math.max((dataRows.length + 1) * Math.max(headerCells.length, 1) - 1, 0);
       
       const tableEl = (
         <div
@@ -889,9 +932,12 @@ export function MarkdownPreview({
               <tr style={{ borderBottom: '2px solid var(--border-color)', backgroundColor: 'rgba(0,0,0,0.015)' }}>
                 {headerCells.map((cell, colIdx) => {
                   const isCellActive = activeCell?.lineIdx === block.startLine && activeCell?.colIdx === colIdx;
+                  const cellOrder = colIdx;
                   return (
                     <th
                       key={`th_${colIdx}`}
+                      data-dnote-table-key={block.key}
+                      data-dnote-cell-order={cellOrder}
                       contentEditable
                       suppressContentEditableWarning
                       onFocus={() => setActiveCell({ lineIdx: block.startLine, colIdx })}
@@ -901,10 +947,7 @@ export function MarkdownPreview({
                         setActiveCell(null);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          e.currentTarget.blur();
-                        }
+                        handleTableCellKeyDown(e, block.key, cellOrder, maxCellOrder);
                       }}
                       onClick={(e) => e.stopPropagation()}
                       style={{
@@ -917,10 +960,37 @@ export function MarkdownPreview({
                         backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
                       }}
                     >
-                      {isCellActive ? cell : renderInline(cell, block.startLine)}
+                      <span>{isCellActive ? cell : renderInline(cell, block.startLine)}</span>
+                      {headerCells.length > 1 && (
+                        <button
+                          type="button"
+                          contentEditable={false}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteTableColumn(block, colIdx);
+                          }}
+                          title="删除此列"
+                          style={{
+                            marginLeft: '6px',
+                            border: '0',
+                            background: 'transparent',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            fontSize: '10px',
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
                     </th>
                   );
                 })}
+                <th style={{ width: '28px', padding: '0', borderBottom: '2px solid var(--border-color)' }} />
               </tr>
             </thead>
             <tbody>
@@ -936,9 +1006,12 @@ export function MarkdownPreview({
                     const cellVal = rowCells[colIdx] || '';
                     const cellLineIndex = block.startLine + 2 + rowIdx;
                     const isCellActive = activeCell?.lineIdx === cellLineIndex && activeCell?.colIdx === colIdx;
+                    const cellOrder = (rowIdx + 1) * headerCells.length + colIdx;
                     return (
                       <td
                         key={`td_${rowIdx}_${colIdx}`}
+                        data-dnote-table-key={block.key}
+                        data-dnote-cell-order={cellOrder}
                         contentEditable
                         suppressContentEditableWarning
                         onFocus={() => setActiveCell({ lineIdx: cellLineIndex, colIdx })}
@@ -948,10 +1021,7 @@ export function MarkdownPreview({
                           setActiveCell(null);
                         }}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          }
+                          handleTableCellKeyDown(e, block.key, cellOrder, maxCellOrder);
                         }}
                         onClick={(e) => e.stopPropagation()}
                         style={{
@@ -966,6 +1036,38 @@ export function MarkdownPreview({
                       </td>
                     );
                   })}
+                  <td
+                    contentEditable={false}
+                    style={{
+                      width: '28px',
+                      padding: '0 4px',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteTableRow(block, block.startLine + 2 + rowIdx);
+                      }}
+                      title="删除此行"
+                      style={{
+                        border: '0',
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

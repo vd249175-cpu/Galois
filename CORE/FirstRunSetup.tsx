@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Blood, useBloodChannel } from './Blood';
 import { BC } from './BloodChannels';
 
@@ -35,20 +36,43 @@ export function shouldShowFirstRunSetup(): boolean {
 }
 
 export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSetupProps) {
+  const [repairing, setRepairing] = useState(false);
+  const [repairMessage, setRepairMessage] = useState('');
   const runtimeSnapshot = useBloodChannel([BC.system.environmentStatus, BC.system.runtimeMode], () => ({
     environmentStatus: Blood.getValue<Record<string, ToolStatus>>(BC.system.environmentStatus, {}),
     runtimeMode: Blood.getValue<string>(BC.system.runtimeMode, 'source-dev'),
+    projectPath: Blood.getValue<string>(BC.system.projectPath, ''),
   }));
-  const { environmentStatus, runtimeMode } = runtimeSnapshot;
+  const { environmentStatus, runtimeMode, projectPath } = runtimeSnapshot;
 
-  const requiredReady = Boolean(environmentStatus.uv?.available && environmentStatus.python?.available);
+  const requiredReady = Boolean(environmentStatus.uv?.available && environmentStatus.node?.available);
 
   const rows: Array<[string, ToolStatus | undefined, boolean, string]> = [
-    ['uv', environmentStatus.uv, false, 'Python 插件服务、项目脚本依赖解析'],
-    ['Python', environmentStatus.python, false, '笔记项目脚本和动态标签'],
-    ['Node.js', environmentStatus.node, true, '插件开发和源码模式构建'],
+    ['uv', environmentStatus.uv, false, '笔记项目 Python 环境、依赖安装和脚本运行'],
+    ['Node.js', environmentStatus.node, false, '插件开发、扩展包工具链和源码模式构建'],
+    ['Python', environmentStatus.python, true, '通常由 uv 自动创建项目解释器'],
     ['agy', environmentStatus.agy, true, '外部命令行助手，不随 DNOTE 打包'],
   ];
+
+  const handleRepairProjectEnvironment = async () => {
+    if (!projectPath || repairing) return;
+    setRepairing(true);
+    setRepairMessage('正在根据项目声明安装缺失包...');
+    try {
+      const result = await window.electronAPI.repairProjectEnvironment(projectPath);
+      Blood.updateKey(BC.system.projectEnvironmentRepair, {
+        ...result,
+        timestamp: Date.now(),
+      });
+      setRepairMessage(result.repaired
+        ? '项目环境已按声明修复完成。'
+        : '已执行修复，但仍有包不可用，请查看环境详情。');
+    } catch (err: any) {
+      setRepairMessage(`修复失败：${err?.message || String(err)}`);
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   return (
     <div
@@ -90,8 +114,8 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
             先把环境边界理清楚
           </h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.65, fontSize: '13px' }}>
-            DNOTE 不内置 Python 依赖环境，也不内置 agy/Antigravity。App 本体负责启动和调度；
-            插件、笔记项目脚本、命令行助手分别使用自己的外部环境。
+            DNOTE 不要求用户手动维护 Python 包。App 本体负责启动和调度；笔记项目默认通过
+            <code> uv</code> 声明、创建并修复 Python 环境；插件开发则依赖 Node.js 和可写扩展目录。
           </p>
         </div>
 
@@ -109,7 +133,7 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
           >
             当前模式：<strong>{runtimeMode}</strong>。{requiredReady
               ? '核心脚本工具已经可用，可以进入工作区。'
-              : '建议先完成 uv 和 Python 配置，否则动态标签、插件服务或项目脚本可能无法运行。'}
+              : '建议先完成 uv 和 Node.js 配置；Python 解释器和包依赖会优先由 uv 根据项目声明创建。'}
           </div>
 
           <div style={{ display: 'grid', gap: '8px' }}>
@@ -148,8 +172,47 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
               lineHeight: 1.6,
             }}
           >
-            推荐安装命令：<code>brew install uv python</code>。如果不用 Homebrew，也可以用
+            推荐安装命令：<code>brew install uv node</code>。如果不用 Homebrew，也可以用
             <code> curl -LsSf https://astral.sh/uv/install.sh | sh</code> 安装 uv。
+          </div>
+
+          <div
+            style={{
+              borderRadius: '12px',
+              border: '1px solid var(--border-color)',
+              padding: '12px 14px',
+              display: 'grid',
+              gap: '10px',
+              background: 'color-mix(in srgb, var(--bg-main) 88%, var(--accent-color))',
+            }}
+          >
+            <div style={{ color: 'var(--text-main)', fontSize: '12px', fontWeight: 700 }}>
+              项目依赖由声明自动安装
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.6 }}>
+              当前笔记项目会读取 <code>pyproject.toml</code> 和脚本 PEP 723 依赖声明，然后用
+              <code> uv</code> 同步缺失包。插件包依赖则由 Extension Lab 读取插件自己的
+              <code> plugin.json</code>。
+            </div>
+            {repairMessage && (
+              <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{repairMessage}</div>
+            )}
+            <button
+              onClick={handleRepairProjectEnvironment}
+              disabled={!projectPath || repairing || !environmentStatus.uv?.available}
+              style={{
+                justifySelf: 'start',
+                border: '1px solid var(--accent-color)',
+                background: repairing ? 'var(--bg-input)' : 'var(--accent-color)',
+                color: repairing ? 'var(--text-muted)' : 'var(--bg-main)',
+                padding: '8px 12px',
+                borderRadius: '9px',
+                cursor: repairing ? 'default' : 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              {repairing ? '正在修复...' : '一键修复当前项目环境'}
+            </button>
           </div>
         </div>
 
@@ -188,7 +251,7 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
                 fontWeight: 700,
               }}
             >
-              打开环境与扩展
+              打开基础偏好
             </button>
             <button
               onClick={() => completeFirstRun(onDone)}

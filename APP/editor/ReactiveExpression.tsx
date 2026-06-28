@@ -147,7 +147,7 @@ export function ReactiveExpression({
       if (isMountedRef.current) {
         setStatus('success');
       }
-      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+      updateBloodKey(BC.events.commandExecuted(`reactive.${run}`), Date.now());
     } catch (err: any) {
       console.error('[ReactiveExpression] Execution error:', err);
       if (isMountedRef.current) {

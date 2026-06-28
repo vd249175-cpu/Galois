@@ -197,8 +197,8 @@ function TerminalView({
 
     xtermInstances.set(tabId, { term, fit, container, unsubOutput, unsubExit });
 
-    // ── Spawn PTY (cwd = DNOTE app dir) ──
-    const dir = appDirRef.current;
+    // ── Spawn PTY in the writable notebook workspace; appDir is only a fallback.
+    const dir = notesProject || appDirRef.current;
     window.electronAPI
       .spawnTerminal(tabId, dir, term.cols || 80, term.rows || 24)
       .then(() => {

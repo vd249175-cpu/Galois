@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
+import type { DragEvent } from 'react';
 import { extensionLabActions } from './actions';
 import { BC } from '../../CORE/BloodChannels';
 import { useService } from '../../CORE/instantiation';
 import { IExtensionHostService } from '../../CORE/extensionHost';
-import type { ExtensionCommandContribution, ExtensionRecord } from '../../CORE/platform';
+import type { ExtensionCommandContribution, ExtensionRecord, ExtensionServiceDiagnostic } from '../../CORE/platform';
 
 type SideLoadedExtension = ExtensionRecord;
 
@@ -58,7 +59,9 @@ function ExtensionLab({
   const [commands, setCommands] = useState<ExtensionCommandContribution[]>([]);
   const [runningKey, setRunningKey] = useState('');
   const [output, setOutput] = useState<Record<string, string>>({});
+  const [diagnostics, setDiagnostics] = useState<Record<string, ExtensionServiceDiagnostic>>({});
   const [message, setMessage] = useState('');
+  const [isDraggingPackage, setIsDraggingPackage] = useState(false);
 
   const applyExtensions = (list: SideLoadedExtension[]) => {
     setExtensions(list);
@@ -111,6 +114,33 @@ function ExtensionLab({
     }
   };
 
+  const diagnoseService = async (extension: SideLoadedExtension, serviceName: string) => {
+    const key = `${extension.id}/${serviceName}`;
+    try {
+      const diagnostic = await extensionHostService.diagnoseExtensionService(extension.id, serviceName);
+      setDiagnostics((prev) => ({ ...prev, [key]: diagnostic }));
+    } catch (err: any) {
+      const message = err?.message || String(err);
+      setOutput((prev) => ({ ...prev, [key]: message }));
+      updateBloodKey(BC.events.scriptError('extensionLab'), { message, ts: Date.now() });
+    }
+  };
+
+  const repairExtensionEnvironment = async (extension: SideLoadedExtension) => {
+    try {
+      setMessage(`正在修复插件依赖：${extension.id}`);
+      const result = await window.electronAPI.repairPluginEnvironment(extension.id);
+      setMessage(result.repaired
+        ? `插件依赖已就绪：${extension.id}`
+        : `插件依赖修复后仍有缺失：${extension.id}`);
+    } catch (err: any) {
+      const text = err?.message || String(err);
+      setMessage(`插件依赖修复失败：${text}`);
+      updateBloodKey(BC.events.scriptError('extensionLab'), { message: text, ts: Date.now() });
+    }
+  };
+
+
   const runCommand = async (command: ExtensionCommandContribution) => {
     const key = command.command;
     setRunningKey(key);
@@ -129,6 +159,41 @@ function ExtensionLab({
     } finally {
       setRunningKey('');
     }
+  };
+
+  const importExtensionPackage = async (archivePath: string) => {
+    try {
+      setMessage('正在导入扩展包...');
+      const result = await window.electronAPI.importExtensionArchive(archivePath);
+      applyExtensions(result.extensions);
+      const imported = result.extensions.find((extension) => extension.path === result.extensionPath);
+      if (imported) {
+        setMessage(`已导入扩展包，正在根据 plugin.json 安装依赖：${imported.id}`);
+        const repair = await window.electronAPI.repairPluginEnvironment(imported.id);
+        setMessage(repair.repaired
+          ? `已导入并修复插件依赖：${result.extensionPath}`
+          : `已导入插件，但仍有依赖不可用：${result.extensionPath}`);
+      } else {
+        setMessage(`已导入扩展包：${result.extensionPath}`);
+      }
+    } catch (err: any) {
+      const text = err?.message || String(err);
+      setMessage(`导入失败：${text}`);
+      updateBloodKey(BC.events.scriptError('extensionLab'), { message: text, ts: Date.now() });
+    }
+  };
+
+  const handlePackageDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsDraggingPackage(false);
+    const file = event.dataTransfer.files?.[0];
+    if (!file) return;
+    const archivePath = window.electronAPI.getPathForFile(file);
+    if (!archivePath.toLowerCase().endsWith('.zip')) {
+      setMessage('请拖入 .zip 扩展包。');
+      return;
+    }
+    await importExtensionPackage(archivePath);
   };
 
   useEffect(() => {
@@ -157,6 +222,29 @@ function ExtensionLab({
           <button className="settings-action-btn" onClick={() => extensionHostService.openUserExtensionsDir()}>
             打开侧载目录
           </button>
+        </div>
+
+        <div
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDraggingPackage(true);
+          }}
+          onDragLeave={() => setIsDraggingPackage(false)}
+          onDrop={handlePackageDrop}
+          style={{
+            border: `1.5px dashed ${isDraggingPackage ? 'var(--accent-color)' : 'var(--border-color)'}`,
+            borderRadius: '14px',
+            padding: '16px',
+            background: isDraggingPackage
+              ? 'color-mix(in srgb, var(--accent-color) 14%, var(--bg-input))'
+              : 'var(--bg-input)',
+            color: 'var(--text-muted)',
+            fontSize: '12px',
+            lineHeight: 1.6,
+          }}
+        >
+          将 APP 插件压缩包拖到这里安装。压缩包需要包含 <code>plugin.json</code>，安装后会进入可写的
+          <code> userData/extensions/</code>，不会修改只读的 App bundle。
         </div>
 
         <code style={codeStyle}>{extensionPath || '侧载目录尚未写入 Blood，点击刷新扩展'}</code>
@@ -205,6 +293,9 @@ function ExtensionLab({
                     移除开发目录
                   </button>
                 )}
+                <button className="settings-action-btn" onClick={() => repairExtensionEnvironment(extension)}>
+                  修复插件依赖
+                </button>
               </div>
             </div>
             <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.5 }}>
@@ -220,10 +311,16 @@ function ExtensionLab({
                         {service.label || service.name}
                         <span style={{ color: 'var(--text-muted)' }}> · {service.runtime || 'script'}</span>
                       </div>
-                      <button className="settings-action-btn" onClick={() => runService(extension, service.name)} disabled={runningKey === key}>
-                        {runningKey === key ? '运行中...' : '运行服务脚本'}
-                      </button>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button className="settings-action-btn" onClick={() => diagnoseService(extension, service.name)}>
+                          诊断
+                        </button>
+                        <button className="settings-action-btn" onClick={() => runService(extension, service.name)} disabled={runningKey === key}>
+                          {runningKey === key ? '运行中...' : '运行服务脚本'}
+                        </button>
+                      </div>
                     </div>
+                    {diagnostics[key] && <pre style={preStyle}>{formatDiagnostic(diagnostics[key])}</pre>}
                     {output[key] && <pre style={preStyle}>{output[key]}</pre>}
                   </div>
                 );
@@ -234,6 +331,19 @@ function ExtensionLab({
       </div>
     </div>
   );
+}
+
+function formatDiagnostic(diagnostic: ExtensionServiceDiagnostic): string {
+  return [
+    `service: ${diagnostic.extensionId}/${diagnostic.serviceName}`,
+    `runtime: ${diagnostic.runtime}`,
+    `script: ${diagnostic.scriptPath}`,
+    `script exists: ${diagnostic.scriptExists ? 'yes' : 'no'}`,
+    `interpreter: ${diagnostic.interpreter || '(direct executable)'}`,
+    `interpreter source: ${diagnostic.interpreterSource}`,
+    `fallback: ${diagnostic.usingFallbackInterpreter ? 'yes' : 'no'}`,
+    `manifest: ${diagnostic.manifestPath}`,
+  ].join('\n');
 }
 
 const cardStyle = {

@@ -45,6 +45,8 @@ export const FileTreeComponent = {
   bloodChannels: [
     BC.system.projectPath,
     BC.system.resolvedTags,
+    BC.system.staticTags,
+    BC.system.fileSearchQuery,
     BC.system.maxIterations,
     BC_PREFIX.fileSavedAll,
     BC.system.lastFocusedEditorId,
@@ -62,6 +64,8 @@ export const FileTreeComponent = {
     writes: [
       BC.system.projectPath,            // 用户选择新目录时写入
       BC.system.resolvedTags,           // 计算后的全量标签 map（其他插件的核心数据来源）
+      BC.system.staticTags,
+      BC.system.fileSearchQuery,        // 左侧搜索状态，供 graphView 联动高亮/过滤
       BC.events.fileSaved('*'),         // 新建文件时广播
       BC.events.openFile('*'),          // 点击文件时发给目标 editor
       BC.events.scriptError('fileTree'), // 脚本执行错误广播
@@ -92,6 +96,7 @@ function FileTreeView({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteIndex, setAutocompleteIndex] = useState(0);
+  const linkedSearchQuery = state[BC.system.fileSearchQuery] || '';
 
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
 
@@ -175,6 +180,19 @@ function FileTreeView({
     setSearchQuery(prefix + replacement + ' ');
     setShowAutocomplete(false);
   };
+
+  useEffect(() => {
+    if (linkedSearchQuery !== searchQuery) {
+      setSearchQuery(linkedSearchQuery);
+      setAutocompleteIndex(0);
+    }
+  }, [linkedSearchQuery]);
+
+  useEffect(() => {
+    if (searchQuery !== linkedSearchQuery) {
+      updateBloodKey(BC.system.fileSearchQuery, searchQuery);
+    }
+  }, [searchQuery]);
   const [templateFiles, setTemplateFiles] = useState<{ name: string; path: string; content: string }[]>([]);
   const [promptConfig, setPromptConfig] = useState<{
     show: boolean;
@@ -293,6 +311,7 @@ function FileTreeView({
 
     const loadFiles = async () => {
       try {
+        await window.electronAPI.ensureNotebookProjectDeclaration(projectPath);
         const list = await (window as any).electronAPI.listDir(projectPath);
         const mdFiles = list.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
         const maxIterations = state[BC.system.maxIterations] || 3;

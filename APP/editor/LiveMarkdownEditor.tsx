@@ -280,8 +280,12 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
       if (!view) return;
       const current = view.state.doc.toString();
       if (current === value) return;
+      const selection = view.state.selection.main;
+      const anchor = Math.min(selection.anchor, value.length);
+      const head = Math.min(selection.head, value.length);
       view.dispatch({
         changes: { from: 0, to: current.length, insert: value },
+        selection: { anchor, head },
       });
     }, [value]);
 

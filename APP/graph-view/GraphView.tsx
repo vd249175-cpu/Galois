@@ -37,6 +37,7 @@ export const GraphViewComponent = {
   bloodChannels: [
     BC.system.projectPath,
     BC.system.resolvedTags,
+    BC.system.fileSearchQuery,
     BC_PREFIX.fileSavedAll,
     BC.system.lastFocusedEditorId,
     BC.system.activeEditors,
@@ -46,12 +47,14 @@ export const GraphViewComponent = {
     reads: [
       BC.system.projectPath,
       BC.system.resolvedTags,       // 由 fileTree 写入，graphView 是消费者
+      BC.system.fileSearchQuery,    // 与左侧文件树搜索联动
       BC_PREFIX.fileSavedAll,       // 文件保存时重建图谱
       BC.system.lastFocusedEditorId,
       BC.system.activeEditors,
     ],
     writes: [
       BC.events.openFile('*'),              // 双击节点时发送打开请求
+      BC.system.fileSearchQuery,            // 点击节点时反向更新左侧搜索
       BC.events.scriptError('graphView'),   // lattice.py 失败时广播错误
     ],
     dependsOn: ['fileTree'],  // 依赖 fileTree 提供 resolvedTags（必须先 mount）
@@ -70,6 +73,7 @@ function GraphView({
   lastAction: { id: string; timestamp: number } | null;
 }) {
   const projectPath = state[BC.system.projectPath] || '';
+  const fileSearchQuery = String(state[BC.system.fileSearchQuery] || '');
   const fileSavedMap = state[BC_PREFIX.fileSavedAll] || {};
   const fileSavedEvent = Object.values(fileSavedMap).reduce((max: number, val: any) => Math.max(max, Number(val) || 0), 0);
 
@@ -235,6 +239,18 @@ function GraphView({
     }
   };
 
+  const getSearchQueryForNode = (nodeId: string) => {
+    const node = simRef.current.nodes.find((item) => item.id === nodeId);
+    const tags = node?.tags || [];
+    if (tags.length > 0) {
+      return tags.map((tag) => `#${tag}`).join(' ');
+    }
+    if (nodeId.startsWith('tag:')) {
+      return `#${nodeId.substring(4)}`;
+    }
+    return node?.label || '';
+  };
+
   const handleSVGMouseUp = (e?: React.MouseEvent) => {
     const wasPanning = isPanning.current;
     isPanning.current = false;
@@ -246,6 +262,7 @@ function GraphView({
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < 5) {
           setSelectedNodeId(dragNodeId.current);
+          updateBloodKey(BC.system.fileSearchQuery, getSearchQueryForNode(dragNodeId.current));
         }
       }
       dragNodeId.current = null;
@@ -334,6 +351,26 @@ function GraphView({
     });
     return neighbors;
   }, [nodes, links]);
+
+  const searchFocus = useMemo(() => {
+    const query = fileSearchQuery.trim().toLowerCase();
+    if (!query) return { active: false, tags: [] as string[], text: '' };
+    const tags = Array.from(query.matchAll(/#([^\s#()]+)/g)).map((match) => match[1].toLowerCase());
+    const text = query.replace(/#([^\s#()]+)/g, '').trim();
+    return { active: true, tags, text };
+  }, [fileSearchQuery]);
+
+  const matchesSearchFocus = (node: any) => {
+    if (!searchFocus.active) return true;
+    const nodeTags = (node.tags || []).map((tag: string) => tag.toLowerCase());
+    const tagMatched = searchFocus.tags.length > 0
+      ? searchFocus.tags.every((tag) => nodeTags.some((nodeTag: string) => nodeTag.includes(tag)))
+      : false;
+    const textMatched = searchFocus.text
+      ? String(node.label || '').toLowerCase().includes(searchFocus.text)
+      : false;
+    return tagMatched || textMatched;
+  };
 
   if (!projectPath) {
     return (
@@ -474,10 +511,12 @@ function GraphView({
             const isHovered = hoveredNode === node.id;
             const isSelected = selectedNodeId === node.id;
             const isHighlight = isHovered || isSelected;
+            const isSearchMatched = matchesSearchFocus(node);
 
             const activeFocusNode = hoveredNode || selectedNodeId;
-            const isDimmed = activeFocusNode !== null && !isHovered && !isSelected && 
+            const isFocusDimmed = activeFocusNode !== null && !isHovered && !isSelected && 
               !(neighborById.get(node.id)?.has(activeFocusNode));
+            const isDimmed = isFocusDimmed || (searchFocus.active && !isSearchMatched);
 
             return (
               <g
@@ -487,7 +526,7 @@ function GraphView({
                 onDoubleClick={() => handleNodeDoubleClick(node.id)}
                 onMouseEnter={() => setHoveredNode(node.id)}
                 onMouseLeave={() => setHoveredNode(null)}
-                style={{ cursor: 'pointer', opacity: isDimmed ? 0.35 : 1.0, transition: 'opacity 0.25s' }}
+                style={{ cursor: 'pointer', opacity: isDimmed ? 0.18 : 1.0, transition: 'opacity 0.25s' }}
               >
                 {(() => {
                   const d = node.degree || 0;

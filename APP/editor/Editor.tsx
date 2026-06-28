@@ -19,11 +19,14 @@ import { useEditorHistory } from './hooks/useEditorHistory';
 import { useRuntimeSync } from './hooks/useRuntimeSync';
 import type { EditorTextHandle } from './LiveMarkdownEditor';
 import { applyMarkdownFormatting, handleSmartEnter, handleSmartTab } from './markdownEditing';
+import { filterAndRankSlashCommands, rememberSlashCommand } from './slashCommandSearch';
 
 const LiveMarkdownEditor = React.lazy(async () => {
   const mod = await import('./LiveMarkdownEditor');
   return { default: mod.LiveMarkdownEditor };
 });
+
+const RECENT_SLASH_COMMANDS_KEY = 'dnote_recent_slash_commands';
 
 type EditorMode = 'source' | 'live' | 'reading';
 
@@ -537,26 +540,33 @@ function EditorView({
   const [slashMenuQuery, setSlashMenuQuery] = useState('');
   const [slashMenuCoords, setSlashMenuCoords] = useState({ left: 0, top: 0 });
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
+  const [recentSlashCommandIds, setRecentSlashCommandIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_SLASH_COMMANDS_KEY) || '[]');
+    } catch (_) {
+      return [];
+    }
+  });
 
   const SLASH_COMMANDS = [
-    { id: 'bold', label: 'Bold', desc: 'Make text bold', icon: 'B' },
-    { id: 'italic', label: 'Italic', desc: 'Make text italic', icon: 'I' },
-    { id: 'code-inline', label: 'Inline Code', desc: 'Insert monospace code', icon: '`' },
-    { id: 'link', label: 'Link', desc: 'Create a hyperlink', icon: '🔗' },
-    { id: 'wiki-link', label: 'Wiki Link', desc: 'Link to another note', icon: '[[' },
-    { id: 'h1', label: 'Heading 1', desc: 'Big section heading', icon: 'H1' },
-    { id: 'h2', label: 'Heading 2', desc: 'Medium section heading', icon: 'H2' },
-    { id: 'h3', label: 'Heading 3', desc: 'Small section heading', icon: 'H3' },
-    { id: 'todo', label: 'To-Do List', desc: 'Checkbox for tasks', icon: '☑' },
-    { id: 'bullet', label: 'Bullet List', desc: 'Simple bullet point', icon: '•' },
-    { id: 'number', label: 'Numbered List', desc: 'Numbered sequence', icon: '1.' },
-    { id: 'quote', label: 'Blockquote', desc: 'Blockquote section', icon: '“' },
-    { id: 'callout', label: 'Callout', desc: 'Obsidian-style callout block', icon: '!' },
-    { id: 'table', label: 'Table', desc: 'Insert a 2-column table', icon: '▦' },
-    { id: 'hr', label: 'Divider', desc: 'Horizontal rule', icon: '—' },
-    { id: 'strike', label: 'Strikethrough', desc: 'Strike selected text', icon: 'S' },
-    { id: 'highlight', label: 'Highlight', desc: 'Highlight selected text', icon: '==' },
-    { id: 'code-block', label: 'Code Block', desc: 'Code code wrapper', icon: '💻' }
+    { id: 'bold', label: 'Bold', desc: 'Make text bold', icon: 'B', category: '格式' },
+    { id: 'italic', label: 'Italic', desc: 'Make text italic', icon: 'I', category: '格式' },
+    { id: 'code-inline', label: 'Inline Code', desc: 'Insert monospace code', icon: '`', category: '格式' },
+    { id: 'strike', label: 'Strikethrough', desc: 'Strike selected text', icon: 'S', category: '格式' },
+    { id: 'highlight', label: 'Highlight', desc: 'Highlight selected text', icon: '==', category: '格式' },
+    { id: 'link', label: 'Link', desc: 'Create a hyperlink', icon: '🔗', category: '链接' },
+    { id: 'wiki-link', label: 'Wiki Link', desc: 'Link to another note', icon: '[[', category: '链接' },
+    { id: 'h1', label: 'Heading 1', desc: 'Big section heading', icon: 'H1', category: '基础块' },
+    { id: 'h2', label: 'Heading 2', desc: 'Medium section heading', icon: 'H2', category: '基础块' },
+    { id: 'h3', label: 'Heading 3', desc: 'Small section heading', icon: 'H3', category: '基础块' },
+    { id: 'quote', label: 'Blockquote', desc: 'Blockquote section', icon: '“', category: '基础块' },
+    { id: 'callout', label: 'Callout', desc: 'Obsidian-style callout block', icon: '!', category: '基础块' },
+    { id: 'hr', label: 'Divider', desc: 'Horizontal rule', icon: '—', category: '基础块' },
+    { id: 'todo', label: 'To-Do List', desc: 'Checkbox for tasks', icon: '☑', category: '列表' },
+    { id: 'bullet', label: 'Bullet List', desc: 'Simple bullet point', icon: '•', category: '列表' },
+    { id: 'number', label: 'Numbered List', desc: 'Numbered sequence', icon: '1.', category: '列表' },
+    { id: 'table', label: 'Table', desc: 'Insert a 2-column table', icon: '▦', category: '表格' },
+    { id: 'code-block', label: 'Code Block', desc: 'Code wrapper', icon: '💻', category: '代码' }
   ];
 
   const allCommands = useMemo(() => {
@@ -570,7 +580,8 @@ function EditorView({
         React.createElement('circle', { cx: 8, cy: 8, r: 2.5 }),
         React.createElement('path', { d: 'M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4' })
       ),
-      content: cmd.content
+      content: cmd.content,
+      category: '自定义',
     }));
 
     const projectList = projectCommands
@@ -585,7 +596,8 @@ function EditorView({
           { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
           React.createElement('path', { d: 'M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z' })
         ),
-        content: cmd.content
+        content: cmd.content,
+        category: '项目',
       }));
 
     const helperCmds = [
@@ -598,7 +610,8 @@ function EditorView({
           { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
           React.createElement('path', { d: 'M8 3v10M3 8h10' })
         ),
-        content: ''
+        content: '',
+        category: '自定义',
       },
       {
         id: 'custom.manage',
@@ -610,16 +623,23 @@ function EditorView({
           React.createElement('circle', { cx: 8, cy: 8, r: 2.5 }),
           React.createElement('path', { d: 'M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4' })
         ),
-        content: ''
+        content: '',
+        category: '自定义',
       }
     ];
     return [...SLASH_COMMANDS, ...customList, ...projectList, ...helperCmds];
   }, [customCommands, projectCommands]);
 
-  const filteredCommands = allCommands.filter((cmd: any) => 
-    cmd.label.toLowerCase().includes(slashMenuQuery.toLowerCase()) ||
-    cmd.id.includes(slashMenuQuery.toLowerCase())
+  const filteredCommands = useMemo(
+    () => filterAndRankSlashCommands(allCommands, slashMenuQuery, recentSlashCommandIds),
+    [allCommands, slashMenuQuery, recentSlashCommandIds]
   );
+
+  const rememberSlashCommandUse = (commandId: string) => {
+    const nextRecent = rememberSlashCommand(recentSlashCommandIds, commandId);
+    setRecentSlashCommandIds(nextRecent);
+    localStorage.setItem(RECENT_SLASH_COMMANDS_KEY, JSON.stringify(nextRecent));
+  };
 
   const applyFormatting = applyMarkdownFormatting;
 
@@ -633,6 +653,7 @@ function EditorView({
     rangeEnd?: number,
     sourceContent?: string
   ) => {
+    rememberSlashCommandUse(cmd.id);
     const activeEditor = textareaRef.current;
     const workingContent = sourceContent ?? content;
     const hasExplicitRange = rangeStart !== undefined && rangeEnd !== undefined;
@@ -969,8 +990,7 @@ function EditorView({
       } catch (e) {}
 
       setStatusMessage(`Script ${run} executed successfully.`);
-      // Force reload editor state
-      updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
+      updateBloodKey(BC.events.commandExecuted(`reactive.${run}`), Date.now());
 
       if (isIsolatedExecution) {
         setTimeout(() => {

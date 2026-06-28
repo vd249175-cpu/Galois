@@ -1,7 +1,7 @@
 import { createDecorator } from './instantiation';
 import { BC } from './BloodChannels';
 import { IStateService } from './services';
-import { ExtensionCommandContribution, ExtensionRecord, IPlatformService } from './platform';
+import { ExtensionCommandContribution, ExtensionRecord, ExtensionServiceDiagnostic, IPlatformService } from './platform';
 
 export const IExtensionHostService = createDecorator<IExtensionHostService>('extensionHostService');
 
@@ -12,6 +12,7 @@ export interface IExtensionHostService {
   addDevelopmentPath(): Promise<{ extensions: ExtensionRecord[]; selectedPath: string | null }>;
   removeDevelopmentPath(devPath: string): Promise<ExtensionRecord[]>;
   openUserExtensionsDir(): Promise<void>;
+  diagnoseExtensionService(extensionId: string, serviceName: string): Promise<ExtensionServiceDiagnostic>;
   runExtensionCommand(commandId: string, payload: Record<string, any>): Promise<{ stdout: string; stderr: string }>;
   runExtensionService(extensionId: string, serviceName: string, payload: Record<string, any>): Promise<{ stdout: string; stderr: string }>;
 }
@@ -63,10 +64,19 @@ export class ExtensionHostService implements IExtensionHostService {
     await this.platformService.openPath(extensionDir);
   }
 
+  diagnoseExtensionService(extensionId: string, serviceName: string): Promise<ExtensionServiceDiagnostic> {
+    return this.platformService.diagnoseExtensionService(extensionId, serviceName);
+  }
+
   async runExtensionService(extensionId: string, serviceName: string, payload: Record<string, any>): Promise<{ stdout: string; stderr: string }> {
     const scriptPath = await this.platformService.getExtensionServiceScriptPath(extensionId, serviceName);
+    const extensionCwd = scriptPath.includes('/services/')
+      ? scriptPath.split('/services/')[0]
+      : scriptPath.replace(/\/[^/]+$/, '');
     const projectPath = this.stateService.getValue(BC.system.projectPath, '');
-    const result = await this.platformService.runScript(scriptPath, JSON.stringify(payload), projectPath);
+    const result = await this.platformService.runScript(scriptPath, JSON.stringify(payload), extensionCwd, {
+      DNOTE_PROJECT_PATH: projectPath,
+    });
     this.stateService.updateKey(BC.events.commandExecuted(`${extensionId}.${serviceName}`), Date.now());
     return result;
   }
