@@ -256,31 +256,20 @@ function EditorView({
 
   // Custom Commands & Tag Groups States
   const [customCommands, setCustomCommands] = useState<Array<{ id: string; label: string; desc: string; content: string; defaultShortcut?: string }>>(() => {
-    const defaultRainbow = {
-      id: 'custom.rainbow',
-      label: 'Rainbow Text (彩虹渐变文字)',
-      desc: 'Colors the paragraph below using rainbow colors',
-      content: '{{rainbow.json:status?run=rainbow.py&isolate=execution}}',
-      defaultShortcut: 'meta+l'
-    };
-
     const saved = localStorage.getItem('dnote_custom_commands');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const hasRainbow = parsed.some(c => c.id === 'custom.rainbow');
-          if (!hasRainbow) {
-            const updated = [...parsed, defaultRainbow];
-            localStorage.setItem('dnote_custom_commands', JSON.stringify(updated));
-            return updated;
+          const filtered = parsed.filter(c => c.id !== 'custom.rainbow');
+          if (filtered.length !== parsed.length) {
+            localStorage.setItem('dnote_custom_commands', JSON.stringify(filtered));
           }
-          return parsed;
+          return filtered;
         }
       } catch (_) {}
     }
-    localStorage.setItem('dnote_custom_commands', JSON.stringify([defaultRainbow]));
-    return [defaultRainbow];
+    return [];
   });
 
   useEffect(() => {
