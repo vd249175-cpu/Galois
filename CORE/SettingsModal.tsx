@@ -3,13 +3,15 @@ import { ActionRegistry } from './ActionRegistry';
 import { Blood, useBloodChannel } from './Blood';
 import { BC } from './BloodChannels';
 import { themes, applyTheme } from './themes';
+import { EnvironmentPanel } from './EnvironmentPanel';
 
 interface SettingsModalProps {
   onClose: () => void;
+  initialTab?: 'general' | 'environment' | 'shortcuts';
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'general' | 'shortcuts'>('general');
+export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'general' | 'environment' | 'shortcuts'>(initialTab);
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [, setUpdateTrigger] = useState<number>(0);
 
@@ -20,7 +22,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [editorLineHeight, setEditorLineHeight] = useState<number>(1.6);
   const [editorAutosaveDelay, setEditorAutosaveDelay] = useState<number>(500);
   const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
-  const [terminalAutoStartAgy, setTerminalAutoStartAgy] = useState<boolean>(true);
+  const [terminalAutoStartAgy, setTerminalAutoStartAgy] = useState<boolean>(false);
   const [sidebarIconSize, setSidebarIconSize] = useState<number>(14);
   const [fileTreeTitleSize, setFileTreeTitleSize] = useState<number>(11);
   const [fileTreeTagSize, setFileTreeTagSize] = useState<number>(8.5);
@@ -32,6 +34,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     focusedAreaId ? [`system.areaComponentTypes.${focusedAreaId}`] : [],
     () => focusedAreaId ? Blood.getValue<string | null>(`system.areaComponentTypes.${focusedAreaId}`, null) : null
   );
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Load configuration from userData
   useEffect(() => {
@@ -81,6 +87,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         appearance: {
           ...config.appearance,
           ...updatedFields.appearance,
+        },
+        interpreters: {
+          ...config.interpreters,
+          ...updatedFields.interpreters,
         }
       };
       await window.electronAPI.setConfig(mergedConfig);
@@ -209,6 +219,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             }}
           >
             🎨 常规设置
+          </button>
+          <button
+            onClick={() => setActiveTab('environment')}
+            style={{
+              padding: '8px 16px',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'environment' ? '2px solid var(--accent-color)' : 'none',
+              color: activeTab === 'environment' ? 'var(--text-main)' : 'var(--text-muted)',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'environment' ? 'bold' : 'normal',
+              fontSize: '13px'
+            }}
+          >
+            🧰 环境与扩展
           </button>
           <button
             onClick={() => setActiveTab('shortcuts')}
@@ -461,7 +486,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>启动时自动运行 agy</label>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>启动时自动运行外部 agy</label>
                   <input
                     type="checkbox"
                     checked={terminalAutoStartAgy}
@@ -478,7 +503,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   />
                 </div>
               </div>
+
             </div>
+          ) : activeTab === 'environment' ? (
+            <EnvironmentPanel />
           ) : (
             <div>
               <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>

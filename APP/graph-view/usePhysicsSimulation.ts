@@ -44,6 +44,7 @@ export function usePhysicsSimulation({
       const attractionStrength = 0.05;
       const damping = 0.85;
       const currentAlpha = alpha.current;
+      const nodeById = new Map(simNodes.map((node) => [node.id, node]));
 
       // Repulsion (Push nodes apart)
       for (let i = 0; i < simNodes.length; i++) {
@@ -74,8 +75,8 @@ export function usePhysicsSimulation({
 
       // Attraction (Pull connected Concept Nodes together)
       simLinks.forEach((link) => {
-        const sourceNode = simNodes.find((n) => n.id === link.source);
-        const targetNode = simNodes.find((n) => n.id === link.target);
+        const sourceNode = nodeById.get(link.source);
+        const targetNode = nodeById.get(link.target);
 
         if (sourceNode && targetNode) {
           const dx = targetNode.x - sourceNode.x;

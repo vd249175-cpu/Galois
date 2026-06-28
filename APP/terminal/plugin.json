@@ -4,7 +4,11 @@
   "version": "1.0.0",
   "description": "Multi-tab terminal command executor running inside the project workspace directory.",
   "dependencies": [],
-  "bloodChannels": [],
+  "bloodChannels": [
+    "system.projectPath",
+    "system.terminalTabs",
+    "system.terminalActiveTabId"
+  ],
   "triggerConditions": {
     "clear": "actions.terminal.clear.${areaId}"
   }

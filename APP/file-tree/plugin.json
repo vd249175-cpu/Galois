@@ -5,7 +5,12 @@
   "description": "File explorer and notebook tree manager for Lattice markdown note archives.",
   "dependencies": [],
   "bloodChannels": [
-    "project.path",
+    "system.projectPath",
+    "system.resolvedTags",
+    "system.staticTags",
+    "system.maxIterations",
+    "system.lastFocusedEditorId",
+    "system.activeEditors",
     "events.fileSaved.*"
   ],
   "triggerConditions": {

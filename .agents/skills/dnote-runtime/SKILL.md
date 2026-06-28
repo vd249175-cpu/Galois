@@ -11,7 +11,7 @@ description: Guidelines on how to read and interpret DNOTE's note project runtim
 
 ## 1. 运行时状态文件位置
 
-DNOTE 在 App.tsx 中维护一个 throttled 写入器，将 Blood 状态实时同步为项目根目录下的文件：
+DNOTE 当前由 `APP/editor/hooks/useRuntimeSync.ts` 维护一个防抖写入器，将 Blood 状态实时同步为项目根目录下的文件。该逻辑已经从 `CORE/App.tsx` 迁出，以保持 CORE 不依赖 editor 专属频道：
 
 - **路径**：`{projectPath}/.dnote_runtime.json`
 - **写入触发条件**：以下任一 Blood 频道发生变化时触发（防抖 150ms）：
@@ -26,9 +26,9 @@ DNOTE 在 App.tsx 中维护一个 throttled 写入器，将 Blood 状态实时�
 
 ```json
 {
-  "projectPath":    "/Users/apexwave/Desktop/my-notes",
+  "projectPath":    "/Users/example/Desktop/my-notes",
   "activeEditorId": "editor-root",
-  "activeFile":     "/Users/apexwave/Desktop/my-notes/拉布拉多.md",
+  "activeFile":     "/Users/example/Desktop/my-notes/example.md",
   "cursor": {
     "line":         13,
     "column":       4,
@@ -45,8 +45,8 @@ DNOTE 在 App.tsx 中维护一个 throttled 写入器，将 Blood 状态实时�
 | `projectPath` | `string` | 当前加载的笔记项目根目录绝对路径 |
 | `activeEditorId` | `string \| null` | 当前聚焦编辑器的 `areaId`（如 `"editor-root"`） |
 | `activeFile` | `string \| null` | 编辑器中当前打开文件的绝对路径；无文件时为 `null` |
-| `cursor.line` | `number` | 光标所在行号（**0 indexed**） |
-| `cursor.column` | `number` | 光标所在列字符索引（**0 indexed**） |
+| `cursor.line` | `number` | 光标所在行号（当前 editor 运行时状态为 **1 indexed**） |
+| `cursor.column` | `number` | 光标所在列字符索引（当前 editor 运行时状态为 **1 indexed**） |
 | `cursor.selectedText` | `string` | 当前高亮选中的文本片段；无选区时为 `""` |
 | `timestamp` | `number` | 最后更新的 Unix 毫秒时间戳 |
 
@@ -68,8 +68,8 @@ AI Agent 插件（`APP/agent/`）和其他组件可以通过以下 Blood 频道�
 
 ```typescript
 {
-  line:         number,   // 0-indexed 行号
-  column:       number,   // 0-indexed 列号
+  line:         number,   // 当前 editor 运行时状态为 1-indexed
+  column:       number,   // 当前 editor 运行时状态为 1-indexed
   selectedText: string,   // 选中文本（可为空字符串）
   filePath:     string,   // 当前打开的文件绝对路径
 }
@@ -107,13 +107,12 @@ const editorCursor = useBloodChannel(
 
 ---
 
-## 5. 写入实现（参考 App.tsx）
+## 5. 写入实现（参考 useRuntimeSync）
 
-`.dnote_runtime.json` 由 CORE/App.tsx 中的防抖 Blood 订阅器维护，
-**不依赖** `fs.watch` 等文件监听器（符合 CORE 极简无状态原则）：
+`.dnote_runtime.json` 由 editor 插件内的 `useRuntimeSync` Hook 维护，**不依赖** `fs.watch` 等文件监听器（符合 CORE 极简无状态原则）：
 
 ```typescript
-// App.tsx（节选）
+// APP/editor/hooks/useRuntimeSync.ts（节选）
 Blood.subscribe((changedKeys) => {
   const isRelevant = Array.from(changedKeys).some(key =>
     key === 'system.projectPath' ||

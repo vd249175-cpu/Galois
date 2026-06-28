@@ -127,10 +127,16 @@ export function ReactiveExpression({
         await (window as any).electronAPI.writeFile(absoluteOutputPath, '{}');
       }
 
-      const workingDir = `${projectPath}/script`;
-      const cmd = `DNOTE_THREAD_ID="${threadId}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_NOTE_PATH="${currentFile}" DNOTE_NOTE_LINE="${lineIndex}" uv run "${run}"`;
-
-      await (window as any).electronAPI.execCommand(cmd, workingDir);
+      await (window as any).electronAPI.runProjectScript(projectPath, {
+        scriptName: run,
+        cwd: `${projectPath}/script`,
+        envExtra: {
+          DNOTE_THREAD_ID: threadId,
+          DNOTE_OUTPUT_FILE: absoluteOutputPath,
+          DNOTE_NOTE_PATH: currentFile,
+          DNOTE_NOTE_LINE: String(lineIndex),
+        },
+      });
 
       // Read the newly created/updated file
       const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);

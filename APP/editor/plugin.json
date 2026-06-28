@@ -5,10 +5,16 @@
   "description": "Custom Markdown note editor with real-time tag editing, wiki links, media drop support, and reactive python execution bindings.",
   "dependencies": [],
   "bloodChannels": [
-    "project.path",
+    "system.projectPath",
+    "system.resolvedTags",
+    "system.staticTags",
+    "system.focusedAreaId",
+    "system.activeEditors",
+    "system.lastFocusedEditorId",
     "events.openFile.editor-root",
     "events.openFile.${areaId}",
-    "script_json:*"
+    "events.fileSaved.*",
+    "events.scriptJson:"
   ],
   "triggerConditions": {
     "open": "events.openFile.${areaId}",

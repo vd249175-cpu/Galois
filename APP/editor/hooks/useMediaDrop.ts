@@ -10,6 +10,8 @@ interface UseMediaDropOptions {
   setStatusMessage: (msg: string) => void;
 }
 
+type DropEvent = React.DragEvent | DragEvent;
+
 export function useMediaDrop({
   projectPath,
   currentFile,
@@ -50,49 +52,81 @@ export function useMediaDrop({
     return `![media](${relativePath})`;
   };
 
-  const archiveAndInsert = async (file: File, insertAtLine?: number) => {
+  const insertBlockAtIndex = (source: string, insertIndex: number, blockText: string): string => {
+    const safeIndex = Math.max(0, Math.min(insertIndex, source.length));
+    const before = source.substring(0, safeIndex);
+    const after = source.substring(safeIndex);
+    const prefix = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+    const suffix = after.length > 0 && !after.startsWith('\n') ? '\n' : '';
+    return `${before}${prefix}${blockText}${suffix}${after}`;
+  };
+
+  const appendBlock = (source: string, blockText: string): string => {
+    const prefix = source.length > 0 && !source.endsWith('\n') ? '\n' : '';
+    return `${source}${prefix}${blockText}\n`;
+  };
+
+  const archiveAndInsert = async (filesInput: FileList | File[], insertAtLine?: number, insertAtIndex?: number) => {
     if (!projectPath || !currentFile) {
       setStatusMessage('Open a notebook directory and select a note first.');
       return;
     }
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const isMedia = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'mp4', 'webm'].includes(ext);
-    if (!isMedia) {
+    const files = Array.from(filesInput);
+    const mediaFiles = files.filter((file) => {
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'mp4', 'webm', 'ogg'].includes(ext);
+    });
+    if (mediaFiles.length === 0) {
       setStatusMessage('Only image, audio, and video files are supported.');
       return;
     }
 
     try {
-      setStatusMessage('Archiving media...');
-      const sysPath = (window as any).electronAPI.getPathForFile(file);
-      if (!sysPath) throw new Error('Could not retrieve file path.');
-      const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
-      const markup = buildMediaMarkup(relativePath);
+      setStatusMessage(mediaFiles.length > 1 ? `Archiving ${mediaFiles.length} media files...` : 'Archiving media...');
+      const markups: string[] = [];
+      for (const file of mediaFiles) {
+        const sysPath = (window as any).electronAPI.getPathForFile(file);
+        if (!sysPath) throw new Error(`Could not retrieve file path for ${file.name}.`);
+        const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
+        markups.push(buildMediaMarkup(relativePath));
+      }
+      const blockText = markups.join('\n');
 
       let nextContent = '';
       if (insertAtLine !== undefined) {
         const lines = contentRef.current.split('\n');
-        lines.splice(insertAtLine + 1, 0, markup);
+        lines.splice(insertAtLine + 1, 0, ...markups);
         nextContent = lines.join('\n');
+      } else if (insertAtIndex !== undefined) {
+        nextContent = insertBlockAtIndex(contentRef.current, insertAtIndex, blockText);
       } else if (isPreviewMode) {
-        nextContent = contentRef.current + '\n' + markup + '\n';
+        nextContent = appendBlock(contentRef.current, blockText);
       } else {
-        nextContent = contentRef.current + '\n' + markup + '\n';
+        nextContent = appendBlock(contentRef.current, blockText);
       }
 
       setContent(nextContent);
       saveNodeFile(nextContent);
-      setStatusMessage('Media archived and embedded successfully.');
+      const skippedCount = files.length - mediaFiles.length;
+      setStatusMessage(
+        skippedCount > 0
+          ? `Imported ${mediaFiles.length} media file(s), skipped ${skippedCount} unsupported file(s).`
+          : `Imported ${mediaFiles.length} media file(s).`
+      );
     } catch (err: any) {
       console.error('[useMediaDrop] archive failed:', err);
-      setStatusMessage(`Failed to archive ${file.name}: ${err.message}`);
+      setStatusMessage(`Failed to archive media: ${err.message}`);
     }
+  };
+
+  const resetDragState = () => {
+    dragCounter.current = 0;
+    setIsDraggingFile(false);
   };
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    dragCounter.current = 0;
-    setIsDraggingFile(false);
+    resetDragState();
 
     const clipText = e.dataTransfer.getData('text/x-dnote-clip');
     if (clipText) {
@@ -126,10 +160,32 @@ export function useMediaDrop({
       // For files, we can also insert at the drop line if we split by newline
       const linesBefore = contentRef.current.substring(0, insertIndex).split('\n');
       const lineIdx = linesBefore.length - 1;
-      await archiveAndInsert(files[0], lineIdx);
+      await archiveAndInsert(files, lineIdx);
     } else {
-      await archiveAndInsert(files[0]);
+      await archiveAndInsert(files);
     }
+  };
+
+  const handleDropAtIndex = async (e: DropEvent, insertIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resetDragState();
+
+    const dataTransfer = e.dataTransfer;
+    if (!dataTransfer) return;
+
+    const clipText = dataTransfer.getData('text/x-dnote-clip');
+    if (clipText) {
+      const nextContent = insertBlockAtIndex(contentRef.current, insertIndex, clipText);
+      setContent(nextContent);
+      saveNodeFile(nextContent);
+      setStatusMessage('剪辑片段已插入');
+      return;
+    }
+
+    const files = dataTransfer.files;
+    if (files.length === 0) return;
+    await archiveAndInsert(files, undefined, insertIndex);
   };
 
   const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {
@@ -171,7 +227,7 @@ export function useMediaDrop({
     // Priority 3: File drop (image/video/audio)
     const files = e.dataTransfer.files;
     if (files.length === 0) return;
-    await archiveAndInsert(files[0], lineIdx);
+    await archiveAndInsert(files, lineIdx);
   };
 
   return {
@@ -182,6 +238,7 @@ export function useMediaDrop({
     handleDragLeave,
     handleDragOver,
     handleDrop,
+    handleDropAtIndex,
     handleLineDrop,
   };
 }

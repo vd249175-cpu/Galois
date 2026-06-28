@@ -5,7 +5,9 @@
   "description": "Application settings and hotkey customizer panel.",
   "dependencies": [],
   "bloodChannels": [
-    "system.focusedAreaId"
+    "system.focusedAreaId",
+    "system.projectPath",
+    "system.maxIterations"
   ],
   "triggerConditions": {}
 }

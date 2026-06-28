@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ReactiveExpression } from './ReactiveExpression';
 import { parseMarkdownBody } from '../utils';
 import { InlineClipPlayer } from './InlineClipPlayer';
+import { SlashMenu } from './SlashMenu';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -151,6 +152,9 @@ interface MarkdownPreviewProps {
   setHoveredLineIndex: React.Dispatch<React.SetStateAction<number | null>>;
   handleLineDrop: (e: React.DragEvent, lineIdx: number) => void;
   currentFile: string;
+  slashCommands?: any[];
+  getShortcutDisplay?: (id: string) => string;
+  onExecuteSlashCommand?: (cmd: any, start: number, end: number, sourceContent?: string) => void;
 }
 
 export function MarkdownPreview({
@@ -166,13 +170,27 @@ export function MarkdownPreview({
   setHoveredLineIndex,
   handleLineDrop,
   currentFile,
+  slashCommands = [],
+  getShortcutDisplay = () => '',
+  onExecuteSlashCommand,
 }: MarkdownPreviewProps) {
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
   const [draggedBlockKey, setDraggedBlockKey] = useState<string | null>(null);
   const [dragContent, setDragContent] = useState<string | null>(null);
   const [isDraggingOverBottom, setIsDraggingOverBottom] = useState(false);
+  const [previewSlashMenu, setPreviewSlashMenu] = useState<{
+    show: boolean;
+    query: string;
+    index: number;
+    coords: { left: number; top: number };
+    start: number;
+    end: number;
+  }>({ show: false, query: '', index: 0, coords: { left: 0, top: 0 }, start: -1, end: -1 });
   const isJumpingToNextLineRef = useRef(false);
+  const previewSlashDraftRef = useRef<string | null>(null);
+  const isExecutingPreviewSlashRef = useRef(false);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   const effectiveContent = dragContent ?? content;
 
@@ -180,6 +198,92 @@ export function MarkdownPreview({
     const allLines = content.split('\n');
     allLines.splice(startLineIdx, endLineIdx - startLineIdx + 1, ...newLines);
     onContentChange(allLines.join('\n'));
+  };
+
+  const getAbsoluteIndex = (lineIdx: number, offset: number) => {
+    const lines = content.split('\n');
+    let index = 0;
+    for (let i = 0; i < lineIdx; i++) {
+      index += (lines[i] || '').length + 1;
+    }
+    return index + offset;
+  };
+
+  const normalizeTableRow = (cells: string[]) => `| ${cells.map((cell) => cell.trim()).join(' | ')} |`;
+
+  const normalizeSeparatorRow = (alignments: string[]) => {
+    const cells = alignments.map((alignment) => {
+      if (alignment === 'center') return ':---:';
+      if (alignment === 'right') return '---:';
+      return '---';
+    });
+    return normalizeTableRow(cells);
+  };
+
+  const handleAddTableRow = (block: ParsedBlock) => {
+    const colCount = Math.max(block.tableHeaders?.length || 0, 1);
+    const row = normalizeTableRow(Array(colCount).fill(''));
+    const allLines = content.split('\n');
+    allLines.splice(block.endLine + 1, 0, row);
+    onContentChange(allLines.join('\n'));
+  };
+
+  const handleAddTableColumn = (block: ParsedBlock) => {
+    const headers = [...(block.tableHeaders || [])];
+    const alignments = [...(block.tableAlignments || [])];
+    const rows = (block.tableRows || []).map((row) => [...row]);
+    const nextIndex = headers.length + 1;
+
+    headers.push(`Column ${nextIndex}`);
+    alignments.push('left');
+    rows.forEach((row) => row.push(''));
+
+    const rebuilt = [
+      normalizeTableRow(headers),
+      normalizeSeparatorRow(alignments),
+      ...rows.map((row) => normalizeTableRow(row)),
+    ];
+    updateMarkdownLines(block.startLine, block.endLine, rebuilt);
+  };
+
+  const filteredPreviewCommands = slashCommands.filter((cmd: any) =>
+    cmd.label?.toLowerCase().includes(previewSlashMenu.query.toLowerCase()) ||
+    cmd.id?.toLowerCase().includes(previewSlashMenu.query.toLowerCase())
+  );
+
+  const closePreviewSlashMenu = () => {
+    setPreviewSlashMenu((prev) => ({ ...prev, show: false, query: '', index: 0 }));
+  };
+
+  const updatePreviewSlashQuery = (textarea: HTMLTextAreaElement, lineIdx: number) => {
+    const draftLines = content.split('\n');
+    draftLines.splice(lineIdx, 1, ...textarea.value.split('\n'));
+    previewSlashDraftRef.current = draftLines.join('\n');
+
+    setPreviewSlashMenu((prev) => {
+      if (!prev.show) return prev;
+      const selectionStart = textarea.selectionStart ?? 0;
+      const absoluteEnd = getAbsoluteIndex(lineIdx, selectionStart);
+      if (absoluteEnd <= prev.start) return { ...prev, show: false };
+
+      const localSlashOffset = prev.start - getAbsoluteIndex(lineIdx, 0);
+      const currentText = textarea.value;
+      if (localSlashOffset < 0 || localSlashOffset >= currentText.length) return { ...prev, show: false };
+      if (currentText[localSlashOffset] !== '/') return { ...prev, show: false };
+
+      const query = currentText.slice(localSlashOffset + 1, selectionStart);
+      if (query.includes(' ') || query.includes('\n')) return { ...prev, show: false };
+      return { ...prev, query, end: absoluteEnd, index: 0 };
+    });
+  };
+
+  const executePreviewSlashCommand = (cmd: any) => {
+    if (!onExecuteSlashCommand || previewSlashMenu.start < 0) return;
+    isExecutingPreviewSlashRef.current = true;
+    onExecuteSlashCommand(cmd, previewSlashMenu.start, previewSlashMenu.end, previewSlashDraftRef.current || content);
+    closePreviewSlashMenu();
+    previewSlashDraftRef.current = null;
+    setEditingLineIdx(null);
   };
 
   const handleTableCellEdit = (lineIdx: number, colIdx: number, newCellVal: string) => {
@@ -197,6 +301,32 @@ export function MarkdownPreview({
 
   const renderBlockEditor = (lineIdx: number, rawText: string) => {
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (previewSlashMenu.show) {
+        const cmds = filteredPreviewCommands;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setPreviewSlashMenu((prev) => ({ ...prev, index: cmds.length > 0 ? (prev.index + 1) % cmds.length : 0 }));
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setPreviewSlashMenu((prev) => ({ ...prev, index: cmds.length > 0 ? (prev.index - 1 + cmds.length) % cmds.length : 0 }));
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          if (cmds.length > 0) {
+            e.preventDefault();
+            executePreviewSlashCommand(cmds[previewSlashMenu.index] || cmds[0]);
+            return;
+          }
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closePreviewSlashMenu();
+          return;
+        }
+      }
+
       if (e.key === 'Enter') {
         if (e.shiftKey) {
           // Allow Shift+Enter for single line breaks
@@ -217,6 +347,27 @@ export function MarkdownPreview({
 
           setEditingLineIdx(nextLineIdx);
         }
+      } else if (e.key === '/') {
+        const textarea = e.currentTarget;
+        const selectionStart = textarea.selectionStart ?? 0;
+        const isStartOrWhitespace = selectionStart === 0 || /\s/.test(textarea.value.charAt(selectionStart - 1));
+        if (isStartOrWhitespace && onExecuteSlashCommand) {
+          const rect = textarea.getBoundingClientRect();
+          const container = previewContainerRef.current;
+          const containerRect = container?.getBoundingClientRect();
+          const absoluteStart = getAbsoluteIndex(lineIdx, selectionStart);
+          setPreviewSlashMenu({
+            show: true,
+            query: '',
+            index: 0,
+            coords: {
+              left: containerRect ? rect.left - containerRect.left + 12 : rect.left + 12,
+              top: containerRect && container ? rect.top - containerRect.top + container.scrollTop + 30 : rect.top + 30,
+            },
+            start: absoluteStart,
+            end: absoluteStart + 1,
+          });
+        }
       }
     };
 
@@ -225,6 +376,10 @@ export function MarkdownPreview({
         defaultValue={rawText}
         placeholder="输入文字..."
         onBlur={(e) => {
+          if (isExecutingPreviewSlashRef.current) {
+            isExecutingPreviewSlashRef.current = false;
+            return;
+          }
           if (isJumpingToNextLineRef.current) {
             isJumpingToNextLineRef.current = false;
             return;
@@ -264,6 +419,7 @@ export function MarkdownPreview({
           const el = e.currentTarget;
           el.style.height = 'auto';
           el.style.height = `${el.scrollHeight}px`;
+          updatePreviewSlashQuery(el, lineIdx);
         }}
       />
     );
@@ -656,7 +812,70 @@ export function MarkdownPreview({
       const dataRows = block.tableRows || [];
       
       const tableEl = (
-        <div key={`table_${idx}`} style={{ overflowX: 'auto', margin: '14px 0', width: '100%' }}>
+        <div
+          key={`table_${idx}`}
+          className="reading-table-shell"
+          onClick={(e) => e.stopPropagation()}
+          style={{ overflowX: 'auto', margin: '14px 0', width: '100%', position: 'relative' }}
+        >
+          <div
+            className="reading-table-toolbar"
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '6px',
+              marginBottom: '6px',
+              opacity: 0,
+              transition: 'opacity 0.14s ease',
+            }}
+          >
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleAddTableRow(block);
+              }}
+              style={{
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-input, rgba(255,255,255,0.08))',
+                color: 'var(--text-muted)',
+                borderRadius: '6px',
+                padding: '3px 8px',
+                fontSize: '11px',
+                cursor: 'pointer',
+              }}
+            >
+              + 行
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleAddTableColumn(block);
+              }}
+              style={{
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-input, rgba(255,255,255,0.08))',
+                color: 'var(--text-muted)',
+                borderRadius: '6px',
+                padding: '3px 8px',
+                fontSize: '11px',
+                cursor: 'pointer',
+              }}
+            >
+              + 列
+            </button>
+          </div>
           <table
             style={{
               width: '100%',
@@ -1153,6 +1372,7 @@ export function MarkdownPreview({
 
   return (
     <div
+      ref={previewContainerRef}
       className="markdown-preview-container"
       onDragOver={(e) => {
         e.preventDefault();
@@ -1260,6 +1480,14 @@ export function MarkdownPreview({
           border-color: transparent;
           box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
         }
+        .reading-table-shell:hover .reading-table-toolbar {
+          opacity: 1 !important;
+        }
+        .reading-table-toolbar button:hover {
+          color: var(--accent-color, #7000ff) !important;
+          border-color: var(--accent-color, #7000ff) !important;
+          background: var(--highlight-color, rgba(112, 0, 255, 0.08)) !important;
+        }
       ` }} />
       {effectiveContent ? (
         blocks.map((block, idx) => renderParsedBlock(block, idx))
@@ -1268,6 +1496,15 @@ export function MarkdownPreview({
           No content. Switch to edit mode to write.
         </div>
       )}
+      <SlashMenu
+        show={previewSlashMenu.show}
+        filteredCommands={filteredPreviewCommands}
+        slashMenuIndex={previewSlashMenu.index}
+        setSlashMenuIndex={(index) => setPreviewSlashMenu((prev) => ({ ...prev, index }))}
+        slashMenuCoords={previewSlashMenu.coords}
+        handleExecuteCommand={executePreviewSlashCommand}
+        getShortcutDisplay={getShortcutDisplay}
+      />
       {isDraggingOverBottom && (
         <div style={{
           height: '40px',

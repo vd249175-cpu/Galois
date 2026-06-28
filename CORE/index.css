@@ -307,6 +307,213 @@ body {
   min-height: 0;
 }
 
+.live-markdown-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  background-color: transparent;
+  user-select: text;
+  overflow: hidden;
+}
+
+.live-markdown-editor .cm-editor {
+  height: 100%;
+}
+
+.cm-dnote-wikilink {
+  color: var(--accent-color);
+  background: var(--highlight-color);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 24%, transparent);
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cm-dnote-md-link {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.cm-dnote-bold {
+  font-weight: 750;
+}
+
+.cm-dnote-italic {
+  font-style: italic;
+}
+
+.cm-dnote-inline-code {
+  color: var(--text-main);
+  background: color-mix(in srgb, var(--bg-input) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.cm-dnote-strike {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.cm-dnote-highlight {
+  background: color-mix(in srgb, var(--accent-color) 24%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
+.cm-dnote-heading {
+  color: var(--text-main);
+  font-weight: 760;
+  letter-spacing: -0.015em;
+}
+
+.cm-dnote-h1 {
+  font-size: 1.55em;
+  line-height: 1.55;
+}
+
+.cm-dnote-h2 {
+  font-size: 1.32em;
+  line-height: 1.5;
+}
+
+.cm-dnote-h3 {
+  font-size: 1.14em;
+  line-height: 1.45;
+}
+
+.cm-dnote-task-line {
+  color: var(--text-main);
+}
+
+.cm-dnote-task-line.checked {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+}
+
+.cm-dnote-taskbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  color: var(--accent-color);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: -2px;
+}
+
+.cm-dnote-taskbox:hover {
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+.cm-dnote-list-line {
+  padding-left: 2px;
+}
+
+.cm-dnote-list-marker,
+.cm-dnote-number-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  margin-right: 4px;
+  color: var(--accent-color);
+  font-weight: 750;
+}
+
+.cm-dnote-number-marker {
+  font-size: 0.92em;
+  color: var(--text-muted);
+}
+
+.cm-dnote-quote-line {
+  border-left: 3px solid color-mix(in srgb, var(--accent-color) 34%, transparent);
+  color: color-mix(in srgb, var(--text-main) 82%, var(--text-muted));
+  padding-left: 9px;
+}
+
+.cm-dnote-callout-line {
+  background: color-mix(in srgb, var(--highlight-color) 72%, transparent);
+  border-left: 3px solid var(--accent-color);
+  border-radius: 7px;
+  padding-left: 9px;
+}
+
+.cm-dnote-callout-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--accent-color);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.cm-dnote-table-line {
+  font-family: var(--font-mono);
+  background: color-mix(in srgb, var(--bg-input) 48%, transparent);
+}
+
+.cm-dnote-table-separator {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.cm-dnote-reactive {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 20%, transparent);
+  background: color-mix(in srgb, var(--highlight-color) 70%, transparent);
+  color: var(--text-main);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.cm-dnote-media,
+.cm-dnote-video-clip {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(420px, 90%);
+  vertical-align: middle;
+  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-input) 84%, transparent);
+  color: var(--text-main);
+  border-radius: 8px;
+  padding: 3px 8px;
+  margin: 2px 0;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.cm-dnote-media-image {
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.cm-dnote-media-image img {
+  display: block;
+  max-width: min(360px, 100%);
+  max-height: 180px;
+  border-radius: 8px;
+}
+
 .editor-statusbar {
   display: flex;
   align-items: center;
@@ -878,6 +1085,22 @@ body {
 
 .shortcut-reset-btn:hover {
   color: var(--error-color);
+}
+
+.settings-action-btn {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--text-main);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.settings-action-btn:hover {
+  border-color: var(--accent-color);
+  background-color: var(--highlight-color);
 }
 
 /* Thicker Glass Bulging Waterdrop Overlay and Modal styling for panels */

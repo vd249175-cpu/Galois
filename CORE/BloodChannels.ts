@@ -36,6 +36,24 @@ export const BC = {
     /** 全局配置。Writer: App / SettingsModal → Reader: 任意组件 */
     config: 'system.config' as const,
 
+    /** 当前 App 运行模式。Writer: App(runtime bootstrap) → Reader: terminal, settings */
+    runtimeMode: 'system.runtimeMode' as const,
+
+    /** 用户级扩展目录。Writer: App(runtime bootstrap) → Reader: terminal, settings */
+    extensionPath: 'system.extensionPath' as const,
+
+    /** 源码插件目录，仅源码开发模式可写。Writer: App(runtime bootstrap) → Reader: terminal */
+    sourcePluginPath: 'system.sourcePluginPath' as const,
+
+    /** 源码插件目录是否可写。Writer: App(runtime bootstrap) → Reader: terminal, settings */
+    canWriteSourcePlugins: 'system.canWriteSourcePlugins' as const,
+
+    /** 命令行助手应加入的工作区目录集合。Writer: App(runtime bootstrap) → Reader: terminal */
+    agentWorkspace: 'system.agentWorkspace' as const,
+
+    /** 外部依赖探测结果（uv/python/agy/shell）。Writer: App(runtime bootstrap) → Reader: settings */
+    environmentStatus: 'system.environmentStatus' as const,
+
     /** 每个 area 的组件类型映射。Writer: AreaShell(mount) → Reader: RightSidebar, ActionRegistry */
     areaComponentTypes: (areaId: string) => `system.areaComponentTypes.${areaId}` as const,
 
@@ -137,7 +155,7 @@ export const BC_PREFIX = {
   areaComponentTypes: 'system.areaComponentTypes.' as const,
   /** 所有 areaFrames 的前缀 */
   areaFrames: 'system.areaFrames.' as const,
-  /** script_json 脚本输出前缀 */
+  /** Reactive expression script JSON output prefix */
   scriptJson: 'events.scriptJson:' as const,
   /** 所有 openFile 事件的前缀 */
   openFileAll: 'events.openFile.' as const,

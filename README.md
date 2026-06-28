@@ -7,11 +7,30 @@ DNOTE 是一个基于 **TypeScript / Electron / Vite / React** 打造的现代�
 
 ---
 
+## 当前状态与发布基线
+
+DNOTE 目前处于**开发者工作区 / 内部试用**阶段。源码模式下可以运行、开发插件、编写笔记项目脚本，并通过内置终端接入外部命令行助手；但它还不是面向普通 macOS 用户的稳定分发包。
+
+当前事实基准见 [CURRENT_ARCHITECTURE_AND_RELEASE.md](docs/CURRENT_ARCHITECTURE_AND_RELEASE.md)。这份文档优先级高于旧 README 中的愿景描述，用于判断架构边界、环境管理、插件开发、笔记项目脚本和 DMG 分发准备度。
+
+当前发布目标是 **unsigned 本地/内部 macOS DMG**，不是 Mac App Store。DNOTE 需要终端、PTY、文件系统和脚本执行能力；Developer ID 签名、公证和 staple 暂不纳入计划。
+
+相关文档：
+
+- [插件环境契约](docs/PLUGIN_ENVIRONMENT.md)
+- [扩展工作区契约](docs/EXTENSION_WORKSPACE.md)
+- [五层架构分层](docs/ARCHITECTURE_LAYERS.md)
+- [macOS DMG 首次启动引导计划](docs/MACOS_DMG_ONBOARDING.md)
+
+---
+
 ## 🚀 启动与开发 (Get Started)
 
 ### ⚡ 一键快捷启动 (One-Click Start Script)
 
-我们提供了一键自动化运行脚本 [run.sh](file:///Users/apexwave/Desktop/DNOTE/run.sh)，该脚本会自动检查 Node.js 环境，自动配置 Astral uv Python 环境管理器，自动拉取并安装 `node_modules` 依赖，并修复 macOS 系统下的 xterm `node-pty` 权限，最后自启热更新服务：
+源码开发模式使用 [run.sh](run.sh)。该脚本会检查 Node.js 和 Astral uv，安装 npm 依赖，修复 macOS 上 `node-pty` 辅助程序权限，并启动 Vite + Electron 热更新开发环境。
+
+`run.sh` 面向开发者，不是 DMG 安装后的用户引导流程。DMG/生产模式由首次启动引导和设置中的“环境与扩展”页检查 `uv`、Python、shell 访问和可选命令行助手。
 
 ```bash
 chmod +x run.sh
@@ -42,12 +61,26 @@ npx tsc --noEmit
 npm run build
 ```
 
+#### 5. 生成 macOS DMG
+```bash
+npm run package:mac
+```
+
+DMG 产物输出在 `.build/`。当前包是 unsigned 内部/本地分发包，不进行 Developer ID 签名、公证或 staple；首次打开时用户可能需要在 macOS Gatekeeper 中手动允许。
+
 ### ⚠️ 平台适配与兼容性说明 (OS Compatibility Notice)
 
 > [!IMPORTANT]
 > **DNOTE 目前仅深度适配了 macOS 系统**。
 >
 > 核心部分（如 `node-pty` 终端权限修复、局部命令路径分隔符、部分底层 Shell 通道等）均针对 macOS 进行设计与优化。如果您在 **Windows** 或 **Linux** 系统下运行本软件，可能需要微调环境依赖及启动路径（例如对 `run.sh` 脚本和 `package.json` 中的构建配置进行平台微调），方能完美运行。
+
+> [!NOTE]
+> **源码开发模式与 DMG 模式不同**
+>
+> 源码开发模式下，内置终端和命令行助手可以在仓库工作区中修改 `APP/` 插件源码、笔记项目脚本，并借助 Vite HMR 实时调试。
+>
+> DMG 安装模式下，`.app` bundle 本身不应被当成可写开发工作区。此时命令行助手主要服务于用户打开的笔记项目、Electron `userData/extensions/` 用户扩展目录，以及用户显式添加的 App 外部开发扩展目录；若要修改内置插件，应使用可写源码工作区。
 
 ---
 
@@ -81,11 +114,12 @@ DNOTE 核心采用极简且松耦合的**器官/插件架构**，无论是面板
 *   **状态解耦即插即用**：各组件绝不直接和其它组件进行复杂的回调耦合，而是通过轻量级的 Blood 血液总线进行单向频道订阅（State Channels）。这使得任何面板在运行时可以自由被销毁、复用、或者任意组合分割（Blender 风格分栏），无需担心接口断裂。
 *   **动作与反射隔离**：所有面板动作和热键（如保存、新建、自定义指令）均由 `ActionRegistry` 收集注册，并依据当前 Focus 的实例进行智能路由隔离。配合 `commands.json`，您可以轻松定义和装配各种后台脚本，极大地扩展系统功能。
 
-### 4. 🚀 内置 Google Antigravity (AGY) 智能代理辅助开发 (Google Antigravity AGY Agent-Driven Development)
+### 4. 🚀 内置命令行助手辅助开发 (Command-Line Assistant Driven Development)
 
-DNOTE 内置并无缝集成了 **Google Antigravity (AGY) 智能代理** 开发套件：
+DNOTE 通过终端插件集成真实 PTY shell，并可启动命令行助手参与开发：
 
-*   **一句话搞定插件开发、脚本编写与正则匹配**：依托于项目内置的 `.agents/` 仿生开发规范（`AGENTS.md`）和定制化的技能库（Skills），无论是开发新的 React 器官视图、编写复杂的 Python 数据计算管道，还是编写高难度的正则表达式，开发者仅需向 Antigravity 智能代理发出“一句话指令”。代理将完美理解前后端解耦规范与血液总线命名空间，自动安全地完成代码编写、冲突自检并推送远程，极大释放生产力。
+*   **源码开发模式**：命令行助手可以在仓库中修改 `APP/` 插件、补充文档、编写笔记项目脚本，并借助 Vite HMR 实时验证。
+*   **DMG 安装模式**：命令行助手默认服务用户打开的笔记项目、`userData/extensions/` 用户扩展目录和显式添加的开发扩展目录。安装后的 `.app` bundle 只作为只读上下文，不应作为可写插件开发目录。
 
 ### 5. 🔄 完整的项目与页面生命周期/循环钩子 (Comprehensive Project & Document Lifecycle Hooks)
 
@@ -103,7 +137,7 @@ DNOTE 提供了一套完整的项目级和页面级生命周期与循环调度�
 
 ## 🛠️ 核心功能子系统 (Subsystems)
 
-### 1. 🎛️ 窗口排版布局引擎 ([LayoutEngine.tsx](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/CORE/LayoutEngine.tsx))
+### 1. 🎛️ 窗口排版布局引擎 ([LayoutEngine.tsx](CORE/LayoutEngine.tsx))
 *   基于 Blender 风格的递归网格分割算法。
 *   支持拖拽分栏边界实时改变尺寸比例。
 *   支持拖拽面板头部标题：
@@ -111,13 +145,13 @@ DNOTE 提供了一套完整的项目级和页面级生命周期与循环调度�
     *   拖拽至窗口物理边界外时：**独立弹出辅助窗口（Window Popout）**（利用 Electron IPC 新开辟渲染进程窗口）。
     *   在辅助窗口点击“归位”或关闭时：**平滑合并回主格栅窗口**。
 
-### 2. ⌨️ 动作与快捷键反射系统 ([ActionRegistry.ts](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/CORE/ActionRegistry.ts))
+### 2. ⌨️ 动作与快捷键反射系统 ([ActionRegistry.ts](CORE/ActionRegistry.ts))
 *   通过 `ActionRegistry` 收集注册的所有动作和快捷键。
 *   **动态装配**：插件在 `ComponentRegistry` 注册时，会自动向反射系统注册其支持 of Action、默认快捷键（Shortcut）以及对应的头部工具栏按钮。
 *   **多实例隔离**：按快捷键时，系统通过 `focusedAreaId` 智能将动作路由到目前处于 Focus 状态下的那个具体面板实例中，实现多个编辑器实例的独立热键响应。
-*   **本地持久化**：用户自定义快捷键会以 JSON 结构序列化并存储至 [dnote_shortcuts.json](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/dnote_shortcuts.json)。支持在设置面板中进行物理 3D 键帽交互录制和一键 Reset。
+*   **本地持久化**：用户自定义快捷键会以 JSON 结构序列化并存储至 Electron `userData` 下的 `shortcuts.json`。源码开发根目录中的 `dnote_shortcuts.json` 仅作为开发期参考文件。
 
-### 3. 🎬 视频时间轴与无损拉片系统 ([VideoTimelineView.tsx](file:///Users/apexwave/Desktop/Projects/GNOTE/Galois/APP/video-timeline/VideoTimelineView.tsx))
+### 3. 🎬 视频时间轴与无损拉片系统 ([VideoTimelineView.tsx](APP/video-timeline/VideoTimelineView.tsx))
 
 ![DNOTE Video Timeline Slicer](assets/video_timeline_v2.png)
 
@@ -190,7 +224,7 @@ DNOTE/
 │   │   └── services/
 │   │       └── lattice.py       # Python 多维度层级极小化（Transitive Reduction）计算脚本
 │   │
-│   ├── agent/                   # 智能助理代理插件 (Antigravity CLI Agent)
+│   ├── agent/                   # 智能助理代理插件
 │   │   ├── index.ts             # 插件入口
 │   │   ├── Agent.tsx            # 智能代理 UI 主组件
 │   │   ├── MessageList.tsx      # 历史消息气泡流渲染

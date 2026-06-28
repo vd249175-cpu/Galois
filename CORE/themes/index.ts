@@ -2,9 +2,17 @@ import defaultLight from './default-light.css?inline';
 import defaultDark from './default-dark.css?inline';
 import lavender from './lavender.css?inline';
 import yuebai from './yuebai.css?inline';
-import blackgold from './blackgold.css?inline';
+import blackgoldUrl from './blackgold.css?url';
 
-export const themes: Record<string, { name: string; css: string }> = {
+type ThemeEntry = {
+  name: string;
+  css?: string;
+  url?: string;
+};
+
+const themeCssCache = new Map<string, string>();
+
+export const themes: Record<string, ThemeEntry> = {
   'default-light': {
     name: '温暖米色 (Light)',
     css: defaultLight,
@@ -23,11 +31,25 @@ export const themes: Record<string, { name: string; css: string }> = {
   },
   'black-gold': {
     name: '玄金耀屑 (Black Gold)',
-    css: blackgold,
+    url: blackgoldUrl,
   },
 };
 
-export function applyTheme(themeId: string) {
+async function resolveThemeCss(themeId: string, theme: ThemeEntry): Promise<string> {
+  if (theme.css) return theme.css;
+  if (!theme.url) return defaultLight;
+  const cached = themeCssCache.get(themeId);
+  if (cached) return cached;
+  const response = await fetch(theme.url);
+  if (!response.ok) {
+    throw new Error(`Failed to load theme: ${themeId}`);
+  }
+  const css = await response.text();
+  themeCssCache.set(themeId, css);
+  return css;
+}
+
+export async function applyTheme(themeId: string) {
   const theme = themes[themeId] || themes['default-light'];
   let styleEl = document.getElementById('dnote-theme-style');
   if (!styleEl) {
@@ -35,6 +57,12 @@ export function applyTheme(themeId: string) {
     styleEl.id = 'dnote-theme-style';
     document.head.appendChild(styleEl);
   }
-  styleEl.textContent = theme.css;
   document.documentElement.setAttribute('data-theme', themeId);
+  try {
+    styleEl.textContent = await resolveThemeCss(themeId, theme);
+  } catch (err) {
+    console.error('[themes] Failed to apply theme:', err);
+    styleEl.textContent = defaultLight;
+    document.documentElement.setAttribute('data-theme', 'default-light');
+  }
 }

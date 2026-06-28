@@ -6,51 +6,54 @@ export function useProjectLifecycle(projectPath: string) {
 
     let isUnloading = false;
 
-    // Helper to check if a script exists in the script/ directory
-    const checkScriptExists = async (scriptName: string) => {
+    // Helper to find a project lifecycle script in the script/ directory by prefix (e.g. on_project_open.*)
+    const findScriptPath = async (baseName: string): Promise<string | null> => {
       try {
         const list = await (window as any).electronAPI.listDir(projectPath);
         const hasScriptDir = list.some((f: any) => f.isDir && f.name === 'script');
-        if (!hasScriptDir) return false;
+        if (!hasScriptDir) return null;
         
         const scriptDir = `${projectPath}/script`;
         const scriptList = await (window as any).electronAPI.listDir(scriptDir);
-        return scriptList.some((f: any) => !f.isDir && f.name === scriptName);
+        const found = scriptList.find((f: any) => !f.isDir && f.name.startsWith(baseName + '.'));
+        return found ? `${scriptDir}/${found.name}` : null;
       } catch (err) {
-        return false;
+        return null;
       }
     };
 
-    // 1. Run on_project_open.py and on_project_run.py
+    // 1. Run open and run scripts
     const triggerLifecycleScripts = async () => {
-      const scriptDir = `${projectPath}/script`;
-      
       // A. Open hook (runs once, blocking subsequent commands)
-      const hasOpenScript = await checkScriptExists('on_project_open.py');
-      if (hasOpenScript) {
-        console.log('[Project Lifecycle] Executing on_project_open.py...');
+      const openScriptPath = await findScriptPath('on_project_open');
+      if (openScriptPath) {
+        console.log('[Project Lifecycle] Executing open script:', openScriptPath);
         const outPath = `${projectPath}/script/on_project_open.json`;
-        const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_open.py`;
+        const envExtra = {
+          DNOTE_THREAD_ID: "project_lifecycle",
+          DNOTE_OUTPUT_FILE: outPath
+        };
         try {
-          await (window as any).electronAPI.execCommand(cmd, scriptDir);
-          console.log('[Project Lifecycle] on_project_open.py completed successfully.');
+          await (window as any).electronAPI.runScript(openScriptPath, '', projectPath, envExtra);
+          console.log('[Project Lifecycle] Open script completed successfully.');
         } catch (err: any) {
-          console.error('[Project Lifecycle] on_project_open.py failed:', err.message || err);
+          console.error('[Project Lifecycle] Open script failed:', err.message || err);
         }
       }
 
       // B. Run hook (spawns in background as a daemon)
-      const hasRunScript = await checkScriptExists('on_project_run.py');
-      if (hasRunScript) {
-        console.log('[Project Lifecycle] Executing on_project_run.py (background daemon)...');
+      const runScriptPath = await findScriptPath('on_project_run');
+      if (runScriptPath) {
+        console.log('[Project Lifecycle] Executing run script (background daemon):', runScriptPath);
         const outPath = `${projectPath}/script/on_project_run.json`;
-        // Use '&' to run in background in macOS shell
-        const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_run.py &`;
-        try {
-          await (window as any).electronAPI.execCommand(cmd, scriptDir);
-        } catch (err: any) {
-          console.error('[Project Lifecycle] Failed to launch on_project_run.py daemon:', err.message || err);
-        }
+        const envExtra = {
+          DNOTE_THREAD_ID: "project_lifecycle",
+          DNOTE_OUTPUT_FILE: outPath
+        };
+        // Run in background (do not await)
+        (window as any).electronAPI.runScript(runScriptPath, '', projectPath, envExtra)
+          .then(() => console.log('[Project Lifecycle] Run daemon exited.'))
+          .catch((err: any) => console.error('[Project Lifecycle] Run daemon error:', err));
       }
     };
 
@@ -58,30 +61,29 @@ export function useProjectLifecycle(projectPath: string) {
 
     // 2. Handle app close (window exit) via beforeunload
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isUnloading) return; // Allow unload if already completed/handling
+      if (isUnloading) return;
 
-      // Prevent immediate close
       e.preventDefault();
-      e.returnValue = ''; // Standard cancellation returnValue
+      e.returnValue = '';
 
       isUnloading = true;
 
-      // Run cleanup close script
       const runCloseOnUnload = async () => {
         try {
-          const hasCloseScript = await checkScriptExists('on_project_close.py');
-          if (hasCloseScript) {
-            console.log('[Project Lifecycle] Executing on_project_close.py on unload...');
-            const scriptDir = `${projectPath}/script`;
+          const closeScriptPath = await findScriptPath('on_project_close');
+          if (closeScriptPath) {
+            console.log('[Project Lifecycle] Executing close script on unload:', closeScriptPath);
             const outPath = `${projectPath}/script/on_project_close.json`;
-            const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_close.py`;
-            await (window as any).electronAPI.execCommand(cmd, scriptDir);
-            console.log('[Project Lifecycle] on_project_close.py unload completed.');
+            const envExtra = {
+              DNOTE_THREAD_ID: "project_lifecycle",
+              DNOTE_OUTPUT_FILE: outPath
+            };
+            await (window as any).electronAPI.runScript(closeScriptPath, '', projectPath, envExtra);
+            console.log('[Project Lifecycle] Close script unload completed.');
           }
         } catch (err: any) {
-          console.error('[Project Lifecycle] on_project_close.py unload failed:', err.message || err);
+          console.error('[Project Lifecycle] Close script unload failed:', err.message || err);
         } finally {
-          // Re-trigger window close which will exit since isUnloading is now true
           window.close();
         }
       };
@@ -97,17 +99,19 @@ export function useProjectLifecycle(projectPath: string) {
 
       const runCloseOnSwitch = async () => {
         try {
-          const hasCloseScript = await checkScriptExists('on_project_close.py');
-          if (hasCloseScript) {
-            console.log('[Project Lifecycle] Executing on_project_close.py on switch from:', projectPath);
-            const scriptDir = `${projectPath}/script`;
+          const closeScriptPath = await findScriptPath('on_project_close');
+          if (closeScriptPath) {
+            console.log('[Project Lifecycle] Executing close script on switch:', closeScriptPath);
             const outPath = `${projectPath}/script/on_project_close.json`;
-            const cmd = `DNOTE_THREAD_ID="project_lifecycle" DNOTE_OUTPUT_FILE="${outPath}" uv run on_project_close.py`;
-            await (window as any).electronAPI.execCommand(cmd, scriptDir);
-            console.log('[Project Lifecycle] on_project_close.py switch completed.');
+            const envExtra = {
+              DNOTE_THREAD_ID: "project_lifecycle",
+              DNOTE_OUTPUT_FILE: outPath
+            };
+            await (window as any).electronAPI.runScript(closeScriptPath, '', projectPath, envExtra);
+            console.log('[Project Lifecycle] Close script switch completed.');
           }
         } catch (err: any) {
-          console.error('[Project Lifecycle] on_project_close.py switch failed:', err.message || err);
+          console.error('[Project Lifecycle] Close script switch failed:', err.message || err);
         }
       };
 

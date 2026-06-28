@@ -17,6 +17,28 @@ import { PromptModal } from './PromptModal';
 import { SlashMenu } from './SlashMenu';
 import { useEditorHistory } from './hooks/useEditorHistory';
 import { useRuntimeSync } from './hooks/useRuntimeSync';
+import type { EditorTextHandle } from './LiveMarkdownEditor';
+import { applyMarkdownFormatting, handleSmartEnter, handleSmartTab } from './markdownEditing';
+
+const LiveMarkdownEditor = React.lazy(async () => {
+  const mod = await import('./LiveMarkdownEditor');
+  return { default: mod.LiveMarkdownEditor };
+});
+
+type EditorMode = 'source' | 'live' | 'reading';
+
+function getInitialEditorMode(): EditorMode {
+  const savedMode = localStorage.getItem('dnote_editor_mode') as EditorMode | null;
+  if (savedMode === 'live' || savedMode === 'reading') return savedMode;
+  if (savedMode === 'source') return 'live';
+  const legacyPreview = localStorage.getItem('dnote_editor_preview_mode');
+  if (legacyPreview !== null) return legacyPreview === 'true' ? 'reading' : 'live';
+  return 'live';
+}
+
+function getNextEditorMode(mode: EditorMode): EditorMode {
+  return mode === 'reading' ? 'live' : 'reading';
+}
 
 /**
  * EditorComponent — 插件注册对象（完整契约）
@@ -91,10 +113,9 @@ function EditorView({
   const [content, setContent] = useState<string>('');
   const [currentFile, setCurrentFile] = useState('');
   const [statusMessage, setStatusMessage] = useState('No file open');
-  const [isPreviewMode, setIsPreviewMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('dnote_editor_preview_mode');
-    return saved !== null ? saved === 'true' : true;
-  });
+  const [editorMode, setEditorMode] = useState<EditorMode>(() => getInitialEditorMode());
+  const isReadingMode = editorMode === 'reading';
+  const isLivePreviewMode = editorMode === 'live';
   const [newTagInput, setNewTagInput] = useState('');
   const [ruleMatches, setRuleMatches] = useState<Record<string, string[]>>({});
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
@@ -103,7 +124,7 @@ function EditorView({
   // Migrated from CORE/App.tsx to keep editor-specific logic inside the editor plugin.
   useRuntimeSync(areaId);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<EditorTextHandle>(null);
   const contentRef = useRef(content);
   contentRef.current = content;
   const tagsRef = useRef(tags);
@@ -127,8 +148,8 @@ function EditorView({
       setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
       updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
       
-      // If we are not in preview mode, detect and run any immediate scripts matching {{...}}
-      if (!isPreviewMode) {
+      // If we are not in reading mode, detect and run any immediate scripts matching {{...}}
+      if (!isReadingMode) {
         triggerImmediateScripts(fullContent);
       }
     } catch (err: any) {
@@ -206,6 +227,12 @@ function EditorView({
       bullet: '',
       number: '',
       quote: '',
+      callout: '',
+      table: '',
+      hr: '',
+      'wiki-link': '',
+      strike: '',
+      highlight: '',
       'code-block': '',
     };
   });
@@ -516,6 +543,7 @@ function EditorView({
     { id: 'italic', label: 'Italic', desc: 'Make text italic', icon: 'I' },
     { id: 'code-inline', label: 'Inline Code', desc: 'Insert monospace code', icon: '`' },
     { id: 'link', label: 'Link', desc: 'Create a hyperlink', icon: '🔗' },
+    { id: 'wiki-link', label: 'Wiki Link', desc: 'Link to another note', icon: '[[' },
     { id: 'h1', label: 'Heading 1', desc: 'Big section heading', icon: 'H1' },
     { id: 'h2', label: 'Heading 2', desc: 'Medium section heading', icon: 'H2' },
     { id: 'h3', label: 'Heading 3', desc: 'Small section heading', icon: 'H3' },
@@ -523,6 +551,11 @@ function EditorView({
     { id: 'bullet', label: 'Bullet List', desc: 'Simple bullet point', icon: '•' },
     { id: 'number', label: 'Numbered List', desc: 'Numbered sequence', icon: '1.' },
     { id: 'quote', label: 'Blockquote', desc: 'Blockquote section', icon: '“' },
+    { id: 'callout', label: 'Callout', desc: 'Obsidian-style callout block', icon: '!' },
+    { id: 'table', label: 'Table', desc: 'Insert a 2-column table', icon: '▦' },
+    { id: 'hr', label: 'Divider', desc: 'Horizontal rule', icon: '—' },
+    { id: 'strike', label: 'Strikethrough', desc: 'Strike selected text', icon: 'S' },
+    { id: 'highlight', label: 'Highlight', desc: 'Highlight selected text', icon: '==' },
     { id: 'code-block', label: 'Code Block', desc: 'Code code wrapper', icon: '💻' }
   ];
 
@@ -588,119 +621,42 @@ function EditorView({
     cmd.id.includes(slashMenuQuery.toLowerCase())
   );
 
-  const applyFormatting = (
-    type: string,
-    currentVal: string,
-    start: number,
-    end: number,
-    urlArg?: string
-  ): { text: string; newStart: number; newEnd: number } => {
-    const selectedText = currentVal.substring(start, end);
-    const before = currentVal.substring(0, start);
-    const after = currentVal.substring(end);
+  const applyFormatting = applyMarkdownFormatting;
 
-    switch (type) {
-      case 'bold':
-        return {
-          text: before + `**${selectedText}**` + after,
-          newStart: start + 2,
-          newEnd: end + 2,
-        };
-      case 'italic':
-        return {
-          text: before + `*${selectedText}*` + after,
-          newStart: start + 1,
-          newEnd: end + 1,
-        };
-      case 'code-inline':
-        return {
-          text: before + `\`${selectedText}\`` + after,
-          newStart: start + 1,
-          newEnd: end + 1,
-        };
-      case 'link': {
-        const url = urlArg !== undefined ? urlArg : 'https://';
-        return {
-          text: before + `[${selectedText || 'link'}](${url})` + after,
-          newStart: start + 1,
-          newEnd: start + 1 + (selectedText || 'link').length,
-        };
-      }
-      case 'h1':
-      case 'h2':
-      case 'h3':
-      case 'todo':
-      case 'bullet':
-      case 'number':
-      case 'quote': {
-        const lineStart = currentVal.lastIndexOf('\n', start - 1) + 1;
-        const lineEnd = currentVal.indexOf('\n', start);
-        const actualLineEnd = lineEnd === -1 ? currentVal.length : lineEnd;
-        const lineText = currentVal.substring(lineStart, actualLineEnd);
-
-        let prefix = '';
-        if (type === 'h1') prefix = '# ';
-        else if (type === 'h2') prefix = '## ';
-        else if (type === 'h3') prefix = '### ';
-        else if (type === 'todo') prefix = '- [ ] ';
-        else if (type === 'bullet') prefix = '- ';
-        else if (type === 'number') prefix = '1. ';
-        else if (type === 'quote') prefix = '> ';
-
-        const newLineText = prefix + lineText;
-        const beforeLine = currentVal.substring(0, lineStart);
-        const afterLine = currentVal.substring(actualLineEnd);
-
-        return {
-          text: beforeLine + newLineText + afterLine,
-          newStart: start + prefix.length,
-          newEnd: end + prefix.length,
-        };
-      }
-      case 'code-block':
-        return {
-          text: before + `\`\`\`\n${selectedText}\n\`\`\`` + after,
-          newStart: start + 4,
-          newEnd: start + 4 + selectedText.length,
-        };
-      default:
-        return { text: currentVal, newStart: start, newEnd: end };
-    }
+  const getEditorCaretCoordinates = (position: number) => {
+    return textareaRef.current?.getCaretCoordinates(position) || { left: 12, top: 36 };
   };
 
-  const getCaretCoordinates = (element: HTMLTextAreaElement, position: number) => {
-    const style = window.getComputedStyle(element);
-    
-    const div = document.createElement('div');
-    div.style.position = 'absolute';
-    div.style.visibility = 'hidden';
-    div.style.whiteSpace = 'pre-wrap';
-    div.style.wordWrap = 'break-word';
-    div.style.width = element.offsetWidth + 'px';
-    div.style.font = style.font;
-    div.style.padding = style.padding;
-    div.style.border = style.border;
-    div.style.lineHeight = style.lineHeight;
+  const handleExecuteCommand = (
+    cmd: { id: string; label: string; desc?: string; icon?: any; content?: string },
+    rangeStart?: number,
+    rangeEnd?: number,
+    sourceContent?: string
+  ) => {
+    const activeEditor = textareaRef.current;
+    const workingContent = sourceContent ?? content;
+    const hasExplicitRange = rangeStart !== undefined && rangeEnd !== undefined;
+    if (!activeEditor && !hasExplicitRange && cmd.id !== 'custom.add_new' && cmd.id !== 'custom.manage') return;
 
-    const text = element.value.substring(0, position);
-    div.textContent = text;
-    
-    const span = document.createElement('span');
-    span.textContent = element.value.substring(position) || '.';
-    div.appendChild(span);
-    
-    document.body.appendChild(div);
-    const { offsetLeft: spanLeft, offsetTop: spanTop } = span;
-    document.body.removeChild(div);
-
-    return {
-      left: Math.min(spanLeft - element.scrollLeft + 12, element.clientWidth - 250),
-      top: Math.min(spanTop - element.scrollTop + 22, element.clientHeight - 230)
+    const selectionStart = activeEditor?.selectionStart ?? workingContent.length;
+    const selectionEnd = activeEditor?.selectionEnd ?? selectionStart;
+    const actualStart = Math.max(0, Math.min(
+      workingContent.length,
+      hasExplicitRange ? rangeStart! : (showSlashMenu ? slashIndex : selectionStart)
+    ));
+    const actualEnd = Math.max(actualStart, Math.min(
+      workingContent.length,
+      hasExplicitRange ? rangeEnd! : selectionEnd
+    ));
+    const restoreSelection = (start: number, end: number) => {
+      if (!activeEditor) return;
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(start, end);
+        }
+      }, 0);
     };
-  };
-
-  const handleExecuteCommand = (cmd: { id: string; label: string; desc?: string; icon?: any; content?: string }) => {
-    if (!textareaRef.current) return;
 
     if (cmd.id === 'custom.add_new' || cmd.id === 'custom.manage') {
       setShowSlashMenu(false);
@@ -709,13 +665,10 @@ function EditorView({
     }
 
     if (cmd.id.startsWith('custom.')) {
-      const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
-      const end = textareaRef.current.selectionEnd;
+      pushStateToUndoStack(workingContent, actualStart, actualEnd);
       
-      pushStateToUndoStack(content, actualStart, end);
-      
-      const before = content.substring(0, actualStart);
-      const after = content.substring(end);
+      const before = workingContent.substring(0, actualStart);
+      const after = workingContent.substring(actualEnd);
       
       const snippet = cmd.content || '';
       const textAfterInsert = before + snippet + after;
@@ -723,12 +676,7 @@ function EditorView({
       lastHistoryContentRef.current = textAfterInsert;
       saveNodeFile(textAfterInsert);
       setShowSlashMenu(false);
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          textareaRef.current.setSelectionRange(actualStart + snippet.length, actualStart + snippet.length);
-        }
-      }, 0);
+      restoreSelection(actualStart + snippet.length, actualStart + snippet.length);
       return;
     }
 
@@ -736,34 +684,24 @@ function EditorView({
       const projCmd = projectCommands.find(p => p.id === cmd.id);
       if (projCmd && projCmd.content) {
         // Run it like a custom command (insert content snippet)
-        const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
-        const end = textareaRef.current.selectionEnd;
-        pushStateToUndoStack(content, actualStart, end);
-        const before = content.substring(0, actualStart);
-        const after = content.substring(end);
+        pushStateToUndoStack(workingContent, actualStart, actualEnd);
+        const before = workingContent.substring(0, actualStart);
+        const after = workingContent.substring(actualEnd);
         const snippet = projCmd.content || '';
         const textAfterInsert = before + snippet + after;
         setContent(textAfterInsert);
         lastHistoryContentRef.current = textAfterInsert;
         saveNodeFile(textAfterInsert);
         setShowSlashMenu(false);
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus();
-            textareaRef.current.setSelectionRange(actualStart + snippet.length, actualStart + snippet.length);
-          }
-        }, 0);
+        restoreSelection(actualStart + snippet.length, actualStart + snippet.length);
         return;
       }
 
       // Fallback: Run project script command
-      const actualStart = showSlashMenu ? slashIndex : textareaRef.current.selectionStart;
-      const end = textareaRef.current.selectionEnd;
+      pushStateToUndoStack(workingContent, actualStart, actualEnd);
       
-      pushStateToUndoStack(content, actualStart, end);
-      
-      const before = content.substring(0, actualStart);
-      const after = content.substring(end);
+      const before = workingContent.substring(0, actualStart);
+      const after = workingContent.substring(actualEnd);
       const cleanContent = before + after;
       
       setContent(cleanContent);
@@ -773,7 +711,7 @@ function EditorView({
       
       if (projCmd) {
         setTimeout(() => {
-          if (textareaRef.current) {
+          if (activeEditor && textareaRef.current) {
             textareaRef.current.focus();
             textareaRef.current.setSelectionRange(actualStart, actualStart);
           }
@@ -783,46 +721,34 @@ function EditorView({
       return;
     }
 
-    const start = slashIndex;
-    const end = textareaRef.current.selectionEnd;
-    const before = content.substring(0, start);
-    const after = content.substring(end);
+    const start = (hasExplicitRange || showSlashMenu) ? actualStart : selectionStart;
+    const end = (hasExplicitRange || showSlashMenu) ? actualEnd : selectionEnd;
+    const before = workingContent.substring(0, start);
+    const after = workingContent.substring(end);
     const baseContent = before + after;
 
     if (cmd.id === 'link') {
       setShowSlashMenu(false);
       showPrompt('输入超链接 URL:', 'https://', (url) => {
         if (!url) return;
-        pushStateToUndoStack(content, start, start);
+        pushStateToUndoStack(workingContent, start, start);
         const res = applyFormatting('link', baseContent, start, start, url);
         setContent(res.text);
         lastHistoryContentRef.current = res.text;
         saveNodeFile(res.text);
-        
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.focus();
-            textareaRef.current.setSelectionRange(res.newStart, res.newEnd);
-          }
-        }, 0);
+        restoreSelection(res.newStart, res.newEnd);
       });
       return;
     }
 
-    pushStateToUndoStack(content, start, start);
+    pushStateToUndoStack(workingContent, start, start);
     const res = applyFormatting(cmd.id, baseContent, start, start);
     setContent(res.text);
     lastHistoryContentRef.current = res.text;
     saveNodeFile(res.text);
 
     setShowSlashMenu(false);
-    
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        textareaRef.current.setSelectionRange(res.newStart, res.newEnd);
-      }
-    }, 0);
+    restoreSelection(res.newStart, res.newEnd);
   };
 
   const handleExecuteProjectCommand = async (cmd: { id: string; label: string; script?: string }) => {
@@ -851,11 +777,18 @@ function EditorView({
         await (window as any).electronAPI.writeFile(absoluteOutputPath, '{}');
       }
 
-      const workingDir = projectPath;
-      const shellCmd = `DNOTE_PROJECT_PATH="${projectPath}" DNOTE_ACTIVE_FILE="${currentFile}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_CURSOR_LINE="${cursorLine}" DNOTE_CURSOR_COL="${cursorCol}" DNOTE_SELECTED_TEXT="${selectedText.replace(/"/g, '\\"')}" ${cmd.script}`;
-
-      console.log(`[Editor] Executing project command: ${shellCmd}`);
-      await (window as any).electronAPI.execCommand(shellCmd, workingDir);
+      console.log(`[Editor] Executing project command: ${cmd.script}`);
+      await (window as any).electronAPI.runProjectScript(projectPath, {
+        command: cmd.script,
+        cwd: projectPath,
+        envExtra: {
+          DNOTE_ACTIVE_FILE: currentFile,
+          DNOTE_OUTPUT_FILE: absoluteOutputPath,
+          DNOTE_CURSOR_LINE: String(cursorLine),
+          DNOTE_CURSOR_COL: String(cursorCol),
+          DNOTE_SELECTED_TEXT: selectedText,
+        },
+      });
 
       let parsedData: any = null;
       try {
@@ -893,6 +826,7 @@ function EditorView({
     { id: 'italic', label: 'Italic (斜体)', defaultCombo: 'meta+i' },
     { id: 'code-inline', label: 'Inline Code (行内代码)', defaultCombo: 'meta+d' },
     { id: 'link', label: 'Link (超链接)', defaultCombo: 'meta+k' },
+    { id: 'wiki-link', label: 'Wiki Link (双向链接)', defaultCombo: '' },
     { id: 'h1', label: 'Heading 1 (一级标题)', defaultCombo: 'meta+1' },
     { id: 'h2', label: 'Heading 2 (二级标题)', defaultCombo: 'meta+2' },
     { id: 'h3', label: 'Heading 3 (三级标题)', defaultCombo: 'meta+3' },
@@ -900,6 +834,11 @@ function EditorView({
     { id: 'bullet', label: 'Bullet List (无序列表)', defaultCombo: '' },
     { id: 'number', label: 'Numbered List (有序列表)', defaultCombo: '' },
     { id: 'quote', label: 'Blockquote (引用块)', defaultCombo: '' },
+    { id: 'callout', label: 'Callout (提示块)', defaultCombo: '' },
+    { id: 'table', label: 'Table (表格)', defaultCombo: '' },
+    { id: 'hr', label: 'Divider (分割线)', defaultCombo: '' },
+    { id: 'strike', label: 'Strikethrough (删除线)', defaultCombo: '' },
+    { id: 'highlight', label: 'Highlight (高亮)', defaultCombo: '' },
     { id: 'code-block', label: 'Code Block (代码块)', defaultCombo: '' }
   ];
 
@@ -1010,10 +949,16 @@ function EditorView({
         await (window as any).electronAPI.writeFile(absoluteOutputPath, '{}');
       }
 
-      const workingDir = `${projectPath}/script`;
-      const cmd = `DNOTE_THREAD_ID="${threadId}" DNOTE_OUTPUT_FILE="${absoluteOutputPath}" DNOTE_NOTE_PATH="${currentFile}" DNOTE_NOTE_LINE="${lineIndex}" uv run "${run}"`;
-
-      await (window as any).electronAPI.execCommand(cmd, workingDir);
+      await (window as any).electronAPI.runProjectScript(projectPath, {
+        scriptName: run,
+        cwd: `${projectPath}/script`,
+        envExtra: {
+          DNOTE_THREAD_ID: threadId,
+          DNOTE_OUTPUT_FILE: absoluteOutputPath,
+          DNOTE_NOTE_PATH: currentFile,
+          DNOTE_NOTE_LINE: String(lineIndex),
+        },
+      });
 
       try {
         const updatedContent = await (window as any).electronAPI.readFile(absoluteOutputPath);
@@ -1063,11 +1008,12 @@ function EditorView({
     handleDragLeave,
     handleDragOver,
     handleDrop,
+    handleDropAtIndex,
     handleLineDrop,
   } = useMediaDrop({
     projectPath,
     currentFile,
-    isPreviewMode,
+    isPreviewMode: isReadingMode,
     contentRef,
     setContent: setContentFromDrop,
     saveNodeFile,
@@ -1191,7 +1137,7 @@ function EditorView({
           setContent(template);
           setCurrentFile(openedFile);
           setStatusMessage(`Draft Note: ${draftTitle} (Unsaved)`);
-          setIsPreviewMode(false);
+          setEditorMode('live');
         } else {
           setStatusMessage(`Error loading note file.`);
         }
@@ -1251,10 +1197,10 @@ function EditorView({
 
   // ── Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {
-    if (!currentFile || isPreviewMode || content === '' || content === lastSavedContentRef.current || isComposingRef.current) return;
+    if (!currentFile || isReadingMode || content === '' || content === lastSavedContentRef.current || isComposingRef.current) return;
     const timer = setTimeout(() => { saveNodeFile(content); }, 600);
     return () => clearTimeout(timer);
-  }, [content, currentFile, isPreviewMode]);
+  }, [content, currentFile, isReadingMode]);
 
   // ── Tag update helper ──────────────────────────────────────────────────
   const handleUpdateTags = async (nextTags: string[]) => {
@@ -1295,12 +1241,19 @@ function EditorView({
     handleUpdateTags(tags.filter((t) => t !== tagToRemove));
   };
 
-  const togglePreviewMode = () => {
-    setIsPreviewMode((prev) => {
-      const next = !prev;
-      localStorage.setItem('dnote_editor_preview_mode', String(next));
+  const cycleEditorMode = () => {
+    setEditorMode((prev) => {
+      const next = getNextEditorMode(prev);
+      localStorage.setItem('dnote_editor_mode', next);
+      localStorage.setItem('dnote_editor_preview_mode', String(next === 'reading'));
       return next;
     });
+  };
+
+  const switchEditorMode = (mode: EditorMode) => {
+    setEditorMode(mode);
+    localStorage.setItem('dnote_editor_mode', mode);
+    localStorage.setItem('dnote_editor_preview_mode', String(mode === 'reading'));
   };
 
   const handleDeleteCurrentFile = async () => {
@@ -1409,7 +1362,7 @@ function EditorView({
   useEffect(() => {
     if (!lastAction) return;
     if (lastAction.id === 'editor.save') saveNodeFile();
-    else if (lastAction.id === 'editor.toggleMode') togglePreviewMode();
+    else if (lastAction.id === 'editor.toggleMode') cycleEditorMode();
     else if (lastAction.id === 'editor.delete') handleDeleteCurrentFile();
     else if (lastAction.id === 'editor.setAsTemplate') handleSetAsTemplate();
     else if (lastAction.id === 'editor.editShortcuts') setIsShortcutsModalOpen(true);
@@ -1454,11 +1407,7 @@ function EditorView({
     updateCursorState();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    const textarea = e.currentTarget;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-
+  const handleKeyDown = (e: KeyboardEvent, start: number, end: number) => {
     // Undo / Redo keybind interception
     if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
       e.preventDefault();
@@ -1568,6 +1517,38 @@ function EditorView({
       }
     }
 
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const result = handleSmartEnter(content, start, end);
+      if (result.handled) {
+        e.preventDefault();
+        pushStateToUndoStack(content, start, end);
+        setContent(result.text);
+        lastHistoryContentRef.current = result.text;
+        saveNodeFile(result.text);
+        setTimeout(() => {
+          textareaRef.current?.focus();
+          textareaRef.current?.setSelectionRange(result.newStart, result.newEnd);
+        }, 0);
+        return;
+      }
+    }
+
+    if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const result = handleSmartTab(content, start, end, e.shiftKey);
+      if (result.handled) {
+        e.preventDefault();
+        pushStateToUndoStack(content, start, end);
+        setContent(result.text);
+        lastHistoryContentRef.current = result.text;
+        if (result.text !== content) saveNodeFile(result.text);
+        setTimeout(() => {
+          textareaRef.current?.focus();
+          textareaRef.current?.setSelectionRange(result.newStart, result.newEnd);
+        }, 0);
+        return;
+      }
+    }
+
     // Triggering Slash Menu
     if (e.key === '/') {
       const isStartOrWhitespace = start === 0 || /\s/.test(content.charAt(start - 1));
@@ -1577,11 +1558,33 @@ function EditorView({
         setSlashMenuIndex(0);
         setShowSlashMenu(true);
 
-        const coords = getCaretCoordinates(textarea, start);
+        const coords = getEditorCaretCoordinates(start);
         setSlashMenuCoords(coords);
       }
     }
   };
+
+  const handleEditorDrop = (event: React.DragEvent) => {
+    if (event.defaultPrevented) return;
+    if (!isReadingMode) {
+      const position = textareaRef.current?.getPositionAtCoordinates(event.clientX, event.clientY);
+      if (position !== null && position !== undefined) {
+        handleDropAtIndex(event, position);
+        return;
+      }
+    }
+    handleDrop(event);
+  };
+
+  const modeLabel = editorMode === 'reading'
+    ? '📖 Reading'
+    : editorMode === 'live'
+      ? '✨ Live Preview'
+      : '✍️ Source';
+  const modeOptions: Array<{ mode: EditorMode; label: string; title: string }> = [
+    { mode: 'live', label: 'Live', title: '编辑态实时预览' },
+    { mode: 'reading', label: 'Reading', title: '纯阅读预览' },
+  ];
 
   return (
     <div
@@ -1589,13 +1592,13 @@ function EditorView({
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onDrop={handleEditorDrop}
       style={{ position: 'relative' }}
     >
       {/* Editor Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px', overflow: 'hidden' }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
-          <span>{isPreviewMode ? '✨ 笔记预览' : '✍️ 笔记编辑器'}</span>
+          <span>{modeLabel}</span>
           {currentFile && (
             <>
               <span style={{ color: 'var(--border-color)', margin: '0 2px' }}>|</span>
@@ -1650,14 +1653,35 @@ function EditorView({
             </svg>
             自定义命令
           </button>
-          <button
-            className="area-btn"
-            title="切换编辑/预览 (meta+e)"
-            onClick={togglePreviewMode}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '11px' }}
+          <div
+            role="group"
+            aria-label="Editor mode"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', padding: '2px', border: '1px solid var(--border-color)', borderRadius: '7px', backgroundColor: 'var(--bg-input)' }}
           >
-            {isPreviewMode ? '编辑笔记' : '预览'}
-          </button>
+            {modeOptions.map((option) => {
+              const active = editorMode === option.mode;
+              return (
+                <button
+                  key={option.mode}
+                  className="area-btn"
+                  title={`${option.title} (meta+e 在 Live / Reading 间切换)`}
+                  onClick={() => switchEditorMode(option.mode)}
+                  style={{
+                    width: 'auto',
+                    height: '18px',
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    borderColor: active ? 'var(--accent-color)' : 'transparent',
+                    backgroundColor: active ? 'var(--highlight-color)' : 'transparent',
+                    color: active ? 'var(--accent-color)' : 'var(--text-muted)',
+                    fontWeight: active ? 700 : 600,
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -1678,7 +1702,7 @@ function EditorView({
       />
 
       {/* Editor Body */}
-      {isPreviewMode ? (
+      {isReadingMode ? (
         <MarkdownPreview
           content={content}
           onContentChange={handlePreviewContentChange}
@@ -1687,83 +1711,93 @@ function EditorView({
           state={state}
           updateBloodKey={updateBloodKey}
           handleLinkClick={handleLinkClick}
-          isPreviewMode={isPreviewMode}
+          isPreviewMode={true}
           hoveredLineIndex={hoveredLineIndex}
           setHoveredLineIndex={setHoveredLineIndex}
           handleLineDrop={handleLineDrop}
           currentFile={currentFile}
+          slashCommands={allCommands}
+          getShortcutDisplay={getShortcutDisplay}
+          onExecuteSlashCommand={(cmd, start, end, sourceContent) => {
+            handleExecuteCommand(cmd as any, start, end, sourceContent);
+          }}
         />
       ) : (
-        <textarea
-          ref={textareaRef}
-          className="code-textarea"
-          value={content}
-          onCompositionStart={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionEnd={(e) => {
-            isComposingRef.current = false;
-            setContent(e.currentTarget.value);
-          }}
-          onChange={(e) => {
-            const nextVal = e.target.value;
-            const start = e.target.selectionStart;
+        <React.Suspense
+          fallback={
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+              正在加载编辑器内核...
+            </div>
+          }
+        >
+          <LiveMarkdownEditor
+            key={`${editorMode}:${projectPath}`}
+            ref={textareaRef}
+            value={content}
+            livePreview={isLivePreviewMode}
+            projectPath={projectPath}
+            onWikiLink={handleLinkClick}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={(nextValue) => {
+              isComposingRef.current = false;
+              setContent(nextValue);
+            }}
+            onChange={(nextVal, selectionStart) => {
+              // Clear any pending debounced history push
+              if (historyTimerRef.current) {
+                clearTimeout(historyTimerRef.current);
+              }
 
-            // Clear any pending debounced history push
-            if (historyTimerRef.current) {
-              clearTimeout(historyTimerRef.current);
-            }
-
-            // Capture milestones (space, newline, or a jump of characters) for undo history
-            const diffLen = Math.abs(nextVal.length - lastHistoryContentRef.current.length);
-            const lastChar = nextVal.charAt(start - 1);
-            if (diffLen > 6 || lastChar === ' ' || lastChar === '\n') {
-              pushStateToUndoStack(lastHistoryContentRef.current, start, start);
-              lastHistoryContentRef.current = nextVal;
-            } else {
-              // Debounce pushing history state if user stops typing for 500ms
-              const prevVal = lastHistoryContentRef.current;
-              historyTimerRef.current = setTimeout(() => {
-                pushStateToUndoStack(prevVal, start, start);
+              // Capture milestones (space, newline, or a jump of characters) for undo history
+              const diffLen = Math.abs(nextVal.length - lastHistoryContentRef.current.length);
+              const lastChar = nextVal.charAt(selectionStart - 1);
+              if (diffLen > 6 || lastChar === ' ' || lastChar === '\n') {
+                pushStateToUndoStack(lastHistoryContentRef.current, selectionStart, selectionStart);
                 lastHistoryContentRef.current = nextVal;
-              }, 500);
-            }
-
-            setContent(nextVal);
-            try {
-              const parsed = parseFrontmatterTags(nextVal);
-              setTags((prev) => {
-                const prevClean = prev.slice().sort().join(',');
-                const nextClean = parsed.slice().sort().join(',');
-                return prevClean === nextClean ? prev : parsed;
-              });
-            } catch (_) {}
-
-            const cursor = e.target.selectionStart;
-            if (showSlashMenu) {
-              if (cursor <= slashIndex || nextVal[slashIndex] !== '/') {
-                setShowSlashMenu(false);
               } else {
-                const query = nextVal.substring(slashIndex + 1, cursor);
-                if (query.includes(' ') || query.includes('\n')) {
+                // Debounce pushing history state if user stops typing for 500ms
+                const prevVal = lastHistoryContentRef.current;
+                historyTimerRef.current = setTimeout(() => {
+                  pushStateToUndoStack(prevVal, selectionStart, selectionStart);
+                  lastHistoryContentRef.current = nextVal;
+                }, 500);
+              }
+
+              setContent(nextVal);
+              try {
+                const parsed = parseFrontmatterTags(nextVal);
+                setTags((prev) => {
+                  const prevClean = prev.slice().sort().join(',');
+                  const nextClean = parsed.slice().sort().join(',');
+                  return prevClean === nextClean ? prev : parsed;
+                });
+              } catch (_) {}
+
+              const cursor = selectionStart;
+              if (showSlashMenu) {
+                if (cursor <= slashIndex || nextVal[slashIndex] !== '/') {
                   setShowSlashMenu(false);
                 } else {
-                  setSlashMenuQuery(query);
-                  setSlashMenuIndex(0);
+                  const query = nextVal.substring(slashIndex + 1, cursor);
+                  if (query.includes(' ') || query.includes('\n')) {
+                    setShowSlashMenu(false);
+                  } else {
+                    setSlashMenuQuery(query);
+                    setSlashMenuIndex(0);
+                  }
                 }
               }
-            }
-            updateCursorState(nextVal);
-          }}
-          onKeyDown={handleKeyDown}
-          onFocus={handleFocus}
-          onKeyUp={() => updateCursorState()}
-          onMouseUp={() => updateCursorState()}
-          onClick={() => updateCursorState()}
-          placeholder="Start writing note..."
-          spellCheck={false}
-          style={{ border: 'none', resize: 'none', overflowY: 'auto', height: 0, minHeight: 0 }}
-        />
+              updateCursorState(nextVal);
+            }}
+            onKeyDown={handleKeyDown}
+            onDropAtPosition={handleDropAtIndex}
+            onFocus={handleFocus}
+            onSelectionChange={() => updateCursorState()}
+            placeholder="Start writing note..."
+          />
+        </React.Suspense>
       )}
 
       {/* Slash Menu */}
@@ -1784,16 +1818,20 @@ function EditorView({
       </div>
 
       {isDraggingFile && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(10px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 1000, border: '2.5px dashed var(--accent-color)', margin: '8px', borderRadius: '10px', pointerEvents: 'none' }}>
-          <div style={{ padding: '20px', borderRadius: '50%', backgroundColor: 'var(--highlight-color)', marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
+        <div style={{ position: 'absolute', top: '58px', right: '14px', zIndex: 40, pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 11px', border: '1.5px dashed var(--accent-color)', borderRadius: '10px', backgroundColor: 'color-mix(in srgb, var(--bg-main) 88%, transparent)', boxShadow: '0 10px 30px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'var(--highlight-color)', color: 'var(--accent-color)' }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>松手插入到当前位置</span>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>支持媒体文件和 CLIP 片段</span>
+            </div>
           </div>
-          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>拖放媒体文件以导入</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>支持图片、音频和视频文件</span>
         </div>
       )}
 

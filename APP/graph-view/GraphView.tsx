@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { GraphControls } from './GraphControls';
 import { SelectedNodeDrawer } from './SelectedNodeDrawer';
 import { PaletteManagerModal } from './PaletteManagerModal';
@@ -91,6 +91,10 @@ function GraphView({
   const [repulsion, setRepulsion] = useState(1800);
   const [arrowSize, setArrowSize] = useState(5);
   const [spacing, setSpacing] = useState(120);
+  const [virtualDetail, setVirtualDetail] = useState(() => {
+    const saved = Number(localStorage.getItem('dnote_graph_virtual_detail'));
+    return Number.isFinite(saved) ? Math.max(0, Math.min(1, saved)) : 0.55;
+  });
 
   const repulsionRef = useRef(repulsion);
   const arrowSizeRef = useRef(arrowSize);
@@ -129,6 +133,7 @@ function GraphView({
     resolvedTags: state[BC.system.resolvedTags],
     fileSavedEvent,
     graphMode,
+    virtualDetail,
     updateBloodKey,
     wakeSimulation: () => wakeSimulationRef.current(),
   });
@@ -161,6 +166,10 @@ function GraphView({
     spacingRef.current = spacing;
     wakeSimulation();
   }, [spacing]);
+
+  useEffect(() => {
+    localStorage.setItem('dnote_graph_virtual_detail', String(virtualDetail));
+  }, [virtualDetail]);
 
   // Mouse Wheel Zoom-to-Cursor Effect
   useEffect(() => {
@@ -315,6 +324,17 @@ function GraphView({
     }
   }, [lastAction]);
 
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const neighborById = useMemo(() => {
+    const neighbors = new Map<string, Set<string>>();
+    nodes.forEach((node) => neighbors.set(node.id, new Set()));
+    links.forEach((link) => {
+      neighbors.get(link.source)?.add(link.target);
+      neighbors.get(link.target)?.add(link.source);
+    });
+    return neighbors;
+  }, [nodes, links]);
+
   if (!projectPath) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '20px', color: 'var(--text-muted)' }}>
@@ -340,6 +360,8 @@ function GraphView({
         setArrowSize={setArrowSize}
         spacing={spacing}
         setSpacing={setSpacing}
+        virtualDetail={virtualDetail}
+        setVirtualDetail={setVirtualDetail}
         graphMode={graphMode}
         setGraphMode={setGraphMode}
       />
@@ -385,8 +407,8 @@ function GraphView({
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
           {/* Render Lattice links */}
           {links.map((link, idx) => {
-            const source = nodes.find((n) => n.id === link.source);
-            const target = nodes.find((n) => n.id === link.target);
+            const source = nodeById.get(link.source);
+            const target = nodeById.get(link.target);
             if (!source || !target) return null;
 
             const activeFocusNode = hoveredNode || selectedNodeId;
@@ -455,7 +477,7 @@ function GraphView({
 
             const activeFocusNode = hoveredNode || selectedNodeId;
             const isDimmed = activeFocusNode !== null && !isHovered && !isSelected && 
-              !links.some((l) => (l.source === node.id && l.target === activeFocusNode) || (l.target === node.id && l.source === activeFocusNode));
+              !(neighborById.get(node.id)?.has(activeFocusNode));
 
             return (
               <g

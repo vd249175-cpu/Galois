@@ -8,6 +8,7 @@ interface UseLatticeDataProps {
   resolvedTags: any;
   fileSavedEvent: number;
   graphMode: 'hierarchical' | 'contracted' | 'flat';
+  virtualDetail: number;
   updateBloodKey: (key: string, value: any) => void;
   wakeSimulation: () => void;
 }
@@ -17,6 +18,7 @@ export function useLatticeData({
   resolvedTags,
   fileSavedEvent,
   graphMode,
+  virtualDetail,
   updateBloodKey,
   wakeSimulation,
 }: UseLatticeDataProps) {
@@ -57,7 +59,12 @@ export function useLatticeData({
         // Call Python lattice.py — 传入 { nodes, showVirtual }，由 Python 侧做 FCA 虚节点计算
         const scriptPath = await (window as any).electronAPI.getServiceScriptPath('graph-view', 'lattice.py');
         const showVirtual = graphMode !== 'flat';
-        const latticePayload = JSON.stringify({ nodes: rawNodes, showVirtual });
+        const latticePayload = JSON.stringify({
+          nodes: rawNodes,
+          showVirtual,
+          virtualDetail,
+          maxVirtualNodes: 180,
+        });
         const result = await (window as any).electronAPI.runScript(scriptPath, latticePayload, projectPath);
 
         if (result.stderr && result.stderr.trim()) {
@@ -70,9 +77,11 @@ export function useLatticeData({
           // lattice.py 返回 FCA 生成的虚节点（合并进 rawNodes 用于渲染）
           const returnedVirtualNodes: { id: string; tags: string[]; label: string; isVirtual: boolean }[] =
             latticeResult.nodes || [];
+          const rawNodeIds = new Set(rawNodes.map((rn) => rn.id));
           returnedVirtualNodes.forEach((vn) => {
-            if (!rawNodes.find((rn) => rn.id === vn.id)) {
+            if (!rawNodeIds.has(vn.id)) {
               rawNodes.push(vn);
+              rawNodeIds.add(vn.id);
             }
           });
           calculatedEdges = latticeResult.edges || [];
@@ -112,8 +121,9 @@ export function useLatticeData({
           if (degrees[edge.target] !== undefined) degrees[edge.target]++;
         });
 
+        const previousNodes = new Map(simRef.current.nodes.map((n) => [n.id, n]));
         const physicsNodes: Node[] = rawNodes.map((rn, i) => {
-          const existing = simRef.current.nodes.find((n) => n.id === rn.id);
+          const existing = previousNodes.get(rn.id);
           
           // Spread nodes uniformly in 2D space
           const angle = (i / rawNodes.length) * Math.PI * 2;
@@ -166,7 +176,7 @@ export function useLatticeData({
     };
 
     buildLatticeGraph();
-  }, [projectPath, resolvedTags, fileSavedEvent, graphMode]);
+  }, [projectPath, resolvedTags, fileSavedEvent, graphMode, virtualDetail]);
 
   return {
     nodes,

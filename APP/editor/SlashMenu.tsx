@@ -67,7 +67,7 @@ export function SlashMenu({
         return (
           <div
             key={cmd.id}
-            onClick={(e) => {
+            onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
               handleExecuteCommand(cmd);

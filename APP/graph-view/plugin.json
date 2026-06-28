@@ -5,8 +5,14 @@
   "description": "Force-directed DAG visualization of transitive inclusion relations between tags.",
   "dependencies": [],
   "bloodChannels": [
-    "project.path",
+    "system.projectPath",
+    "system.resolvedTags",
+    "system.lastFocusedEditorId",
+    "system.activeEditors",
     "events.fileSaved.*"
   ],
+  "interpreters": {
+    "python": "uv run"
+  },
   "triggerConditions": {}
 }

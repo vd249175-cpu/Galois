@@ -74,7 +74,7 @@ tags:
 以 `run:` 前缀声明的标签，用于调用外部 Python 脚本做复杂动态计算：
 
 - **格式**：`run:<script_name>.py`（脚本位于 `{projectPath}/script/` 目录下）
-- **执行方式**：`uv run {scriptName}` 在项目 `script/` 目录中执行
+- **执行方式**：通过 `electronAPI.runProjectScript` 在项目 `script/` 目录中执行，默认等价于 `uv run script/<scriptName>`
 - **迭代轮数**：由 `maxIterations` 配置控制（可在 Settings 中调节，默认 1 轮）
 
 ```yaml
@@ -85,15 +85,15 @@ tags:
 
 ### 4.1 脚本环境变量
 
-脚本执行时由 `tagResolver.ts` 注入以下环境变量（注意：与项目指令脚本的环境变量**不同**）：
+脚本执行时通过 `runProjectScript` 注入项目基础环境，并由 `tagResolver.ts` 追加标签解析上下文：
 
 | 变量名 | 说明 |
 |--------|------|
+| `DNOTE_PROJECT_PATH` | 当前笔记项目根目录绝对路径 |
 | `DNOTE_NOTE_PATH` | 当前正在处理的笔记文件绝对路径 |
-| `DNOTE_RESOLVED_TAGS` | 当前轮次已解析的标签列表（JSON 字符串，用于多轮迭代） |
+| `DNOTE_RESOLVED_TAGS` | 当前轮次全项目已解析标签 map（JSON 字符串，用于多轮迭代） |
 
-> ⚠️ **注意**：标签脚本的环境变量是 `DNOTE_NOTE_PATH`（非 `DNOTE_ACTIVE_FILE`），
-> 且**不会**注入 `DNOTE_PROJECT_PATH` 和 `DNOTE_OUTPUT_FILE`，需要从 `DNOTE_NOTE_PATH` 推导，输出结果必须打印到 `stdout`。
+> 注意：标签脚本的目标文件变量是 `DNOTE_NOTE_PATH`，不是 `DNOTE_ACTIVE_FILE`。标签解析器当前只读取 `stdout` 中的 JSON 作为标签结果；不要只写 `DNOTE_OUTPUT_FILE` 而不打印结果。
 
 ### 4.2 脚本输出协议
 
@@ -122,23 +122,17 @@ tags:
 import os, json
 
 note_path   = os.environ.get('DNOTE_NOTE_PATH', '')
-output_file = os.environ.get('DNOTE_OUTPUT_FILE', 'output.json')
-
-# 推导项目根目录
 project_path = os.environ.get('DNOTE_PROJECT_PATH') or os.path.dirname(note_path)
 
-# 读取当前已解析标签（本轮迭代的输入）
-resolved_json = os.environ.get('DNOTE_RESOLVED_TAGS', '[]')
-current_tags = set(json.loads(resolved_json))
+# 读取当前全项目已解析标签 map（本轮迭代的输入）
+resolved_json = os.environ.get('DNOTE_RESOLVED_TAGS', '{}')
+resolved_map = json.loads(resolved_json)
+current_tags = set(resolved_map.get(note_path, []))
 
 # 计算新标签（示例：根据现有标签推断父标签）
 new_tags = list(current_tags)
 if 'dog' in current_tags:
     new_tags.append('animal')
-
-# 写入结果
-with open(output_file, 'w', encoding='utf-8') as f:
-    json.dump(new_tags, f, ensure_ascii=False)
 
 print(json.dumps(new_tags, ensure_ascii=False))
 ```
@@ -154,7 +148,7 @@ fileTree 器官检测到 projectPath 或 fileSaved 变化
             ├── parseFrontmatterTags() → 提取 tags: 列表
             ├── resolveTagsSync()      → 解析 re: 正则标签（同步，JS 端）
             └──> 对 run: 标签（迭代 maxIterations 轮）：
-                 └──> uv run {scriptName}（env: DNOTE_NOTE_PATH + DNOTE_OUTPUT_FILE + DNOTE_RESOLVED_TAGS）
+                 └──> runProjectScript(scriptName)（env: DNOTE_PROJECT_PATH + DNOTE_NOTE_PATH + DNOTE_RESOLVED_TAGS）
                       └──> 解析 stdout/output 的 tag 数组
                            └──> 合并进 resolvedTags
   └──> 写入 Blood: system.resolvedTags（完整 map）

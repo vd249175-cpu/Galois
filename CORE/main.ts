@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, protocol, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -294,16 +294,210 @@ function getSecureEnv() {
   return userEnv;
 }
 
-ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
-  return new Promise((resolve, reject) => {
-    exec(command, { cwd, env: getSecureEnv() }, (error, stdout, stderr) => {
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function getSourcePluginPath(): string {
+  return app.isPackaged ? path.join(process.resourcesPath, 'APP') : path.join(app.getAppPath(), 'APP');
+}
+
+function getUserExtensionsPath(): string {
+  return path.join(app.getPath('userData'), 'extensions');
+}
+
+function getBundledExtensionsPath(): string {
+  return app.isPackaged ? path.join(process.resourcesPath, 'extensions') : path.join(app.getAppPath(), 'extensions');
+}
+
+function canWriteDirectory(dirPath: string): boolean {
+  try {
+    fs.mkdirSync(dirPath, { recursive: true });
+    const testPath = path.join(dirPath, `.dnote-write-test-${process.pid}-${Date.now()}`);
+    fs.writeFileSync(testPath, 'ok', 'utf-8');
+    fs.unlinkSync(testPath);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function listUserExtensions() {
+  const seen = new Set<string>();
+  const extensions = [
+    ...getExtensionDevPaths().flatMap((devPath) => listExtensionsFromDevPath(devPath)),
+    ...listExtensionsFromRoot(getUserExtensionsPath(), 'userData'),
+  ];
+  return extensions.filter((extension) => {
+    if (seen.has(extension.id)) return false;
+    seen.add(extension.id);
+    return true;
+  });
+}
+
+function listExtensionsFromRoot(rootPath: string, source: 'userData' | 'development') {
+  if (!fs.existsSync(rootPath)) return [];
+  return fs.readdirSync(rootPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => readExtensionManifest(path.join(rootPath, entry.name), entry.name, source, source === 'development' ? rootPath : undefined))
+    .filter(isExtensionRecord);
+}
+
+function listExtensionsFromDevPath(devPath: string) {
+  const resolvedPath = path.resolve(devPath);
+  const manifestPath = path.join(resolvedPath, 'plugin.json');
+  if (fs.existsSync(manifestPath)) {
+    return [readExtensionManifest(resolvedPath, path.basename(resolvedPath), 'development', resolvedPath)].filter(isExtensionRecord);
+  }
+  return listExtensionsFromRoot(resolvedPath, 'development');
+}
+
+function isExtensionRecord(extension: ReturnType<typeof readExtensionManifest>): extension is NonNullable<ReturnType<typeof readExtensionManifest>> {
+  return extension !== null;
+}
+
+function readExtensionManifest(extensionDir: string, fallbackId: string, source: 'userData' | 'development', developmentPath?: string) {
+  const manifestPath = path.join(extensionDir, 'plugin.json');
+  let manifest: any = null;
+  if (fs.existsSync(manifestPath)) {
+    try {
+      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+    } catch (err: any) {
+      manifest = { id: fallbackId, error: err.message };
+    }
+  } else if (source === 'development') {
+    return null;
+  }
+  return {
+    id: manifest?.id || fallbackId,
+    name: manifest?.name || fallbackId,
+    path: extensionDir,
+    manifestPath,
+    manifest,
+    source,
+    developmentPath,
+    writable: canWriteDirectory(extensionDir),
+  };
+}
+
+function resolveExtensionRoot(extensionId: string): string {
+  const extension = listUserExtensions().find((candidate) => candidate.id === extensionId);
+  if (!extension) {
+    throw new Error(`Extension not found: ${extensionId}`);
+  }
+  const extensionRoot = path.resolve(extension.path);
+  const allowedRoots = [getUserExtensionsPath(), ...getExtensionDevPaths()].map((dirPath) => path.resolve(dirPath));
+  const isAllowed = allowedRoots.some((rootPath) => isInsidePath(rootPath, extensionRoot));
+  if (!isAllowed) {
+    throw new Error('Extension path must stay inside a registered extensions directory');
+  }
+  return extensionRoot;
+}
+
+function readUserConfig(): any {
+  const configPath = path.join(app.getPath('userData'), 'dnote.config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (_) {}
+  }
+  return {};
+}
+
+function writeUserConfig(config: any) {
+  const configPath = path.join(app.getPath('userData'), 'dnote.config.json');
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+function getExtensionDevPaths(): string[] {
+  const config = readUserConfig();
+  const devPaths = config.extensions?.devPaths;
+  if (!Array.isArray(devPaths)) return [];
+  return Array.from(new Set(devPaths.filter((item: any) => typeof item === 'string' && item.trim()).map((item: string) => path.resolve(item))));
+}
+
+function setExtensionDevPaths(devPaths: string[]) {
+  const config = readUserConfig();
+  const nextConfig = {
+    ...config,
+    extensions: {
+      ...(config.extensions || {}),
+      devPaths: Array.from(new Set(devPaths.map((item) => path.resolve(item)))),
+    },
+  };
+  writeUserConfig(nextConfig);
+}
+
+function getRuntimeInfo() {
+  const extensionPath = getUserExtensionsPath();
+  fs.mkdirSync(extensionPath, { recursive: true });
+
+  const sourcePluginPath = getSourcePluginPath();
+  const extensionDevPaths = getExtensionDevPaths();
+  const canWriteSourcePlugins = !app.isPackaged && canWriteDirectory(sourcePluginPath);
+  const writableDirs = [
+    extensionPath,
+    ...extensionDevPaths,
+    ...(canWriteSourcePlugins ? [sourcePluginPath] : []),
+  ];
+
+  return {
+    mode: app.isPackaged ? 'installed-app' : 'source-dev',
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    userDataPath: app.getPath('userData'),
+    extensionPath,
+    extensionDevPaths,
+    sourcePluginPath,
+    canWriteSourcePlugins,
+    agentWorkspace: {
+      writableDirs,
+      readableDirs: Array.from(new Set([extensionPath, ...extensionDevPaths, sourcePluginPath])),
+    },
+    extensions: listUserExtensions(),
+  };
+}
+
+async function checkTool(command: string, versionArgs = '--version') {
+  try {
+    const which = await runShellCommand(`command -v ${quoteShellArg(command)}`, os.homedir(), getSecureEnv());
+    let version = '';
+    try {
+      const result = await runShellCommand(`${quoteShellArg(command)} ${versionArgs}`, os.homedir(), getSecureEnv());
+      version = (result.stdout || result.stderr).trim().split('\n')[0] || '';
+    } catch (err: any) {
+      version = err.message || '';
+    }
+    return { available: true, path: which.stdout.trim(), version };
+  } catch (err: any) {
+    return { available: false, error: err.message || `${command} not found` };
+  }
+}
+
+function isInsidePath(parentPath: string, targetPath: string): boolean {
+  const relative = path.relative(parentPath, targetPath);
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function runShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv, stdinPayload?: string) {
+  return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const child = exec(command, { cwd, env }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr || error.message));
       } else {
         resolve({ stdout, stderr });
       }
     });
+    if (stdinPayload) {
+      child.stdin?.write(stdinPayload);
+      child.stdin?.end();
+    }
   });
+}
+
+ipcMain.handle('shell:exec', async (_, command: string, cwd: string) => {
+  return runShellCommand(command, cwd, getSecureEnv());
 });
 
 ipcMain.handle('shell:openTerminal', async (_, dirPath: string) => {
@@ -323,13 +517,25 @@ ipcMain.handle('shell:openTerminal', async (_, dirPath: string) => {
 
 ipcMain.handle('shell:openAgentTerminal', async (_, dirPath: string) => {
   try {
+    const runtimeInfo = getRuntimeInfo();
+    const extraDirs = runtimeInfo.agentWorkspace.readableDirs
+      .filter((workspaceDir: string) => workspaceDir && workspaceDir !== dirPath);
+
     if (process.platform === 'darwin') {
       const escapedPath = dirPath.replace(/"/g, '\\"');
+      const addDirScripts = extraDirs
+        .map((workspaceDir: string) => {
+          const escapedWorkspaceDir = workspaceDir.replace(/"/g, '\\"');
+          return `delay 1
+        do script "/add-dir ${escapedWorkspaceDir}" in selected tab of front window`;
+        })
+        .join('\n        ');
       const applescript = `tell application "Terminal"
         activate
         do script "cd \\"${escapedPath}\\" && clear && agy"
+        ${addDirScripts}
       end tell`;
-      exec(`osascript -e '${applescript}'`);
+      exec(`osascript -e ${quoteShellArg(applescript)}`);
     } else if (process.platform === 'win32') {
       exec(`start cmd /k "cd /d "${dirPath}" && agy"`);
     } else {
@@ -341,11 +547,142 @@ ipcMain.handle('shell:openAgentTerminal', async (_, dirPath: string) => {
   }
 });
 
+function getPluginFolderFromPath(scriptPath: string): string | null {
+  const parts = scriptPath.split(path.sep);
+  const servicesIndex = parts.indexOf('services');
+  if (servicesIndex > 0) {
+    return parts[servicesIndex - 1];
+  }
+  return null;
+}
+
+function getGlobalInterpreter(ext: string): string {
+  const configPath = path.join(app.getPath('userData'), 'dnote.config.json');
+  let config: any = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (_) {}
+  }
+  
+  const userInterpreters = config.interpreters || {};
+  
+  if (ext === '.py') {
+    return userInterpreters.python || 'uv run';
+  } else if (ext === '.js' || ext === '.mjs') {
+    return userInterpreters.node || 'node';
+  } else if (ext === '.ts' || ext === '.mts') {
+    return userInterpreters.typescript || 'node --experimental-strip-types';
+  } else if (ext === '.sh') {
+    return userInterpreters.bash || 'bash';
+  }
+  return '';
+}
+
+function getInterpreterFromManifest(configPath: string, ext: string): string | null {
+  if (!fs.existsSync(configPath)) return null;
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const pluginInterpreters = config.interpreters || {};
+    const val = ext === '.py' ? pluginInterpreters.python
+              : ext === '.js' || ext === '.mjs' ? pluginInterpreters.node
+              : ext === '.ts' || ext === '.mts' ? pluginInterpreters.typescript
+              : ext === '.sh' ? pluginInterpreters.bash : undefined;
+    return val || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getOwningExtensionManifestPaths(scriptPath?: string): string[] {
+  const resolvedScriptPath = scriptPath ? path.resolve(scriptPath) : '';
+  if (!resolvedScriptPath) return [];
+  return listUserExtensions()
+    .filter((extension) => isInsidePath(path.resolve(extension.path), resolvedScriptPath))
+    .map((extension) => extension.manifestPath);
+}
+
+function getMatchingExtensionManifestPaths(pluginFolder: string): string[] {
+  return listUserExtensions()
+    .filter((extension) => extension.id === pluginFolder || path.basename(path.resolve(extension.path)) === pluginFolder)
+    .map((extension) => extension.manifestPath);
+}
+
+function getPluginInterpreter(ext: string, pluginFolder: string, scriptPath?: string): string {
+  const appPath = app.isPackaged ? path.join(process.resourcesPath, 'APP') : path.join(app.getAppPath(), 'APP');
+  const userExtPath = path.join(app.getPath('userData'), 'extensions');
+  
+  const searchPaths = [
+    ...getOwningExtensionManifestPaths(scriptPath),
+    path.join(appPath, pluginFolder, 'plugin.json'),
+    ...getMatchingExtensionManifestPaths(pluginFolder),
+    path.join(userExtPath, pluginFolder, 'plugin.json'),
+  ];
+
+  for (const configPath of Array.from(new Set(searchPaths))) {
+    const interpreter = getInterpreterFromManifest(configPath, ext);
+    if (interpreter) return interpreter;
+  }
+
+  return getGlobalInterpreter(ext);
+}
+
+function getProjectInterpreter(ext: string, projectPath: string): string {
+  const projectConfigPath = path.join(projectPath, '.dnote', 'config.json');
+  if (fs.existsSync(projectConfigPath)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(projectConfigPath, 'utf-8'));
+      const userInterpreters = config.interpreters || {};
+      const val = ext === '.py' ? userInterpreters.python
+                : ext === '.js' || ext === '.mjs' ? userInterpreters.node
+                : ext === '.ts' || ext === '.mts' ? userInterpreters.typescript
+                : ext === '.sh' ? userInterpreters.bash : undefined;
+      if (val) {
+        if (val.startsWith('.')) {
+          return `"${path.resolve(projectPath, val)}"`;
+        }
+        return val;
+      }
+    } catch (_) {}
+  }
+
+  if (ext === '.py') {
+    const macVenv = path.join(projectPath, '.venv', 'bin', 'python');
+    const winVenv = path.join(projectPath, '.venv', 'Scripts', 'python.exe');
+    if (fs.existsSync(macVenv)) {
+      return `"${macVenv}"`;
+    } else if (fs.existsSync(winVenv)) {
+      return `"${winVenv}"`;
+    }
+  }
+
+  return getGlobalInterpreter(ext);
+}
+
 // Generic script runner — replaces plugin-specific calculateLattice IPC
 // Plugins pass their own scriptPath; CORE stays business-logic-free
-ipcMain.handle('shell:runScript', async (_, scriptPath: string, stdinPayload: string, cwd: string) => {
+ipcMain.handle('shell:runScript', async (_, scriptPath: string, stdinPayload: string, cwd: string, envExtra?: Record<string, string>) => {
   return new Promise((resolve) => {
-    const child = exec(`uv run "${scriptPath}"`, { cwd: cwd || path.dirname(scriptPath), env: getSecureEnv() }, (error, stdout, stderr) => {
+    const ext = path.extname(scriptPath).toLowerCase();
+    let interpreter = '';
+    
+    const isProjectScript = cwd && scriptPath.startsWith(cwd);
+    
+    if (isProjectScript) {
+      interpreter = getProjectInterpreter(ext, cwd);
+    } else {
+      const pluginFolder = getPluginFolderFromPath(scriptPath);
+      if (pluginFolder) {
+        interpreter = getPluginInterpreter(ext, pluginFolder, scriptPath);
+      } else {
+        interpreter = getGlobalInterpreter(ext);
+      }
+    }
+
+    const command = interpreter ? `${interpreter} "${scriptPath}"` : `"${scriptPath}"`;
+
+    const env = { ...getSecureEnv(), ...envExtra };
+    const child = exec(command, { cwd: cwd || path.dirname(scriptPath), env }, (error, stdout, stderr) => {
       if (error && !stdout) {
         console.error('[shell:runScript Error]', scriptPath, stderr || error.message);
         resolve({ stdout: '[]', stderr: stderr || error.message });
@@ -360,6 +697,51 @@ ipcMain.handle('shell:runScript', async (_, scriptPath: string, stdinPayload: st
   });
 });
 
+interface ProjectScriptRunRequest {
+  command?: string;
+  scriptName?: string;
+  cwd?: string;
+  stdin?: string;
+  envExtra?: Record<string, string>;
+  useUv?: boolean;
+}
+
+// Unified notebook-project script bridge. APP organs provide intent and context;
+// CORE owns PATH/interpreter setup and process execution mechanics.
+ipcMain.handle('shell:runProjectScript', async (_, projectPath: string, request: ProjectScriptRunRequest) => {
+  if (!projectPath || !request) {
+    throw new Error('Missing projectPath or script request');
+  }
+
+  const normalizedProjectPath = path.resolve(projectPath);
+  const cwd = path.resolve(request.cwd || (request.scriptName ? path.join(normalizedProjectPath, 'script') : normalizedProjectPath));
+  if (!isInsidePath(normalizedProjectPath, cwd)) {
+    throw new Error('Project script cwd must stay inside the notebook project');
+  }
+
+  const env = {
+    ...getSecureEnv(),
+    DNOTE_PROJECT_PATH: normalizedProjectPath,
+    ...(request.envExtra || {}),
+  };
+
+  let command = request.command || '';
+  if (!command && request.scriptName) {
+    const scriptPath = path.resolve(cwd, request.scriptName);
+    if (!isInsidePath(cwd, scriptPath)) {
+      throw new Error('Project scriptName must stay inside its script directory');
+    }
+    command = request.useUv === false
+      ? quoteShellArg(scriptPath)
+      : `uv run ${quoteShellArg(scriptPath)}`;
+  }
+  if (!command) {
+    throw new Error('Missing project script command');
+  }
+
+  return runShellCommand(command, cwd, env, request.stdin);
+});
+
 // Resolve the absolute path of a service script inside an APP plugin folder
 // e.g. getServiceScriptPath('graph-view', 'lattice.py') => APP/graph-view/services/lattice.py
 ipcMain.handle('shell:getServiceScriptPath', async (_, pluginFolder: string, scriptName: string) => {
@@ -367,6 +749,18 @@ ipcMain.handle('shell:getServiceScriptPath', async (_, pluginFolder: string, scr
     return path.join(process.resourcesPath, 'APP', pluginFolder, 'services', scriptName);
   }
   return path.join(app.getAppPath(), 'APP', pluginFolder, 'services', scriptName);
+});
+
+ipcMain.handle('shell:getExtensionServiceScriptPath', async (_, extensionId: string, scriptName: string) => {
+  const extensionRoot = resolveExtensionRoot(extensionId);
+  const scriptPath = path.resolve(extensionRoot, 'services', scriptName);
+  if (!isInsidePath(path.join(extensionRoot, 'services'), scriptPath)) {
+    throw new Error('Extension service script must stay inside its services directory');
+  }
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error(`Extension service script not found: ${scriptName}`);
+  }
+  return scriptPath;
 });
 
 // IPC Window Manager APIs for Popped-out panels
@@ -449,6 +843,67 @@ ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
 
 ipcMain.handle('app:getAppPath', () => app.getAppPath());
 
+ipcMain.handle('app:getRuntimeInfo', () => getRuntimeInfo());
+
+ipcMain.handle('app:ensureExtensionsDir', () => {
+  const extensionPath = getUserExtensionsPath();
+  fs.mkdirSync(extensionPath, { recursive: true });
+  return extensionPath;
+});
+
+ipcMain.handle('app:listExtensions', () => listUserExtensions());
+
+ipcMain.handle('app:seedExtensions', () => {
+  seedSideLoadedExtensions();
+  return listUserExtensions();
+});
+
+ipcMain.handle('app:addExtensionDevPath', (_, devPath: string) => {
+  const resolvedPath = path.resolve(devPath);
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Extension development path does not exist: ${resolvedPath}`);
+  }
+  const devPaths = getExtensionDevPaths();
+  setExtensionDevPaths([...devPaths, resolvedPath]);
+  return listUserExtensions();
+});
+
+ipcMain.handle('app:removeExtensionDevPath', (_, devPath: string) => {
+  const resolvedPath = path.resolve(devPath);
+  const devPaths = getExtensionDevPaths().filter((item) => item !== resolvedPath);
+  setExtensionDevPaths(devPaths);
+  return listUserExtensions();
+});
+
+ipcMain.handle('app:openPath', async (_, targetPath: string) => {
+  const error = await shell.openPath(targetPath);
+  if (error) {
+    throw new Error(error);
+  }
+  return true;
+});
+
+ipcMain.handle('app:getEnvironmentStatus', async () => {
+  const [uv, python, python3, agy, node] = await Promise.all([
+    checkTool('uv'),
+    checkTool('python'),
+    checkTool('python3'),
+    checkTool('agy'),
+    checkTool('node'),
+  ]);
+  return {
+    shell: {
+      available: Boolean(process.env.SHELL),
+      path: process.env.SHELL || '',
+    },
+    uv,
+    python: python.available ? python : python3,
+    python3,
+    agy,
+    node,
+  };
+});
+
 ipcMain.handle('app:logRendererError', (_, errorMsg: any) => {
   try {
     const logPath = path.join(app.getPath('userData'), 'renderer_error.log');
@@ -493,12 +948,21 @@ ipcMain.handle('app:getConfig', () => {
     terminal: {
       shell: "",
       fontSize: 13,
-      autoStartAgy: true
+      autoStartAgy: false
     },
     appearance: {
       sidebarIconSize: 14,
       fileTreeTitleSize: 11,
       fileTreeTagSize: 8.5
+    },
+    interpreters: {
+      python: "",
+      node: "",
+      typescript: "",
+      bash: ""
+    },
+    extensions: {
+      devPaths: []
     }
   };
 });
@@ -578,6 +1042,27 @@ function copyFolderRecursiveSync(src: string, dest: string) {
   }
 }
 
+function seedSideLoadedExtensions() {
+  const bundledExtensionsPath = getBundledExtensionsPath();
+  const userExtensionsPath = getUserExtensionsPath();
+  if (!fs.existsSync(bundledExtensionsPath)) return;
+
+  fs.mkdirSync(userExtensionsPath, { recursive: true });
+  fs.readdirSync(bundledExtensionsPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .forEach((entry) => {
+      const src = path.join(bundledExtensionsPath, entry.name);
+      const dest = path.join(userExtensionsPath, entry.name);
+      if (fs.existsSync(dest)) return;
+      try {
+        copyFolderRecursiveSync(src, dest);
+        console.log(`[initUserData] Seeded side-loaded extension: ${entry.name}`);
+      } catch (err) {
+        console.error(`[initUserData] Failed to seed extension ${entry.name}:`, err);
+      }
+    });
+}
+
 async function initUserData() {
   const configDir = app.getPath('userData');
   
@@ -599,7 +1084,16 @@ async function initUserData() {
       terminal: {
         shell: "",
         fontSize: 13,
-        autoStartAgy: true
+        autoStartAgy: false
+      },
+      interpreters: {
+        python: "",
+        node: "",
+        typescript: "",
+        bash: ""
+      },
+      extensions: {
+        devPaths: []
       }
     };
     fs.mkdirSync(configDir, { recursive: true });
@@ -633,6 +1127,9 @@ async function initUserData() {
       }
     }
   }
+
+  // 4. Seed side-loaded extension examples into writable userData.
+  seedSideLoadedExtensions();
 }
 
 // ── PTY Terminal Manager (node-pty) ──────────────────────────────────────────

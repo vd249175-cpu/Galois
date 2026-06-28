@@ -7,7 +7,7 @@
  * - tabs / activeTabId 存在 Blood 全局状态（跨卸载/挂载持久）
  * - xtermInstances / startedTabIds 是模块级常量（跨 React 生命周期持久）
  * - 组件卸载后 xterm 容器孤立，重新挂载时 re-attach 到新 wrapper DOM
- * - startedTabIds 防止重挂时重复发送 agy 启动命令
+ * - startedTabIds 防止重挂时重复发送助手初始化命令
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -41,12 +41,28 @@ interface XTermInstance {
 /** All active xterm + PTY instances. Key = tabId */
 const xtermInstances = new Map<string, XTermInstance>();
 
-/** Tab IDs that have already had their auto-start commands sent */
+/** Tab IDs that have already had their assistant initialization commands sent */
 const startedTabIds = new Set<string>();
 
 /** Blood keys for terminal state — use BC constants from BloodChannels */
 const BLOOD_TABS       = BC.system.terminalTabs;
 const BLOOD_ACTIVE_TAB = BC.system.terminalActiveTabId;
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function normalizeAgentDir(dirPath: string): string {
+  return dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
+}
+
+function getAgentWorkspaceDirs(notesProject: string): string[] {
+  const runtimeWorkspace = Blood.getValue<{ readableDirs?: string[] } | null>(BC.system.agentWorkspace, null);
+  return Array.from(new Set([
+    notesProject,
+    ...(runtimeWorkspace?.readableDirs || []),
+  ].filter(Boolean))).map(normalizeAgentDir);
+}
 
 // ─── Plugin manifest ──────────────────────────────────────────────────────────
 
@@ -64,10 +80,10 @@ export const TerminalComponent = {
   ),
   component: TerminalView,
   actions: terminalActions,
-  bloodChannels: [BC.system.projectPath],
+  bloodChannels: [BC.system.projectPath, BC.system.agentWorkspace],
   manifest: {
-    description: '原生 PTY 终端（xterm.js + node-pty），自动启动 agy 并同步笔记项目',
-    reads: [BC.system.projectPath],
+    description: '原生 PTY 终端（xterm.js + node-pty），可选接入外部 agy 并同步笔记项目',
+    reads: [BC.system.projectPath, BC.system.agentWorkspace],
     writes: [
       BC.system.terminalTabs,         // Tab 列表持久化到 Blood
       BC.system.terminalActiveTabId,  // 活跃 Tab ID
@@ -191,16 +207,29 @@ function TerminalView({
           startedTabIds.add(tabId);
           // Wait 600ms to check if "Antigravity" output was generated during shell startup
           setTimeout(() => {
-            const formattedProj = notesProject ? (notesProject.endsWith('/') ? notesProject : notesProject + '/') : '';
+            const agentDirs = getAgentWorkspaceDirs(notesProject);
+            const config = Blood.getValue<any>(BC.system.config, {});
+            const autoStartAgy = config?.terminal?.autoStartAgy === true;
             if (detectedAntigravity) {
-              // Shell already auto-started agy. Just type /add-dir to sync project.
-              if (formattedProj) {
-                window.electronAPI.writeTerminal(tabId, `/add-dir ${formattedProj}\r`);
-              }
+              // Shell already auto-started agy. Sync every known workspace dir.
+              agentDirs.forEach((dir, index) => {
+                setTimeout(() => {
+                  window.electronAPI.writeTerminal(tabId, `/add-dir ${dir}\r`);
+                }, index * 250);
+              });
+            } else if (!autoStartAgy) {
+              // agy is an external optional tool. Do not start it unless the user opts in.
+              return;
             } else {
-              // Shell did not auto-start agy. Start it with the --add-dir parameter directly.
-              if (formattedProj) {
-                window.electronAPI.writeTerminal(tabId, `agy --add-dir ${formattedProj}\r`);
+              // Start agy in the project, then add extension/source dirs after startup.
+              if (agentDirs.length > 0) {
+                const [primaryDir, ...extraDirs] = agentDirs;
+                window.electronAPI.writeTerminal(tabId, `agy --add-dir ${shellQuote(primaryDir)}\r`);
+                extraDirs.forEach((dir, index) => {
+                  setTimeout(() => {
+                    window.electronAPI.writeTerminal(tabId, `/add-dir ${dir}\r`);
+                  }, 1400 + index * 250);
+                });
               } else {
                 window.electronAPI.writeTerminal(tabId, 'agy\r');
               }

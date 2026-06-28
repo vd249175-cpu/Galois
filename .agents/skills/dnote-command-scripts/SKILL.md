@@ -1,17 +1,38 @@
 ---
 name: dnote-command-scripts
-description: Covenants and guidelines for authoring DNOTE project custom commands (commands.json), environment variables, JSON output protocols, and project lifecycle python scripts.
+description: Covenants and guidelines for DNOTE notebook project commands, commands.json, reactive expressions, lifecycle hooks, environment variables, JSON output, and project-owned dependency management.
 ---
 
-# DNOTE Project Commands & Shortcut Scripts (`dnote-command-scripts`)
+# DNOTE Notebook Project Commands and Scripts
 
-本文档定义 DNOTE 笔记项目中自定义指令的声明方式、脚本执行协议、环境变量契约，以及项目生命周期钩子的编写规范。
+This guide covers notebook project scripts. These are different from
+application dependencies and plugin service scripts.
 
----
+Read `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md` before changing script
+execution behavior.
+For assistant workspace boundaries, also read `docs/EXTENSION_WORKSPACE.md`.
 
-## 1. 项目指令配置 (`command/commands.json`)
+## 1. Ownership
 
-每个笔记项目可以在 `command/commands.json` 中注册自定义动作，并在其中指定要执行的脚本（静默运行于后台，隐藏在斜线菜单外，支持全局快捷键）或要在编辑器中插入的自定义文本片段（显示在斜线 `/` 菜单中）：
+Notebook project scripts belong to the selected notebook project. They live
+inside that project, usually under:
+
+```text
+command/commands.json
+script/
+.dnote/config.json
+pyproject.toml
+uv.lock
+.venv/
+```
+
+The application layer is packaged by Electron and should not require end users
+to manage Node dependencies. Plugin service scripts belong to their plugin. A
+notebook project's lifecycle hooks and commands own their own dependencies.
+
+## 2. commands.json
+
+Notebook commands are declared in `command/commands.json`.
 
 ```json
 {
@@ -20,170 +41,163 @@ description: Covenants and guidelines for authoring DNOTE project custom command
       "id": "project.runStats",
       "label": "统计项目字数",
       "shortcut": "meta+shift+t",
+      "scope": "editor",
       "script": "uv run script/note_stats.py"
     },
     {
       "id": "project.sysMonitorWidget",
       "label": "插入系统实时监控小部件",
-      "desc": "在当前位置插入动态测量CPU和内存占用的反应式组件",
-      "content": "⚡ 系统监控：{{script/sys_monitor.json:status | run=\"sys_monitor.py\" & interval=3}}"
+      "content": "系统状态：{{script/sys_monitor.json:status | run=\"sys_monitor.py\" & interval=3}}"
     }
   ]
 }
 ```
 
-### 1.1 指令类型与斜线菜单过滤规则
+Commands with `script` are background commands. They should not insert text into
+the note. They run silently, write JSON to `.dnote_cache/{command_id}.json`, and
+broadcast `events.commandExecuted.{command_id}`.
 
-为了保证编辑器斜线菜单的纯净度，DNOTE 将指令的运行分流如下：
+Commands with `content` are insertion commands. They appear in the editor slash
+menu and insert text or reactive expressions at the cursor. The same slash
+command execution path is used by Live Preview and Reading mode block editors,
+so new insertion commands should be written once and tested in both modes.
 
-| 指令配置字段 | 指令类型 | 斜线菜单 `/` 状态 | 触发行为 |
-| :--- | :--- | :--- | :--- |
-| **`script`**（配置脚本命令） | 外部静默执行脚本 | 🚫 **隐藏过滤** | 不在文档中插入任何文本。按下快捷键后静默通过 `execCommand` 执行脚本，结果输出至 `.dnote_cache/{id}.json`，状态显示在状态栏或弹出提示框。 |
-| **`content`**（配置插入片段） | 占位符文本插值命令 | 🟢 **显示在菜单** | 选中后在光标处插入 `"content"` 中的文本片段（如 `{{ ... }}` 占位符）。随后触发编辑器的反应式组件解析执行。 |
+## 3. Scope Rules
 
-### 1.2 快捷键有效作用域 (`"scope"`) 配置
+`scope` controls where a shortcut can run:
 
-为了避免页面间快捷键冲突，并提供更灵活的交互控制，DNOTE 支持通过 `"scope"` 字段配置项目指令的快捷键作用域：
+```text
+global / all / true  => any focused panel or no focused panel
+editor               => editor panels only
+fileTree             => file tree panels only
+graphView            => graph view panels only
+```
 
-* **`"scope": "global"`** (或 `"all"`, `true`)：**全局快捷键**。不论用户聚焦在文件树、图形视图、还是编辑器，甚至在页面无任何元素聚焦时，该快捷键均可被触发执行。
-* **`"scope": "editor"`**：**编辑器局域快捷键**。只有当光标聚焦在编辑器内时，该快捷键才会被触发。
-* **`"scope": "fileTree"` / `"graphView"` 等**：**特定页面局域快捷键**。只有当聚焦在对应的组件页面/视图上时，该快捷键才生效。
-* **默认解析规则**：
-  * 若指令配置了 `"script"` 且未声明 `"scope"`，默认其 `scope` 为 `"global"`。
-  * 若指令配置了 `"content"` 且未声明 `"scope"`，默认其 `scope` 为 `"editor"`。
+If `scope` is omitted, script commands default to global and content commands
+default to editor.
 
----
+## 4. Environment Variables
 
----
+Project command scripts receive editor and project context:
 
-## 2. 标准环境变量
+| Variable | Meaning |
+| --- | --- |
+| `DNOTE_PROJECT_PATH` | Absolute notebook project path |
+| `DNOTE_ACTIVE_FILE` | Current focused note path |
+| `DNOTE_OUTPUT_FILE` | JSON output file path |
+| `DNOTE_CURSOR_LINE` | Cursor line, 0-indexed |
+| `DNOTE_CURSOR_COL` | Cursor column, 0-indexed |
+| `DNOTE_SELECTED_TEXT` | Current selection |
+| `DNOTE_THREAD_ID` | Execution instance identifier |
 
-通过 DNOTE 执行的所有脚本（项目指令、生命周期钩子）均会注入以下环境变量：
+Reactive expression scripts also receive:
 
-| 变量名 | 说明 |
-|--------|------|
-| `DNOTE_PROJECT_PATH` | 当前笔记项目的根目录绝对路径 |
-| `DNOTE_ACTIVE_FILE` | 当前编辑器聚焦的笔记文件绝对路径 |
-| `DNOTE_OUTPUT_FILE` | 脚本必须将 JSON 结果写入的目标路径（通常为 `.dnote_cache/{command_id}.json`） |
-| `DNOTE_CURSOR_LINE` | 光标当前所在行号（0 indexed） |
-| `DNOTE_CURSOR_COL` | 光标当前所在列号（0 indexed） |
-| `DNOTE_SELECTED_TEXT` | 编辑器中当前被选中的文本片段 |
-| `DNOTE_THREAD_ID` | 脚本执行实例 ID（用于生命周期钩子的 "project_lifecycle" 标识） |
+| Variable | Meaning |
+| --- | --- |
+| `DNOTE_NOTE_PATH` | Note path containing the expression |
+| `DNOTE_NOTE_LINE` | Expression line index |
 
-> **生命周期钩子** 会额外注入 `DNOTE_THREAD_ID="project_lifecycle"`，
-> 用于在多次执行时区分同一类别钩子的不同实例。
+Dynamic tag scripts receive:
 
----
+| Variable | Meaning |
+| --- | --- |
+| `DNOTE_NOTE_PATH` | Note being resolved |
+| `DNOTE_RESOLVED_TAGS` | JSON map of current resolved tags |
 
-## 3. 标准 JSON 输出协议
+## 5. JSON Output Contract
 
-所有项目指令脚本**必须**将执行结果以 JSON 格式写入 `DNOTE_OUTPUT_FILE` 路径，
-DNOTE 编辑器在脚本执行完毕后会自动读取该文件并显示结果摘要：
+Project scripts should write JSON to `DNOTE_OUTPUT_FILE`.
 
 ```python
-# /// script
-# requires-python = ">=3.11"
-# ///
-import os
 import json
+import os
 import time
 
-project_path = os.environ.get('DNOTE_PROJECT_PATH', '.')
-output_file  = os.environ.get('DNOTE_OUTPUT_FILE', 'output.json')
-
-# ... 执行逻辑 ...
+output_file = os.environ["DNOTE_OUTPUT_FILE"]
 
 result = {
-    "status":    "success",         # "success" | "error"
-    "message":   "计算完成",         # 展示给用户的摘要文本
-    "data": {                        # 任意 JSON 可序列化结构
-        "file_count":   42,
-        "total_chars":  18600,
+    "status": "success",
+    "message": "计算完成",
+    "data": {
+        "file_count": 42
     },
-    "timestamp": int(time.time()),
+    "timestamp": int(time.time())
 }
 
-with open(output_file, 'w', encoding='utf-8') as f:
+os.makedirs(os.path.dirname(output_file), exist_ok=True)
+with open(output_file, "w", encoding="utf-8") as f:
     json.dump(result, f, indent=2, ensure_ascii=False)
-
-print(f"[Done] {result['message']}")
 ```
 
-### 3.1 输出文件路径规则
+Dynamic tag scripts may also print JSON to stdout because the current
+`tagResolver` reads stdout for tag lists.
 
-`DNOTE_OUTPUT_FILE` 的值由 Editor 组件在调用指令时自动计算，格式为：
+## 6. Project Dependency Management
 
-```
-{projectPath}/.dnote_cache/{command_id}.json
-```
+Notebook projects should be self-describing.
 
-例如 `command.id` 为 `project.runStats` 时：
-```
-/Users/xxx/my-notes/.dnote_cache/project.runStats.json
-```
+Supported project-level options:
 
----
+- `.venv/` for a project-local Python interpreter.
+- `.dnote/config.json` to override interpreters.
+- `pyproject.toml` and `uv.lock` for project-managed Python dependencies.
+- PEP 723 metadata inside individual Python scripts for single-file dependency
+  declarations.
 
-## 4. 生命周期钩子脚本
+Prefer `uv` for portable project scripts. A packaged DMG should guide users
+through installing or configuring `uv`; project scripts should still fail
+clearly when their runtime is missing.
 
-DNOTE 在项目目录打开/切换/关闭时会自动触发对应的钩子脚本（如果存在）。
-脚本统一放置在笔记项目的 `script/` 目录下：
+Do not assume plugin service scripts and notebook project scripts share the same
+environment. Plugin scripts are plugin-owned; notebook scripts are
+project-owned.
 
-| 脚本文件 | 触发时机 | 常见用途 |
-|----------|----------|---------|
-| `script/on_project_open.py` | 项目加载时**同步**运行（阻塞） | 初始化缓存目录、写入 lifecycle 日志 |
-| `script/on_project_run.py` | `on_project_open.py` 完成后以**后台守护进程**方式运行 | 启动长期索引进程、云同步监听器 |
-| `script/on_project_close.py` | 切换工作区或窗口关闭前运行 | 提交缓存、终止后台进程、释放文件锁 |
+## 7. Lifecycle Hooks
 
-### 4.1 示例：on_project_open.py
+Lifecycle hooks live under the notebook project's `script/` directory:
 
-```python
-import os, json, time
-
-project_path = os.environ.get('DNOTE_PROJECT_PATH', '.')
-cache_dir    = os.path.join(project_path, '.dnote_cache')
-os.makedirs(cache_dir, exist_ok=True)
-
-log_path = os.path.join(cache_dir, 'lifecycle.json')
-with open(log_path, 'w', encoding='utf-8') as f:
-    json.dump({"event": "open", "timestamp": int(time.time())}, f, indent=2)
-
-print("[Lifecycle] Project opened successfully.")
+```text
+script/on_project_open.py
+script/on_project_run.py
+script/on_project_close.py
 ```
 
-### 4.2 执行链路（useProjectLifecycle hook）
+`on_project_open` runs when the project is opened. It should verify or bootstrap
+project state and create needed cache directories.
 
-```
-项目路径变更（projectPath Blood 更新）
-  └──> useProjectLifecycle hook 检测到变化
-       ├──> (旧项目) 同步执行 on_project_close.py
-       ├──> 同步执行 on_project_open.py（阻塞等待完成）
-       └──> 后台执行 on_project_run.py &（守护进程，不阻塞 UI）
+`on_project_run` may run as a background process. It must write a PID file or
+another shutdown signal if `on_project_close` needs to stop it.
 
-窗口 beforeunload 事件
-  └──> 阻止关闭 → 同步执行 on_project_close.py → 再触发 window.close()
-```
+`on_project_close` runs when the project is switched or the window closes. It
+should cleanly stop background processes and write final project state.
 
----
+Lifecycle hooks should use project-level dependency declarations. They should
+not depend on application source directories or plugin service directories.
 
-## 5. uv 依赖管理
+## 8. Implementation Status
 
-DNOTE 使用 `uv` 运行所有 Python 脚本，支持 PEP 723 内联元数据声明依赖，
-无需配置独立 virtualenv，即拷即用：
+Project commands, reactive expression scripts, and dynamic tag scripts should
+use `electronAPI.runProjectScript`. New work should keep project script
+execution on that bridge so interpreter setup, environment construction,
+stdout/stderr, and Blood event updates remain centralized.
 
-```python
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "numpy>=1.26",
-#   "requests>=2.31",
-# ]
-# ///
-import numpy as np
-# 脚本正常运行，uv 自动安装 numpy
-```
+`runProjectScript` keeps `scriptName` execution inside the notebook project's
+`script/` directory. If a command needs broader shell behavior, it must be
+declared as a project-owned `command` and treated as trusted project automation.
 
-执行方式：
-```bash
-uv run script/my_script.py
-```
+Some non-script shell operations may still use `execCommand`, for example
+opening a folder or running a media helper. Do not copy those patterns for
+notebook project scripts.
+
+## 9. Editor Mode Notes
+
+DNOTE now exposes Live Preview and Reading as the two user-facing editor modes.
+Source editing is kept as an internal fallback, not the primary UX.
+
+When testing command insertion:
+
+- Live Preview uses the CodeMirror-backed editor handle for cursor ranges.
+- Reading mode uses the block editor's absolute Markdown range and passes the
+  current draft text into the same command executor before replacing `/query`.
+- Commands with `script` must stay hidden from `/` in both modes.
+- Commands with `content` should work from `/` in both modes.

@@ -59,9 +59,14 @@ export async function calculateAllResolvedTags(
       for (const tag of scriptTags) {
         const scriptName = tag.substring(4).trim();
         try {
-          const envResolvedTags = JSON.stringify(resolvedTagsMap).replace(/'/g, "'\\''");
-          const cmd = `DNOTE_NOTE_PATH="${file.path}" DNOTE_RESOLVED_TAGS='${envResolvedTags}' uv run ${scriptName}`;
-          const result = await (window as any).electronAPI.execCommand(cmd, scriptDir);
+          const result = await (window as any).electronAPI.runProjectScript(projectPath, {
+            scriptName,
+            cwd: scriptDir,
+            envExtra: {
+              DNOTE_NOTE_PATH: file.path,
+              DNOTE_RESOLVED_TAGS: JSON.stringify(resolvedTagsMap),
+            },
+          });
 
           if (result && result.stdout) {
             const parsed = JSON.parse(result.stdout.trim());

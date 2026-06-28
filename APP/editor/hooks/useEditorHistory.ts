@@ -6,12 +6,20 @@ interface HistoryState {
   selectionEnd: number;
 }
 
+interface TextEditorHandle {
+  value: string;
+  selectionStart: number;
+  selectionEnd: number;
+  focus: () => void;
+  setSelectionRange: (start: number, end: number) => void;
+}
+
 interface UseEditorHistoryProps {
   content: string;
   setContent: (val: string) => void;
   currentFile: string;
   saveNodeFile: (customContent?: string) => Promise<void> | void;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  textareaRef: RefObject<TextEditorHandle | null>;
   setStatusMessage: (msg: string) => void;
 }
 

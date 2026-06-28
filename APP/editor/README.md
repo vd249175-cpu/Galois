@@ -6,10 +6,16 @@ Lattice Editor 是 DNOTE 的**核心编辑器官**。它不仅是支持 Markdown
 
 ## 🌟 核心功能特性
 
-### 1. ✏️ 编辑 / 预览 双模式切换
-- `meta+e`（`editor.toggleMode`）在**编辑模式**和 **Markdown 预览模式**之间切换
-- 模式状态持久化到 `localStorage`，重启后自动还原
-- 预览模式渲染：WikiLink `[[双向链接]]`、`![media](path)` 图片/视频/音频、代码高亮、数学公式
+### 1. ✏️ Live Preview / Reading 双主模式
+- `meta+e`（`editor.toggleMode`）在 **Live Preview** ↔ **Reading** 之间切换
+- 模式状态持久化到 `localStorage dnote_editor_mode`，旧的 Source/编辑模式配置会迁移到 Live Preview
+- **Live Preview**：CodeMirror 6 编辑态预览，`#` 标题、`**bold**`、`*italic*`、`` `code` ``、`[link](url)`、`[[WikiLink]]`、任务 checkbox、`{{ reactive }}`、`![media](path)`、`@video[](...)` 在光标离开时渲染为 widget/decoration，光标进入时显示原始 Markdown
+- Live Preview 中任务 checkbox 可直接点击切换完成状态，保持 Markdown 源码为唯一真实数据
+- **Reading**：阅读渲染 + 局部交互式编辑，继续使用 `MarkdownPreview` 展示 WikiLink、媒体、代码块、反应式表达式等内容
+- Reading 中点击普通块会进入局部 textarea 编辑；在行首或空格后输入 `/` 可唤起与 Live Preview 共用的 slash commands
+- Reading 中 Markdown 表格支持直接编辑单元格，鼠标悬停表格时显示 `+ 行` / `+ 列` 工具条，并写回标准 Markdown 表格
+- Source 源码编辑路径保留为内部保底能力，不作为普通用户的主切换模式
+- Markdown 语言支持按需异步加载，Live Preview 通过 decorations/widgets 渲染，不额外维护第二份文档模型
 
 ### 2. 🔄 Undo / Redo 撤销重做
 - 内置 100 步历史栈（单词边界防抖入栈，不每个字符都记录）
@@ -21,12 +27,13 @@ Lattice Editor 是 DNOTE 的**核心编辑器官**。它不仅是支持 Markdown
 - 保存后广播 `Blood: events.fileSaved.{filePath}`，触发 fileTree 重新计算标签、graphView 重建拓扑图
 - `meta+s`（`editor.save`）强制立即保存
 
-### 4. 📂 多媒体拖入与自动归档系统
-将图片/音频/视频文件拖入编辑器区域时：
+### 4. 📂 多媒体 / CLIP 拖入与自动归档系统
+将图片/音频/视频文件或视频时间线 CLIP 片段拖入编辑器区域时：
 - 利用 `electronAPI.getPathForFile(file)` 安全获取本地绝对路径（绕过 Chromium 沙箱限制）
 - 调用 `electronAPI.archiveMedia(srcPath, projectPath)` 自动复制到 `{projectPath}/media/`（重名加时间戳后缀）
-- **编辑模式**：在光标处插入 `![filename](media/relative-path)` Markdown 链接
-- **预览模式**：行级拖拽感受体 — 拖入文件时各段落行亮起玻璃态微动光环，松手后精准插入到悬停行下方
+- **Live Preview**：通过 CodeMirror `posAtCoords` 按鼠标落点插入独立 Markdown 块
+- **Reading**：行级拖拽感受体 — 拖入文件或 CLIP 时各段落行亮起玻璃态微动光环，松手后插入到悬停行下方
+- 支持一次拖入多个媒体文件，按顺序归档并插入多行 Markdown
 
 ### 5. 🎬 特权媒体播放协议（`dnote-file://` Scheme）
 本地媒体文件通过 Electron 注册的特权协议流式传输，完整支持：
@@ -35,7 +42,7 @@ Lattice Editor 是 DNOTE 的**核心编辑器官**。它不仅是支持 Markdown
 - 协议注册于 Electron 主进程：`standard: true`、`secure: true`、`stream: true`
 
 ### 6. ⚡ 斜线指令菜单（Slash Commands）
-在编辑模式行首或空格后输入 `/`，唤起三类指令插值菜单（键盘上下键导航）：
+在 Live Preview 或 Reading 块编辑器中，行首或空格后输入 `/`，唤起三类指令插值菜单（键盘上下键导航）：
 
 | 类型 | 来源 | 说明 |
 |------|------|------|
@@ -88,7 +95,7 @@ CPU：{{ script/sys.json:cpu.usage }}
 
 - **三种隔离模式**：`project`（所有实例共享）、`window`（per areaId）、`execution`（每次挂载独立）
 - 初始化时加载 JSON 文件；若有 `run=` 且无 `interval`，保存时立即执行一次
-- 有 `interval=N` 时每 N 秒执行一次脚本并通过 `Blood: script_json:{path}` 刷新显示
+- 有 `interval=N` 时每 N 秒执行一次脚本并通过 `Blood: events.scriptJson:{path}` 刷新显示
 - 渲染为**数据 Pill 芯片**：显示当前值、执行中显示 spinner、报错时显示错误状态
 
 > 完整开发手册：[SCRIPT_GUIDE.md](./SCRIPT_GUIDE.md)
@@ -100,7 +107,7 @@ CPU：{{ script/sys.json:cpu.usage }}
 { line, column, selectedText, filePath }
 ```
 
-App.tsx 防抖 150ms 后将此状态写入 `{projectPath}/.dnote_runtime.json`，供 AI Agent 插件和外部工具感知用户上下文。
+`useRuntimeSync` 防抖 150ms 后将此状态写入 `{projectPath}/.dnote_runtime.json`，供 Agent 插件和外部工具感知用户上下文。
 
 ### 12. 📋 实用 Modal 弹窗
 
@@ -119,7 +126,7 @@ typeId:     'editor'
 reads:      system.projectPath, system.resolvedTags, system.staticTags,
             events.openFile.{areaId}, system.focusedAreaId,
             system.activeEditors, system.lastFocusedEditorId,
-            events.fileSaved.*, script_json:*
+            events.fileSaved.*, events.scriptJson:*
 writes:     events.fileSaved.{path}, system.activeEditors,
             system.lastFocusedEditorId, system.editorCursor.{areaId},
             events.openFile.{areaId}
@@ -131,7 +138,7 @@ dependsOn:  ['fileTree']
 | 动作 ID | 默认快捷键 | 说明 |
 |---------|-----------|------|
 | `editor.save` | `meta+s` | 立即保存 |
-| `editor.toggleMode` | `meta+e` | 切换编辑/预览模式 |
+| `editor.toggleMode` | `meta+e` | 切换 Live Preview / Reading |
 | `editor.delete` | `meta+backspace` | 删除当前笔记 |
 | `editor.setAsTemplate` | — | 设为模板（保存到 `temple/` 目录） |
 | `editor.editShortcuts` | — | 打开快捷键编辑弹窗 |

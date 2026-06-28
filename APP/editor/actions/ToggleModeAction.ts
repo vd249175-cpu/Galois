@@ -3,7 +3,7 @@ import type { OrganAction } from '../../../CORE/ComponentRegistry';
 
 export const toggleModeAction: OrganAction = {
   id: 'editor.toggleMode',
-  label: '切换编辑/预览模式',
+  label: '切换 Live/Reading',
   defaultShortcut: 'meta+e',
   isToolbar: true,
   icon: React.createElement(

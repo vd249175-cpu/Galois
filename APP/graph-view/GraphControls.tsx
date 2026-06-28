@@ -14,6 +14,8 @@ interface GraphControlsProps {
   setArrowSize: (val: number) => void;
   spacing: number;
   setSpacing: (val: number) => void;
+  virtualDetail: number;
+  setVirtualDetail: (val: number) => void;
   graphMode: 'hierarchical' | 'contracted' | 'flat';
   setGraphMode: (val: 'hierarchical' | 'contracted' | 'flat') => void;
 }
@@ -25,6 +27,8 @@ export function GraphControls({
   setArrowSize,
   spacing,
   setSpacing,
+  virtualDetail,
+  setVirtualDetail,
   graphMode,
   setGraphMode,
 }: GraphControlsProps) {
@@ -158,10 +162,41 @@ export function GraphControls({
                 cursor: 'pointer',
               }}
             />
-          </div>
+	          </div>
 
-          {/* Display Mode Slider (拖动切换) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+	          {/* Virtual Concept Granularity Slider */}
+	          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
+	            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
+	              <span>概念粒度</span>
+	              <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>{Math.round(virtualDetail * 100)}%</span>
+	            </div>
+	            <input
+	              type="range"
+	              min="0"
+	              max="1"
+	              step="0.01"
+	              value={virtualDetail}
+	              disabled={graphMode === 'flat'}
+	              onChange={(e) => setVirtualDetail(Number(e.target.value))}
+	              style={{
+	                width: '100%',
+	                accentColor: 'var(--accent-color)',
+	                height: '3px',
+	                cursor: graphMode === 'flat' ? 'not-allowed' : 'pointer',
+	                opacity: graphMode === 'flat' ? 0.45 : 1,
+	              }}
+	            />
+	            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'var(--text-muted)', marginTop: '2px' }}>
+	              <span>抽象</span>
+	              <span>完整</span>
+	            </div>
+	            <div style={{ fontSize: '8px', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+	              真实标签参与计算；可见虚概念会按 support 闭包合并。
+	            </div>
+	          </div>
+
+	          {/* Display Mode Slider (拖动切换) */}
+	          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '2px', borderTop: '1px solid var(--border-color)', paddingTop: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-main)' }}>
               <span>显示模式</span>
               <span style={{ fontWeight: 600, color: 'var(--accent-color)' }}>

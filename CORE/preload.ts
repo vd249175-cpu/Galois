@@ -37,8 +37,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * @param cwd         工作目录（通常是 projectPath）
    * @returns { stdout: string, stderr: string }
    */
-  runScript: (scriptPath: string, stdin: string, cwd: string) =>
-    ipcRenderer.invoke('shell:runScript', scriptPath, stdin, cwd),
+  runScript: (scriptPath: string, stdin: string, cwd: string, envExtra?: Record<string, string>) =>
+    ipcRenderer.invoke('shell:runScript', scriptPath, stdin, cwd, envExtra),
+  runProjectScript: (projectPath: string, request: {
+    command?: string;
+    scriptName?: string;
+    cwd?: string;
+    stdin?: string;
+    envExtra?: Record<string, string>;
+    useUv?: boolean;
+  }) =>
+    ipcRenderer.invoke('shell:runProjectScript', projectPath, request),
 
   /**
    * 获取 APP 插件 services/ 目录下脚本的绝对路径
@@ -46,10 +55,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   getServiceScriptPath: (pluginFolder: string, scriptName: string) =>
     ipcRenderer.invoke('shell:getServiceScriptPath', pluginFolder, scriptName),
+  getExtensionServiceScriptPath: (extensionId: string, scriptName: string) =>
+    ipcRenderer.invoke('shell:getExtensionServiceScriptPath', extensionId, scriptName),
 
   /** 获取 Electron app 根目录（DNOTE 程序目录） */
   getAppPath: () =>
     ipcRenderer.invoke('app:getAppPath'),
+  getRuntimeInfo: () =>
+    ipcRenderer.invoke('app:getRuntimeInfo'),
+  ensureExtensionsDir: () =>
+    ipcRenderer.invoke('app:ensureExtensionsDir'),
+  listExtensions: () =>
+    ipcRenderer.invoke('app:listExtensions'),
+  seedExtensions: () =>
+    ipcRenderer.invoke('app:seedExtensions'),
+  addExtensionDevPath: (devPath: string) =>
+    ipcRenderer.invoke('app:addExtensionDevPath', devPath),
+  removeExtensionDevPath: (devPath: string) =>
+    ipcRenderer.invoke('app:removeExtensionDevPath', devPath),
+  openPath: (targetPath: string) =>
+    ipcRenderer.invoke('app:openPath', targetPath),
+  getEnvironmentStatus: () =>
+    ipcRenderer.invoke('app:getEnvironmentStatus'),
 
   logRendererError: (errorMsg: any) =>
     ipcRenderer.invoke('app:logRendererError', errorMsg),
@@ -113,4 +140,3 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setLayout: (layout: any) =>
     ipcRenderer.invoke('app:setLayout', layout),
 });
-

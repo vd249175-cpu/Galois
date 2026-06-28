@@ -1,0 +1,32 @@
+{
+  "id": "env-check",
+  "name": "Environment Check",
+  "version": "0.1.0",
+  "description": "Side-loaded test extension for plugin-owned runtime declaration and service dependency resolution.",
+  "kind": "script-extension",
+  "activationEvents": [
+    "onCommand:env-check.runProbe"
+  ],
+  "interpreters": {
+    "python": "uv run"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "env-check.runProbe",
+        "title": "Run Python dependency probe",
+        "category": "Environment",
+        "service": "env_probe.py"
+      }
+    ]
+  },
+  "services": [
+    {
+      "name": "env_probe.py",
+      "label": "Python dependency probe",
+      "runtime": "python",
+      "entry": "services/env_probe.py",
+      "dependencies": ["numpy"]
+    }
+  ]
+}

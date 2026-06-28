@@ -11,9 +11,85 @@ export interface ElectronAPI {
   execCommand: (command: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
   openTerminal: (dirPath: string) => Promise<boolean>;
   openAgentTerminal: (dirPath: string) => Promise<boolean>;
-  runScript: (scriptPath: string, stdin: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
+  runScript: (scriptPath: string, stdin: string, cwd: string, envExtra?: Record<string, string>) => Promise<{ stdout: string; stderr: string }>;
+  runProjectScript: (projectPath: string, request: {
+    command?: string;
+    scriptName?: string;
+    cwd?: string;
+    stdin?: string;
+    envExtra?: Record<string, string>;
+    useUv?: boolean;
+  }) => Promise<{ stdout: string; stderr: string }>;
   getServiceScriptPath: (pluginFolder: string, scriptName: string) => Promise<string>;
+  getExtensionServiceScriptPath: (extensionId: string, scriptName: string) => Promise<string>;
   getAppPath: () => Promise<string>;
+  getRuntimeInfo: () => Promise<{
+    mode: 'source-dev' | 'installed-app';
+    isPackaged: boolean;
+    appPath: string;
+    userDataPath: string;
+    extensionPath: string;
+    extensionDevPaths: string[];
+    sourcePluginPath: string;
+    canWriteSourcePlugins: boolean;
+    agentWorkspace: {
+      writableDirs: string[];
+      readableDirs: string[];
+    };
+    extensions: Array<{
+      id: string;
+      name: string;
+      path: string;
+      manifestPath: string;
+      manifest: any;
+      source?: 'userData' | 'development';
+      developmentPath?: string;
+      writable?: boolean;
+    }>;
+  }>;
+  ensureExtensionsDir: () => Promise<string>;
+  listExtensions: () => Promise<Array<{
+    id: string;
+    name: string;
+    path: string;
+    manifestPath: string;
+    manifest: any;
+    source?: 'userData' | 'development';
+    developmentPath?: string;
+    writable?: boolean;
+  }>>;
+  seedExtensions: () => Promise<Array<{
+    id: string;
+    name: string;
+    path: string;
+    manifestPath: string;
+    manifest: any;
+    source?: 'userData' | 'development';
+    developmentPath?: string;
+    writable?: boolean;
+  }>>;
+  addExtensionDevPath: (devPath: string) => Promise<Array<{
+    id: string;
+    name: string;
+    path: string;
+    manifestPath: string;
+    manifest: any;
+    source?: 'userData' | 'development';
+    developmentPath?: string;
+    writable?: boolean;
+  }>>;
+  removeExtensionDevPath: (devPath: string) => Promise<Array<{
+    id: string;
+    name: string;
+    path: string;
+    manifestPath: string;
+    manifest: any;
+    source?: 'userData' | 'development';
+    developmentPath?: string;
+    writable?: boolean;
+  }>>;
+  openPath: (targetPath: string) => Promise<boolean>;
+  getEnvironmentStatus: () => Promise<Record<string, any>>;
   logRendererError: (errorMsg: any) => Promise<boolean>;
 
   openSecondaryWindow: (id: string, componentType: string, title: string) => Promise<void>;

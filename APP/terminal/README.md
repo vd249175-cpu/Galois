@@ -1,6 +1,6 @@
 # 💻 Terminal Console（终端控制台插件）
 
-Terminal Console 是 DNOTE 的**命令执行器官**，提供基于 `xterm.js` + `node-pty` 的真实 PTY 终端体验。支持多标签页、项目工作目录自动切换，并在启动时自动接入 `agy` CLI 会话。
+Terminal Console 是 DNOTE 的**命令执行器官**，提供基于 `xterm.js` + `node-pty` 的真实 PTY 终端体验。支持多标签页、项目工作目录自动切换，并可按用户设置接入外部 `agy` CLI 会话。
 
 ---
 
@@ -20,10 +20,13 @@ Terminal Console 是 DNOTE 的**命令执行器官**，提供基于 `xterm.js` +
 - 标签页创建后，对应的 DOM 容器和 xterm 实例挂载到模块级 `xtermInstances` Map 中，生命周期独立于 React 组件树
 - 组件重新挂载时自动将孤儿容器重新附加到新的 DOM wrapper 中，恢复输出显示
 
-### 3. 🚀 agy CLI 自动接入
+### 3. 🚀 命令行助手可选接入
+`agy/Antigravity` 是外部可选工具，不随 DNOTE 打包，也不由 DNOTE 管理更新。
+
 首次在项目目录创建终端标签时：
-1. 自动发送 `agy\r` 启动 Antigravity CLI 会话
-2. 延迟 1500ms 后发送 `/add-dir {projectPath}\r`，将项目目录注册到 agy 工作上下文
+1. 如果用户 shell 已经自动启动了 Antigravity，DNOTE 只发送 `/add-dir {projectPath}` 同步工作目录。
+2. 如果设置中启用了“启动时自动运行外部 agy”，DNOTE 会发送 `agy --add-dir {projectPath}`。
+3. 默认不主动启动 `agy`，避免 packaged app 与用户自己的助手版本管理打架。
 
 ### 4. 🔄 项目切换自动追踪
 监听 `Blood: system.projectPath` 变化：

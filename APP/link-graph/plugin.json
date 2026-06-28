@@ -6,7 +6,9 @@
   "dependencies": [],
   "bloodChannels": [
     "system.projectPath",
-    "events.fileSaved.*"
+    "events.fileSaved.*",
+    "system.lastFocusedEditorId",
+    "system.activeEditors"
   ],
   "triggerConditions": {}
 }

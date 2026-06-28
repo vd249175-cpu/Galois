@@ -6,6 +6,7 @@ import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
 import { RightSidebar } from './RightSidebar';
 import { SettingsModal } from './SettingsModal';
+import { FirstRunSetup, shouldShowFirstRunSetup } from './FirstRunSetup';
 import { BloodDebugPanel } from './BloodDebugPanel';
 import { Blood } from './Blood';
 import { BC } from './BloodChannels';
@@ -14,20 +15,37 @@ import { TitleBar } from './TitleBar';
 import { defaultLayout } from './defaultLayout';
 import { applyTheme } from './themes';
 import './index.css';
-// Auto-register plugins through the normalized APP/[plugin]/index.ts entrypoint.
-const modules = import.meta.glob('../APP/*/index.ts', { eager: true });
-for (const path in modules) {
-  const mod = modules[path] as any;
-  for (const key in mod) {
-    const exportVal = mod[key];
-    if (exportVal && typeof exportVal === 'object' && exportVal.typeId && exportVal.component) {
-      ComponentRegistry.register(exportVal);
-    }
-  }
-}
+
+import { ServiceCollection, InstantiationService, InstantiationProvider } from './instantiation';
+import { 
+  StateService, IStateService, 
+  LayoutService, ILayoutService, 
+  WorkspaceService, IWorkspaceService,
+  FileService, IFileService,
+  ScriptExecutionService, IScriptExecutionService,
+  CommandService, ICommandService
+} from './services';
+import { PlatformService, IPlatformService } from './platform';
+import { ExtensionHostService, IExtensionHostService } from './extensionHost';
+
+
 
 // LeftActivityBar extracted to ./LeftActivityBar.tsx
 // TitleBar extracted to ./TitleBar.tsx
+
+const services = new ServiceCollection();
+const stateService = new StateService();
+services.set(IStateService, stateService);
+services.set(ILayoutService, new LayoutService(stateService));
+services.set(IWorkspaceService, new WorkspaceService(stateService));
+services.set(IFileService, new FileService(stateService));
+services.set(IScriptExecutionService, new ScriptExecutionService(stateService));
+services.set(ICommandService, new CommandService());
+const platformService = services.set(IPlatformService, new PlatformService());
+services.set(IExtensionHostService, new ExtensionHostService(platformService, stateService));
+
+const globalInstantiationService = new InstantiationService(services);
+
 
 export function App() {
   const getQueryParam = (key: string): string => {
@@ -147,7 +165,25 @@ export function App() {
     Blood.updateKey(BC.system.focusedAreaId, 'editor-root');
 
     const initApp = async () => {
-      // 0. Load global config and put it in Blood
+      // 0. Bootstrap runtime facts used by terminal, settings, and extension tooling.
+      try {
+        const [runtimeInfo, environmentStatus] = await Promise.all([
+          window.electronAPI.getRuntimeInfo(),
+          window.electronAPI.getEnvironmentStatus(),
+        ]);
+        Blood.updateKey(BC.system.runtimeMode, runtimeInfo.mode);
+        Blood.updateKey(BC.system.extensionPath, runtimeInfo.extensionPath);
+        Blood.updateKey(BC.system.sourcePluginPath, runtimeInfo.sourcePluginPath);
+        Blood.updateKey(BC.system.canWriteSourcePlugins, runtimeInfo.canWriteSourcePlugins);
+        Blood.updateKey(BC.system.agentWorkspace, runtimeInfo.agentWorkspace);
+        Blood.updateKey(BC.system.environmentStatus, environmentStatus);
+      } catch (err: any) {
+        Blood.updateKey(BC.system.environmentStatus, {
+          error: err?.message || 'Failed to inspect runtime environment',
+        });
+      }
+
+      // 1. Load global config and put it in Blood
       try {
         const config = await window.electronAPI.getConfig();
         if (config) {
@@ -155,7 +191,7 @@ export function App() {
         }
       } catch (_) {}
 
-      // 1. Restore last opened project from localStorage, fallback to dev default path via IPC
+      // 2. Restore last opened project from localStorage, fallback to dev default path via IPC
       const saved = localStorage.getItem('dnote_last_project');
       if (saved) {
         Blood.updateKey(BC.system.projectPath, saved);
@@ -269,6 +305,8 @@ export function App() {
 
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'shortcuts'>('general');
+  const [showFirstRunSetup, setShowFirstRunSetup] = useState(() => !isPopped && shouldShowFirstRunSetup());
 
   // Initial layout tree
   const [layout, setLayout] = useState<AreaLayout>(defaultLayout);
@@ -312,171 +350,193 @@ export function App() {
     const title = poppedTitleMap[poppedType] || '工作区窗格';
 
     return (
-      <div className="popped-window-root" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
-        <TitleBar title={title} />
-        <div style={{ flexGrow: 1, overflow: 'hidden' }}>
-          <AreaShell areaId={poppedAreaId} componentType={poppedType} isPopped={true} />
+      <InstantiationProvider value={globalInstantiationService}>
+        <div className="popped-window-root" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
+          <TitleBar title={title} />
+          <div style={{ flexGrow: 1, overflow: 'hidden' }}>
+            <AreaShell areaId={poppedAreaId} componentType={poppedType} isPopped={true} />
+          </div>
         </div>
-      </div>
+      </InstantiationProvider>
     );
   }
 
   const handleToggleSettings = () => {
+    setSettingsInitialTab('general');
+    setIsSettingsOpen(true);
+  };
+
+  const handleOpenEnvironmentSettings = () => {
+    setShowFirstRunSetup(false);
+    setSettingsInitialTab('environment');
     setIsSettingsOpen(true);
   };
 
   return (
-    <>
-      {/* Global SVG Liquid Glass Refraction Filter Definition */}
-      <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}>
-        <defs>
-          <filter id="liquid-glass-refraction-global" x="0%" y="0%" width="100%" height="100%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.006 0.012" numOctaves="2" result="noise" seed="3" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="18" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
+    <InstantiationProvider value={globalInstantiationService}>
+      <>
+        {/* Global SVG Liquid Glass Refraction Filter Definition */}
+        <svg style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none' }}>
+          <defs>
+            <filter id="liquid-glass-refraction-global" x="0%" y="0%" width="100%" height="100%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.006 0.012" numOctaves="2" result="noise" seed="3" />
+              <feDisplacementMap in="SourceGraphic" in2="noise" scale="18" xChannelSelector="R" yChannelSelector="G" />
+            </filter>
+          </defs>
+        </svg>
 
-      <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
-        <TitleBar />
-        <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', flexGrow: 1, overflow: 'hidden' }}>
-          <LeftActivityBar />
-          <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
-            {isAllClosed ? (
-              <div style={{
+        <div style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
+          <TitleBar />
+          <div className="app-workspace-root" style={{ display: 'flex', flexDirection: 'row', width: '100vw', flexGrow: 1, overflow: 'hidden' }}>
+            <LeftActivityBar />
+            <div className="layout-container" style={{ flexGrow: 1, height: '100%' }}>
+              {isAllClosed ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  height: '100%',
+                  gap: '24px',
+                  backgroundColor: 'var(--bg-main)',
+                }}>
+                  <div style={{ fontSize: '52px', opacity: 0.18, lineHeight: 1 }}>⬜</div>
+                  <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', opacity: 0.7 }}>
+                      工作区已清空
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      所有面板已关闭，点击下方按钮恢复默认布局
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleRestoreLayout}
+                    style={{
+                      padding: '10px 28px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--accent-color)',
+                      background: 'var(--highlight-color)',
+                      color: 'var(--accent-color)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      letterSpacing: '0.02em',
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = 'var(--accent-color)';
+                      (e.currentTarget as HTMLButtonElement).style.color = 'var(--bg-main)';
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLButtonElement).style.background = 'var(--highlight-color)';
+                      (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-color)';
+                    }}
+                  >
+                    恢复默认布局
+                  </button>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.5 }}>
+                    或在左侧活动栏点击图标打开新面板
+                  </div>
+                </div>
+              ) : (
+                <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
+              )}
+            </div>
+            <RightSidebar onToggleSettings={handleToggleSettings} />
+          </div>
+        </div>
+
+        {showFirstRunSetup && (
+          <FirstRunSetup
+            onDone={() => setShowFirstRunSetup(false)}
+            onOpenEnvironmentSettings={handleOpenEnvironmentSettings}
+          />
+        )}
+        {isSettingsOpen && (
+          <SettingsModal
+            initialTab={settingsInitialTab}
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
+        {process.env.NODE_ENV === 'development' && <BloodDebugPanel />}
+
+        {/* Toast Notifications Container */}
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          width: '360px',
+          pointerEvents: 'none'
+        }}>
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              style={{
+                pointerEvents: 'auto',
+                backgroundColor: 'var(--bg-main)',
+                border: '1.2px solid var(--border-color)',
+                borderLeft: '4px solid var(--accent-color)',
+                borderRadius: '8px',
+                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
+                padding: '12px 14px',
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '100%',
-                height: '100%',
-                gap: '24px',
-                backgroundColor: 'var(--bg-main)',
-              }}>
-                <div style={{ fontSize: '52px', opacity: 0.18, lineHeight: 1 }}>⬜</div>
-                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', opacity: 0.7 }}>
-                    工作区已清空
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    所有面板已关闭，点击下方按钮恢复默认布局
-                  </div>
-                </div>
+                gap: '6px',
+                animation: 'toast-slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)' }}>{toast.title}</span>
                 <button
-                  onClick={handleRestoreLayout}
+                  onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
                   style={{
-                    padding: '10px 28px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--accent-color)',
-                    background: 'var(--highlight-color)',
-                    color: 'var(--accent-color)',
-                    fontSize: '13px',
-                    fontWeight: 600,
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    letterSpacing: '0.02em',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'var(--accent-color)';
-                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--bg-main)';
-                  }}
-                  onMouseLeave={e => {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'var(--highlight-color)';
-                    (e.currentTarget as HTMLButtonElement).style.color = 'var(--accent-color)';
+                    fontSize: '12px',
+                    lineHeight: 1,
+                    padding: 0
                   }}
                 >
-                  恢复默认布局
+                  ✕
                 </button>
-                <div style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.5 }}>
-                  或在左侧活动栏点击图标打开新面板
-                </div>
               </div>
-            ) : (
-              <LayoutEngine layout={layout} onLayoutChange={handleLayoutChange} />
-            )}
-          </div>
-          <RightSidebar onToggleSettings={handleToggleSettings} />
-        </div>
-      </div>
-
-      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
-      {process.env.NODE_ENV === 'development' && <BloodDebugPanel />}
-
-      {/* Toast Notifications Container */}
-      <div style={{
-        position: 'fixed',
-        top: '20px',
-        right: '20px',
-        zIndex: 9999,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        width: '360px',
-        pointerEvents: 'none'
-      }}>
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            style={{
-              pointerEvents: 'auto',
-              backgroundColor: 'var(--bg-main)',
-              border: '1.2px solid var(--border-color)',
-              borderLeft: '4px solid var(--accent-color)',
-              borderRadius: '8px',
-              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.15)',
-              padding: '12px 14px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-              animation: 'toast-slide-in 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-main)' }}>{toast.title}</span>
-              <button
-                onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
-                style={{
-                  background: 'none',
-                  border: 'none',
+              <p style={{ fontSize: '11px', color: 'var(--text-main)', margin: 0, lineHeight: 1.4 }}>
+                {toast.message}
+              </p>
+              {toast.details && (
+                <pre style={{
+                  fontSize: '10px',
+                  backgroundColor: 'var(--bg-input)',
+                  border: '1.2px solid var(--border-color)',
                   color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  lineHeight: 1,
-                  padding: 0
-                }}
-              >
-                ✕
-              </button>
+                  padding: '6px 8px',
+                  borderRadius: '4px',
+                  margin: '4px 0 0 0',
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: 'var(--font-mono)',
+                  userSelect: 'text',
+                  lineHeight: 1.3
+                }}>
+                  {toast.details}
+                </pre>
+              )}
             </div>
-            <p style={{ fontSize: '11px', color: 'var(--text-main)', margin: 0, lineHeight: 1.4 }}>
-              {toast.message}
-            </p>
-            {toast.details && (
-              <pre style={{
-                fontSize: '10px',
-                backgroundColor: 'var(--bg-input)',
-                border: '1.2px solid var(--border-color)',
-                color: 'var(--text-muted)',
-                padding: '6px 8px',
-                borderRadius: '4px',
-                margin: '4px 0 0 0',
-                whiteSpace: 'pre-wrap',
-                fontFamily: 'var(--font-mono)',
-                userSelect: 'text',
-                lineHeight: 1.3
-              }}>
-                {toast.details}
-              </pre>
-            )}
-          </div>
-        ))}
-      </div>
-      <style>{`
-        @keyframes toast-slide-in {
-          from { transform: translateX(120%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-      `}</style>
-    </>
+          ))}
+        </div>
+        <style>{`
+          @keyframes toast-slide-in {
+            from { transform: translateX(120%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+          }
+        `}</style>
+      </>
+    </InstantiationProvider>
   );
 }
