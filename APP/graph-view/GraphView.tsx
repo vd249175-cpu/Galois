@@ -13,8 +13,8 @@ import { Blood } from '../../CORE/Blood';
  * GraphViewComponent — Lattice Graph 插件注册对象
  *
  * 契约声明：
- *   READS:  system.projectPath, system.resolvedTags, events.fileSaved.*,
- *           system.lastFocusedEditorId, system.activeEditors
+ *   READS:  system.projectPath, system.resolvedTags, system.config,
+ *           events.fileSaved.*, system.lastFocusedEditorId, system.activeEditors
  *   WRITES: events.openFile.{editorId}  (双击节点跳转)
  *           events.scriptError.graphView (lattice 脚本错误)
  *   DEPENDS ON: fileTree (提供 system.resolvedTags)
@@ -38,6 +38,7 @@ export const GraphViewComponent = {
     BC.system.projectPath,
     BC.system.resolvedTags,
     BC.system.fileSearchQuery,
+    BC.system.config,
     BC_PREFIX.fileSavedAll,
     BC.system.lastFocusedEditorId,
     BC.system.activeEditors,
@@ -48,6 +49,7 @@ export const GraphViewComponent = {
       BC.system.projectPath,
       BC.system.resolvedTags,       // 由 fileTree 写入，graphView 是消费者
       BC.system.fileSearchQuery,    // 与左侧文件树搜索联动
+      BC.system.config,             // 图谱字号配置
       BC_PREFIX.fileSavedAll,       // 文件保存时重建图谱
       BC.system.lastFocusedEditorId,
       BC.system.activeEditors,
@@ -74,6 +76,8 @@ function GraphView({
 }) {
   const projectPath = state[BC.system.projectPath] || '';
   const fileSearchQuery = String(state[BC.system.fileSearchQuery] || '');
+  const graphConfig = state[BC.system.config]?.graph || {};
+  const graphNodeBaseFontSize = Number(graphConfig.nodeFontSize) || 9;
   const fileSavedMap = state[BC_PREFIX.fileSavedAll] || {};
   const fileSavedEvent = Object.values(fileSavedMap).reduce((max: number, val: any) => Math.max(max, Number(val) || 0), 0);
 
@@ -379,8 +383,8 @@ function GraphView({
           <circle cx="12" cy="12" r="10" />
           <path d="M12 8v4M12 16h.01" />
         </svg>
-        <div style={{ fontSize: '13px', fontWeight: 600 }}>未打开项目文件夹</div>
-        <div style={{ fontSize: '11px', marginTop: '4px' }}>请在左侧笔记本中打开文件夹以计算标签格子关系图。</div>
+        <div style={{ fontSize: 'calc(var(--graph-control-font-size, 11px) + 2px)', fontWeight: 600 }}>未打开项目文件夹</div>
+        <div style={{ fontSize: 'var(--graph-control-font-size, 11px)', marginTop: '4px' }}>请在左侧笔记本中打开文件夹以计算标签格子关系图。</div>
       </div>
     );
   }
@@ -540,8 +544,8 @@ function GraphView({
                       }
                       return '#' + tags.slice(0, 2).join('#') + '... [' + tags.length + ']';
                     })();
-                    const height = 14 + 8 * (d / (d + 3.0));
-                    const fontSize = 8 + 3 * (d / (d + 3.0));
+                    const height = graphNodeBaseFontSize + 5 + 8 * (d / (d + 3.0));
+                    const fontSize = graphNodeBaseFontSize + 2 * (d / (d + 3.0));
                     const width = getPillWidth(displayLabel, fontSize);
 
                     return (
@@ -593,8 +597,8 @@ function GraphView({
                   } else {
                     const radius = 6 + 10 * (d / (d + 3.0));
                     const rCurrent = isHighlight ? radius + 2.5 : radius;
-                    const textY = rCurrent + 11;
-                    const textFS = isHighlight ? 9.5 : 8.5;
+                    const textY = rCurrent + graphNodeBaseFontSize + 2;
+                    const textFS = isHighlight ? graphNodeBaseFontSize + 1 : graphNodeBaseFontSize;
 
                     return (
                       <>

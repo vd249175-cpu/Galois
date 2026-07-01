@@ -1,6 +1,6 @@
 # ⚙️ Preferences（偏好设置插件）
 
-Preferences 是 DNOTE 的**系统配置器官**，提供键盘快捷键的录制与自定义、主题偏好查看等功能。
+Preferences 是 Galois 的**系统配置器官**，提供键盘快捷键录制、自定义与基础偏好查看。
 
 ---
 

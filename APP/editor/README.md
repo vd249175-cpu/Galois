@@ -1,6 +1,6 @@
 # 🧬 Lattice Editor（文本编辑器插件）
 
-Lattice Editor 是 DNOTE 的**核心编辑器官**。它不仅是支持 Markdown 双栏预览与实时 YAML 标签编辑的记笔记工具，更是多媒体归档、Lattice Graph 拓扑联动、反应式 Python 脚本绑定和斜线指令系统的枢纽。
+Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏预览、实时 YAML 标签编辑、多媒体归档、Lattice Graph 联动、反应式脚本绑定和斜线指令系统。
 
 ---
 

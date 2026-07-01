@@ -33,6 +33,38 @@ const CATEGORY_BY_ID: Record<string, string> = {
   'code-block': '代码',
 };
 
+const DEFAULT_COMMAND_ORDER = [
+  'h1',
+  'h2',
+  'h3',
+  'bold',
+  'italic',
+  'strike',
+  'highlight',
+  'code-inline',
+  'link',
+  'wiki-link',
+  'bullet',
+  'number',
+  'todo',
+  'table',
+  'quote',
+  'callout',
+  'code-block',
+  'hr',
+];
+
+const DEFAULT_ORDER_WEIGHT = new Map(DEFAULT_COMMAND_ORDER.map((id, index) => [id, index]));
+
+function commandOrder(command: SlashCommandLike) {
+  if (DEFAULT_ORDER_WEIGHT.has(command.id)) {
+    return DEFAULT_ORDER_WEIGHT.get(command.id)!;
+  }
+  if (command.id.startsWith('project.')) return 200;
+  if (command.id.startsWith('custom.')) return 300;
+  return 250;
+}
+
 function normalize(value: string) {
   return value.toLowerCase().replace(/\s+/g, '');
 }
@@ -75,11 +107,15 @@ export function filterAndRankSlashCommands(
       return {
         ...command,
         category,
+        order: commandOrder(command),
         score: score + (recentWeight.get(command.id) || 0) * 8,
       };
     })
     .filter((command) => !query || command.score > 0)
-    .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+    .sort((a, b) => {
+      if (!query) return a.order - b.order || a.label.localeCompare(b.label);
+      return b.score - a.score || a.order - b.order || a.label.localeCompare(b.label);
+    });
 }
 
 export function rememberSlashCommand(recentIds: string[], commandId: string, limit = 8) {

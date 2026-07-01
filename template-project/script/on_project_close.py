@@ -3,7 +3,7 @@ import json
 import time
 import signal
 
-print("[Lifecycle] DNOTE project closed.")
+print("[Lifecycle] Galois project closed.")
 project_path = os.environ.get('DNOTE_PROJECT_PATH', '.')
 cache_dir = os.path.join(project_path, '.dnote_cache')
 os.makedirs(cache_dir, exist_ok=True)

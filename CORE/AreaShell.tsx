@@ -391,7 +391,7 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
           className="area-header-title"
           style={{
             fontWeight: 600,
-            fontSize: '11px',
+            fontSize: 'var(--panel-title-size, 11px)',
             color: 'var(--text-main)',
             userSelect: 'none',
             whiteSpace: 'nowrap',

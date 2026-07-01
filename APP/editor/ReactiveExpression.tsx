@@ -305,7 +305,7 @@ export function ReactiveExpression({
           }}
         >
           <span style={{ fontWeight: 700, borderBottom: '1px solid rgba(0,0,0,0.06)', paddingBottom: '3px', marginBottom: '3px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>⚡ DNOTE RUNNER</span>
+            <span>⚡ Galois RUNNER</span>
             <span style={{
               fontSize: '8px',
               padding: '1px 4px',

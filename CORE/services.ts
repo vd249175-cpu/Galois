@@ -100,7 +100,7 @@ export class LayoutService implements ILayoutService {
 }
 
 // ============================================================================
-// 3. IWorkspaceService — DNOTE projects, files, and note operations
+// 3. IWorkspaceService — Galois projects, files, and note operations
 // ============================================================================
 
 export const IWorkspaceService = createDecorator<IWorkspaceService>('workspaceService');

@@ -44,6 +44,12 @@ const xtermInstances = new Map<string, XTermInstance>();
 /** Tab IDs that have already had their assistant initialization commands sent */
 const startedTabIds = new Set<string>();
 
+/** Last time we attempted to auto-launch AGY for a tab */
+const agyLaunchAttempts = new Map<string, number>();
+
+/** Tabs that have emitted Antigravity/AGY output */
+const antigravityDetectedTabIds = new Set<string>();
+
 /** Blood keys for terminal state — use BC constants from BloodChannels */
 const BLOOD_TABS       = BC.system.terminalTabs;
 const BLOOD_ACTIVE_TAB = BC.system.terminalActiveTabId;
@@ -58,10 +64,21 @@ function normalizeAgentDir(dirPath: string): string {
 
 function getAgentWorkspaceDirs(notesProject: string): string[] {
   const runtimeWorkspace = Blood.getValue<{ readableDirs?: string[] } | null>(BC.system.agentWorkspace, null);
+  const sourcePluginPath = normalizeAgentDir(Blood.getValue<string>(BC.system.sourcePluginPath, ''));
   return Array.from(new Set([
     notesProject,
     ...(runtimeWorkspace?.readableDirs || []),
-  ].filter(Boolean))).map(normalizeAgentDir);
+  ].filter(Boolean)))
+    .filter((dirPath) => normalizeAgentDir(dirPath) !== sourcePluginPath)
+    .map(normalizeAgentDir);
+}
+
+function getAutoStartAgy(config: any): boolean {
+  return config?.terminal?.autoStartAgy !== false;
+}
+
+function getAgyLaunchThrottleMs(): number {
+  return 2500;
 }
 
 // ─── Plugin manifest ──────────────────────────────────────────────────────────
@@ -80,10 +97,10 @@ export const TerminalComponent = {
   ),
   component: TerminalView,
   actions: terminalActions,
-  bloodChannels: [BC.system.projectPath, BC.system.agentWorkspace],
+  bloodChannels: [BC.system.projectPath, BC.system.agentWorkspace, BC.system.config],
   manifest: {
     description: '原生 PTY 终端（xterm.js + node-pty），可选接入外部 agy 并同步笔记项目',
-    reads: [BC.system.projectPath, BC.system.agentWorkspace],
+    reads: [BC.system.projectPath, BC.system.agentWorkspace, BC.system.config],
     writes: [
       BC.system.terminalTabs,         // Tab 列表持久化到 Blood
       BC.system.terminalActiveTabId,  // 活跃 Tab ID
@@ -104,6 +121,13 @@ function TerminalView({
   const projectPath = useBloodChannel([BC.system.projectPath], () =>
     Blood.getValue<string>(BC.system.projectPath, '')
   );
+  const focusedAreaId = useBloodChannel([BC.system.focusedAreaId], () =>
+    Blood.getValue<string | null>(BC.system.focusedAreaId, null)
+  );
+  const terminalFontSize = useBloodChannel([BC.system.config], () => {
+    const config = Blood.getValue<any>(BC.system.config, {});
+    return Number(config?.terminal?.fontSize) || 13;
+  });
 
   // Mirror Blood tabs into local state for rendering
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
@@ -130,6 +154,31 @@ function TerminalView({
     setActiveTabId(id);
   }, []);
 
+  const tryLaunchAgy = useCallback((tabId: string, notesProject: string, reason: 'spawn' | 'focus') => {
+    const config = Blood.getValue<any>(BC.system.config, {});
+    if (!getAutoStartAgy(config)) return;
+    if (antigravityDetectedTabIds.has(tabId)) return;
+
+    const lastAttempt = agyLaunchAttempts.get(tabId) || 0;
+    if (reason === 'focus' && lastAttempt && Date.now() - lastAttempt < getAgyLaunchThrottleMs()) {
+      return;
+    }
+
+    const agentDirs = getAgentWorkspaceDirs(notesProject);
+    agyLaunchAttempts.set(tabId, Date.now());
+    startedTabIds.add(tabId);
+
+    setTimeout(() => {
+      if (antigravityDetectedTabIds.has(tabId)) return;
+      if (agentDirs.length > 0) {
+        const addDirArgs = agentDirs.map((dir) => `--add-dir ${shellQuote(dir)}`).join(' ');
+        window.electronAPI.writeTerminal(tabId, `agy ${addDirArgs}\r`);
+      } else {
+        window.electronAPI.writeTerminal(tabId, 'agy\r');
+      }
+    }, reason === 'spawn' ? 600 : 180);
+  }, []);
+
   // ─── Create a brand-new xterm + PTY tab ──────────────────────────────────
 
   const spawnTab = useCallback((tabId: string, tabName: string, notesProject: string, skipBloodUpdate = false) => {
@@ -153,7 +202,7 @@ function TerminalView({
     // ── Create xterm instance ──
     const term = new XTerm({
       fontFamily: '"JetBrains Mono","Cascadia Code",Menlo,monospace',
-      fontSize: 13,
+      fontSize: terminalFontSize,
       lineHeight: 1.4,
       theme: {
         background: '#141414', foreground: '#cccccc',
@@ -177,12 +226,10 @@ function TerminalView({
     term.open(container);
     setTimeout(() => { fit.fit(); term.focus(); }, 30);
 
-    let detectedAntigravity = false;
-
     // ── PTY output → xterm ──
     const unsubOutput = window.electronAPI.onTerminalOutput(tabId, (data: string) => {
       if (data && data.toLowerCase().includes('antigravity')) {
-        detectedAntigravity = true;
+        antigravityDetectedTabIds.add(tabId);
       }
       term.write(data);
     });
@@ -202,40 +249,7 @@ function TerminalView({
     window.electronAPI
       .spawnTerminal(tabId, dir, term.cols || 80, term.rows || 24)
       .then(() => {
-        // Only send auto-start once per tab ID, ever
-        if (!startedTabIds.has(tabId)) {
-          startedTabIds.add(tabId);
-          // Wait 600ms to check if "Antigravity" output was generated during shell startup
-          setTimeout(() => {
-            const agentDirs = getAgentWorkspaceDirs(notesProject);
-            const config = Blood.getValue<any>(BC.system.config, {});
-            const autoStartAgy = config?.terminal?.autoStartAgy === true;
-            if (detectedAntigravity) {
-              // Shell already auto-started agy. Sync every known workspace dir.
-              agentDirs.forEach((dir, index) => {
-                setTimeout(() => {
-                  window.electronAPI.writeTerminal(tabId, `/add-dir ${dir}\r`);
-                }, index * 250);
-              });
-            } else if (!autoStartAgy) {
-              // agy is an external optional tool. Do not start it unless the user opts in.
-              return;
-            } else {
-              // Start agy in the project, then add extension/source dirs after startup.
-              if (agentDirs.length > 0) {
-                const [primaryDir, ...extraDirs] = agentDirs;
-                window.electronAPI.writeTerminal(tabId, `agy --add-dir ${shellQuote(primaryDir)}\r`);
-                extraDirs.forEach((dir, index) => {
-                  setTimeout(() => {
-                    window.electronAPI.writeTerminal(tabId, `/add-dir ${dir}\r`);
-                  }, 1400 + index * 250);
-                });
-              } else {
-                window.electronAPI.writeTerminal(tabId, 'agy\r');
-              }
-            }
-          }, 600);
-        }
+        tryLaunchAgy(tabId, notesProject, 'spawn');
       })
       .catch((err: any) => {
         term.write(`\r\n\x1b[31m[错误] PTY 启动失败: ${err.message}\x1b[0m\r\n`);
@@ -249,7 +263,14 @@ function TerminalView({
       applyTabs(newTabs);
       applyActiveTabId(tabId);
     }
-  }, [applyTabs, applyActiveTabId]);
+  }, [applyTabs, applyActiveTabId, tryLaunchAgy, terminalFontSize]);
+
+  useEffect(() => {
+    for (const inst of xtermInstances.values()) {
+      inst.term.options.fontSize = terminalFontSize;
+      setTimeout(() => inst.fit.fit(), 0);
+    }
+  }, [terminalFontSize]);
 
   // ─── On appDir ready: restore from Blood or bootstrap ────────────────────
 
@@ -356,6 +377,19 @@ function TerminalView({
     spawnTab(tabId, shortName, projectPath);
   }, [projectPath, appDir, areaId, spawnTab, applyActiveTabId]);
 
+  // ─── When user focuses the terminal area, give AGY a second chance ───────
+  useEffect(() => {
+    if (focusedAreaId !== areaId) return;
+    if (!activeTabId) return;
+    const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
+    if (!activeTab) return;
+
+    // If the first attempt happened before the shell was ready, allow a retry on focus.
+    if (!antigravityDetectedTabIds.has(activeTab.id)) {
+      tryLaunchAgy(activeTab.id, activeTab.projectPath, 'focus');
+    }
+  }, [focusedAreaId, areaId, activeTabId, tabs, tryLaunchAgy]);
+
   // ─── Toolbar actions ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -378,6 +412,8 @@ function TerminalView({
 
     window.electronAPI.killTerminal(tabId);
     startedTabIds.delete(tabId);
+    agyLaunchAttempts.delete(tabId);
+    antigravityDetectedTabIds.delete(tabId);
 
     const inst = xtermInstances.get(tabId);
     if (inst) {

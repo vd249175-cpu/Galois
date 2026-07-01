@@ -63,7 +63,7 @@ for filename in os.listdir(project_path):
         continue
 
 # 也加入自身的静态标签（保留 05 本身的分类标签）
-own_static = ["DNOTE", "指引", "总结", "写作技巧", "笔记结构", "知识管理"]
+own_static = ["Galois", "指引", "总结", "写作技巧", "笔记结构", "知识管理"]
 all_tags.update(own_static)
 
 tags_list = sorted(all_tags)

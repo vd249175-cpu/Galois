@@ -1,11 +1,17 @@
 ---
 name: dnote-search
-description: Search specifications for DNOTE workspaces, covering tag query tokenization, infix-to-postfix boolean logic evaluation, and note filtering patterns.
+description: "Use in Galois Assist Mode or file-tree build work when explaining, constructing, debugging, or implementing note search queries, tag boolean expressions, regex tag filters, and file filtering behavior."
 ---
 
-# DNOTE Search Specifications & Logic Evaluation (`dnote-search`)
+# Galois Search Specifications & Logic Evaluation (`dnote-search`)
 
-本文档定义 DNOTE 文件浏览器（Lattice Explorer）中搜索框所支持的语法、查询分词规则，以及布尔逻辑匹配算法。
+本文档定义 Galois 文件浏览器（Lattice Explorer）中搜索框所支持的语法、查询分词规则，以及布尔逻辑匹配算法。
+
+## 0. 模式边界
+
+**Assist Mode**：用户想找笔记、构造搜索条件、解释为什么某篇笔记被筛出/筛入时，使用本 skill。必要时先读 `.dnote_runtime.json` 获取当前项目路径。
+
+**Build Mode**：用户要修改搜索框、标签布尔逻辑、文件树过滤或图谱与搜索联动时，使用本 skill 辅助实现。搜索实现属于 `APP/file-tree` 和相关工具，不应放入笔记项目脚本。
 
 ---
 
@@ -45,7 +51,7 @@ description: Search specifications for DNOTE workspaces, covering tag query toke
 
 ## 2. 查询分词 (`tokenizeQuery`)
 
-DNOTE 使用以下正则表达式对查询字符串进行分词：
+Galois 使用以下正则表达式对查询字符串进行分词：
 
 ```
 /(#re:\S+|re:\S+|\(|\)|#\/[^\/]+\/[a-z]*|#[^\s()#]+|and|add|or|not|&&|\|\||!|\S+)/gi
@@ -63,7 +69,7 @@ DNOTE 使用以下正则表达式对查询字符串进行分词：
 
 ## 3. 布尔逻辑求值 (`evaluateBoolean`)
 
-DNOTE 使用**调度场算法（Shunting-Yard）**将中缀表达式转换为后缀（RPN）再求值，
+Galois 使用**调度场算法（Shunting-Yard）**将中缀表达式转换为后缀（RPN）再求值，
 支持任意嵌套的括号分组和多级优先级：
 
 ### 3.1 操作符优先级

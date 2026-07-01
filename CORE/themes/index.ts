@@ -35,7 +35,35 @@ export const themes: Record<string, ThemeEntry> = {
   },
 };
 
+export type AvailableTheme = {
+  id: string;
+  name: string;
+  path?: string;
+  source?: string;
+};
+
+export async function listAvailableThemes(): Promise<AvailableTheme[]> {
+  try {
+    const externalThemes = await window.electronAPI?.listThemes?.();
+    if (externalThemes?.length) {
+      const merged = new Map<string, AvailableTheme>();
+      Object.entries(themes).forEach(([id, theme]) => merged.set(id, { id, name: theme.name, source: 'builtin' }));
+      externalThemes.forEach((theme) => merged.set(theme.id, theme));
+      return Array.from(merged.values());
+    }
+  } catch (err) {
+    console.warn('[themes] Failed to list external themes:', err);
+  }
+  return Object.entries(themes).map(([id, theme]) => ({ id, name: theme.name, source: 'builtin' }));
+}
+
 async function resolveThemeCss(themeId: string, theme: ThemeEntry): Promise<string> {
+  try {
+    const externalCss = await window.electronAPI?.getThemeCss?.(themeId);
+    if (externalCss) return externalCss;
+  } catch (err) {
+    console.warn('[themes] Failed to load external theme:', err);
+  }
   if (theme.css) return theme.css;
   if (!theme.url) return defaultLight;
   const cached = themeCssCache.get(themeId);
@@ -51,6 +79,7 @@ async function resolveThemeCss(themeId: string, theme: ThemeEntry): Promise<stri
 
 export async function applyTheme(themeId: string) {
   const theme = themes[themeId] || themes['default-light'];
+  themeCssCache.delete(themeId);
   let styleEl = document.getElementById('dnote-theme-style');
   if (!styleEl) {
     styleEl = document.createElement('style');

@@ -2,12 +2,22 @@ import { useState, useEffect } from 'react';
 import { ActionRegistry } from './ActionRegistry';
 import { Blood, useBloodChannel } from './Blood';
 import { BC } from './BloodChannels';
-import { themes, applyTheme } from './themes';
+import { themes, applyTheme, listAvailableThemes, type AvailableTheme } from './themes';
 
 interface SettingsModalProps {
   onClose: () => void;
   initialTab?: 'general' | 'shortcuts';
 }
+
+const EDITOR_FONT_FAMILY_OPTIONS = [
+  { label: 'Fira Code', value: 'Fira Code' },
+  { label: 'JetBrains Mono', value: 'JetBrains Mono' },
+  { label: 'SF Mono', value: 'SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, monospace' },
+  { label: 'Menlo', value: 'Menlo, Monaco, Consolas, monospace' },
+  { label: '苹方 / Sans', value: 'PingFang SC, Hiragino Sans GB, var(--font-sans)' },
+  { label: '宋体 / Serif', value: 'Songti SC, Noto Serif CJK SC, serif' },
+  { label: '系统无衬线', value: 'var(--font-sans)' },
+];
 
 export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'general' | 'shortcuts'>(initialTab);
@@ -16,15 +26,27 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
 
   // Configuration states
   const [theme, setTheme] = useState<string>('default-light');
+  const [availableThemes, setAvailableThemes] = useState<AvailableTheme[]>(
+    Object.entries(themes).map(([id, t]) => ({ id, name: t.name, source: 'builtin' }))
+  );
   const [editorFontSize, setEditorFontSize] = useState<number>(14);
   const [editorFontFamily, setEditorFontFamily] = useState<string>('Fira Code');
   const [editorLineHeight, setEditorLineHeight] = useState<number>(1.6);
   const [editorAutosaveDelay, setEditorAutosaveDelay] = useState<number>(500);
   const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
-  const [terminalAutoStartAgy, setTerminalAutoStartAgy] = useState<boolean>(false);
+  const [terminalAutoStartAgy, setTerminalAutoStartAgy] = useState<boolean>(true);
+  const [uiFontSize, setUiFontSize] = useState<number>(12);
+  const [panelTitleSize, setPanelTitleSize] = useState<number>(11);
+  const [sidebarLabelSize, setSidebarLabelSize] = useState<number>(11);
   const [sidebarIconSize, setSidebarIconSize] = useState<number>(14);
   const [fileTreeTitleSize, setFileTreeTitleSize] = useState<number>(11);
   const [fileTreeTagSize, setFileTreeTagSize] = useState<number>(8.5);
+  const [slashMenuTitleSize, setSlashMenuTitleSize] = useState<number>(11);
+  const [slashMenuDescriptionSize, setSlashMenuDescriptionSize] = useState<number>(9);
+  const [timelineFontSize, setTimelineFontSize] = useState<number>(11);
+  const [graphNodeFontSize, setGraphNodeFontSize] = useState<number>(9);
+  const [graphControlFontSize, setGraphControlFontSize] = useState<number>(11);
+  const [graphDrawerFontSize, setGraphDrawerFontSize] = useState<number>(12);
 
   const focusedAreaId = useBloodChannel(['system.focusedAreaId'], () =>
     Blood.getValue<string | null>('system.focusedAreaId', null)
@@ -38,10 +60,11 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
     setActiveTab(initialTab);
   }, [initialTab]);
 
-  // Load configuration from userData
+  // Load configuration from the user-visible Galois home in Documents.
   useEffect(() => {
     const loadConfig = async () => {
       try {
+        setAvailableThemes(await listAvailableThemes());
         const config = await window.electronAPI.getConfig();
         if (config) {
           if (config.theme) setTheme(config.theme);
@@ -56,9 +79,20 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
             if (config.terminal.autoStartAgy !== undefined) setTerminalAutoStartAgy(config.terminal.autoStartAgy);
           }
           if (config.appearance) {
+            if (config.appearance.uiFontSize) setUiFontSize(config.appearance.uiFontSize);
+            if (config.appearance.panelTitleSize) setPanelTitleSize(config.appearance.panelTitleSize);
+            if (config.appearance.sidebarLabelSize) setSidebarLabelSize(config.appearance.sidebarLabelSize);
             if (config.appearance.sidebarIconSize) setSidebarIconSize(config.appearance.sidebarIconSize);
             if (config.appearance.fileTreeTitleSize) setFileTreeTitleSize(config.appearance.fileTreeTitleSize);
             if (config.appearance.fileTreeTagSize) setFileTreeTagSize(config.appearance.fileTreeTagSize);
+            if (config.appearance.slashMenuTitleSize) setSlashMenuTitleSize(config.appearance.slashMenuTitleSize);
+            if (config.appearance.slashMenuDescriptionSize) setSlashMenuDescriptionSize(config.appearance.slashMenuDescriptionSize);
+            if (config.appearance.timelineFontSize) setTimelineFontSize(config.appearance.timelineFontSize);
+          }
+          if (config.graph) {
+            if (config.graph.nodeFontSize) setGraphNodeFontSize(config.graph.nodeFontSize);
+            if (config.graph.controlFontSize) setGraphControlFontSize(config.graph.controlFontSize);
+            if (config.graph.drawerFontSize) setGraphDrawerFontSize(config.graph.drawerFontSize);
           }
         }
       } catch (err) {
@@ -83,6 +117,10 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
           ...config.terminal,
           ...updatedFields.terminal,
         },
+        graph: {
+          ...config.graph,
+          ...updatedFields.graph,
+        },
         appearance: {
           ...config.appearance,
           ...updatedFields.appearance,
@@ -104,6 +142,46 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
     // Broadcast via Blood to all other windows
     Blood.updateKey(BC.events.themeChanged, newTheme);
   };
+
+  const hasKnownEditorFontFamily = EDITOR_FONT_FAMILY_OPTIONS.some((option) => option.value === editorFontFamily);
+
+  const renderNumberSetting = (
+    label: string,
+    value: number,
+    setValue: (value: number) => void,
+    section: 'appearance' | 'editor' | 'terminal' | 'graph',
+    field: string,
+    fallback: number,
+    min: number,
+    max: number,
+    step: number = 1
+  ) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <label style={{ fontSize: 'var(--ui-font-size, 12px)', color: 'var(--text-muted)' }}>{label}</label>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => {
+          const val = Number(e.target.value) || fallback;
+          setValue(val);
+          saveConfig({ [section]: { [field]: val } });
+        }}
+        style={{
+          width: '60px',
+          padding: '4px 6px',
+          borderRadius: '4px',
+          border: '1px solid var(--border-color)',
+          backgroundColor: 'var(--bg-input)',
+          color: 'var(--text-main)',
+          fontSize: 'var(--ui-font-size, 12px)',
+          textAlign: 'center'
+        }}
+      />
+    </div>
+  );
 
   // Keyboard shortcut listener
   useEffect(() => {
@@ -210,7 +288,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
               color: activeTab === 'general' ? 'var(--text-main)' : 'var(--text-muted)',
               cursor: 'pointer',
               fontWeight: activeTab === 'general' ? 'bold' : 'normal',
-              fontSize: '13px'
+              fontSize: 'var(--panel-title-size, 11px)'
             }}
           >
             🎨 常规设置
@@ -225,7 +303,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
               color: activeTab === 'shortcuts' ? 'var(--text-main)' : 'var(--text-muted)',
               cursor: 'pointer',
               fontWeight: activeTab === 'shortcuts' ? 'bold' : 'normal',
-              fontSize: '13px'
+              fontSize: 'var(--panel-title-size, 11px)'
             }}
           >
             ⌨️ 快捷键
@@ -237,7 +315,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {/* Theme Settings */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 'bold' }}>界面主题</label>
+                <label style={{ fontSize: 'calc(var(--panel-title-size, 11px) + 2px)', fontWeight: 'bold' }}>界面主题</label>
                 <select
                   value={theme}
                   onChange={(e) => handleThemeChange(e.target.value)}
@@ -247,21 +325,28 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
                     border: '1px solid var(--border-color)',
                     backgroundColor: 'var(--bg-input)',
                     color: 'var(--text-main)',
-                    fontSize: '13px',
+                    fontSize: 'var(--ui-font-size, 12px)',
                     outline: 'none'
                   }}
                 >
-                  {Object.entries(themes).map(([id, t]) => (
-                    <option key={id} value={id}>
+                  {availableThemes.map((t) => (
+                    <option key={t.id} value={t.id}>
                       {t.name}
                     </option>
                   ))}
                 </select>
+                <div style={{ fontSize: 'calc(var(--ui-font-size, 12px) - 1px)', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                  主题 CSS 位于 ~/Documents/Galois/config/themes/，可直接复制或修改。
+                </div>
               </div>
 
               {/* Appearance Settings */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>界面外观设置</span>
+                <span style={{ fontSize: 'calc(var(--panel-title-size, 11px) + 2px)', fontWeight: 'bold' }}>界面外观设置</span>
+
+                {renderNumberSetting('界面基础文字 (px)', uiFontSize, setUiFontSize, 'appearance', 'uiFontSize', 12, 10, 18)}
+                {renderNumberSetting('面板标题文字 (px)', panelTitleSize, setPanelTitleSize, 'appearance', 'panelTitleSize', 11, 9, 18)}
+                {renderNumberSetting('侧栏文字大小 (px)', sidebarLabelSize, setSidebarLabelSize, 'appearance', 'sidebarLabelSize', 11, 9, 18)}
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>侧栏图标大小 (px)</label>
@@ -338,11 +423,15 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
                     }}
                   />
                 </div>
+
+                {renderNumberSetting('Slash 命令标题 (px)', slashMenuTitleSize, setSlashMenuTitleSize, 'appearance', 'slashMenuTitleSize', 11, 9, 18)}
+                {renderNumberSetting('Slash 命令说明 (px)', slashMenuDescriptionSize, setSlashMenuDescriptionSize, 'appearance', 'slashMenuDescriptionSize', 9, 8, 16)}
+                {renderNumberSetting('视频时间轴文字 (px)', timelineFontSize, setTimelineFontSize, 'appearance', 'timelineFontSize', 11, 9, 18)}
               </div>
 
               {/* Editor Settings */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>编辑器设置</span>
+                <span style={{ fontSize: 'calc(var(--panel-title-size, 11px) + 2px)', fontWeight: 'bold' }}>编辑器设置</span>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>字体大小 (px)</label>
@@ -369,8 +458,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>字体族 (Family)</label>
-                  <input
-                    type="text"
+                  <select
                     value={editorFontFamily}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -378,16 +466,22 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
                       saveConfig({ editor: { fontFamily: val } });
                     }}
                     style={{
-                      width: '120px',
+                      width: '170px',
                       padding: '4px 6px',
                       borderRadius: '4px',
                       border: '1px solid var(--border-color)',
                       backgroundColor: 'var(--bg-input)',
                       color: 'var(--text-main)',
                       fontSize: '12px',
-                      textAlign: 'right'
                     }}
-                  />
+                  >
+                    {!hasKnownEditorFontFamily && editorFontFamily && (
+                      <option value={editorFontFamily}>{editorFontFamily}</option>
+                    )}
+                    {EDITOR_FONT_FAMILY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -438,9 +532,17 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
                 </div>
               </div>
 
+              {/* Graph Settings */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
+                <span style={{ fontSize: 'calc(var(--panel-title-size, 11px) + 2px)', fontWeight: 'bold' }}>图谱文字设置</span>
+                {renderNumberSetting('节点标签文字 (px)', graphNodeFontSize, setGraphNodeFontSize, 'graph', 'nodeFontSize', 9, 7, 18, 0.5)}
+                {renderNumberSetting('控制面板文字 (px)', graphControlFontSize, setGraphControlFontSize, 'graph', 'controlFontSize', 11, 9, 18)}
+                {renderNumberSetting('详情抽屉文字 (px)', graphDrawerFontSize, setGraphDrawerFontSize, 'graph', 'drawerFontSize', 12, 9, 18)}
+              </div>
+
               {/* Terminal Settings */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 'bold' }}>终端设置</span>
+                <span style={{ fontSize: 'calc(var(--panel-title-size, 11px) + 2px)', fontWeight: 'bold' }}>终端设置</span>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>字体大小 (px)</label>
@@ -473,7 +575,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
                     onChange={(e) => {
                       const val = e.target.checked;
                       setTerminalAutoStartAgy(val);
-                      saveConfig({ terminal: { autoStartAgy: val } });
+                      saveConfig({ terminal: { autoStartAgy: val, autoStartAgyConfigured: true } });
                     }}
                     style={{
                       width: '16px',
@@ -487,7 +589,7 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
             </div>
           ) : (
             <div>
-              <div style={{ marginBottom: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+              <div style={{ marginBottom: '8px', fontSize: 'var(--ui-font-size, 12px)', color: 'var(--text-muted)' }}>
                 为全局操作和当前聚焦的页面配置快捷键。
               </div>
 

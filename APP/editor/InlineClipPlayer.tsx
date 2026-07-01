@@ -28,6 +28,7 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
   const rafRef = useRef<number>(0);
   const isScrubbingRef = useRef(false);
   const wasMutedRef = useRef(false);
+  const wasPlayingBeforeScrubRef = useRef(false);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -112,15 +113,28 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
     isScrubbingRef.current = true;
     setIsScrubbing(true);
     wasMutedRef.current = v.muted;
+    wasPlayingBeforeScrubRef.current = !v.paused;
     v.muted = true;
-    if (isPlaying) { v.pause(); }
+    if (wasPlayingBeforeScrubRef.current) {
+      v.pause();
+      setIsPlaying(false);
+    }
     startScrub(e.clientX);
 
     const onMove = (me: MouseEvent) => { me.preventDefault(); startScrub(me.clientX); };
     const onUp = () => {
       isScrubbingRef.current = false;
       setIsScrubbing(false);
-      if (v) v.muted = wasMutedRef.current;
+      if (v) {
+        v.muted = wasMutedRef.current;
+        if (wasPlayingBeforeScrubRef.current) {
+          v.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        } else {
+          v.pause();
+          setIsPlaying(false);
+        }
+      }
+      wasPlayingBeforeScrubRef.current = false;
       window.removeEventListener('mousemove', onMove, { capture: true });
       window.removeEventListener('mouseup', onUp, { capture: true });
     };
@@ -151,9 +165,12 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
 
   return (
     <div
+      className="inline-clip-player"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDragStart={(e) => e.preventDefault()}
       style={{
         display: 'inline-flex',
         flexDirection: 'column',
@@ -186,6 +203,7 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
         <video
           ref={videoRef}
           src={videoSrc}
+          draggable={false}
           muted={false}
           playsInline
           preload="metadata"

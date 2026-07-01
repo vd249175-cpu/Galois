@@ -45,6 +45,16 @@ export function useRuntimeSync(areaId: string) {
           projectPath,
           activeEditorId: lastFocusedEditorId,
           activeFile: cursor?.filePath || null,
+          openFiles: Object.fromEntries(
+            Object.entries(Blood.getRawState() || {})
+              .filter(([key, value]) => key.startsWith(BC_PREFIX.openFileAll) && typeof value === 'string' && value)
+              .map(([key, value]) => [key.slice(BC_PREFIX.openFileAll.length), value])
+          ),
+          cursors: Object.fromEntries(
+            Object.entries(Blood.getRawState() || {})
+              .filter(([key, value]) => key.startsWith(BC_PREFIX.editorCursorAll) && value && typeof value === 'object')
+              .map(([key, value]) => [key.slice(BC_PREFIX.editorCursorAll.length), value])
+          ),
           cursor: cursor
             ? {
                 line: cursor.line,
@@ -61,6 +71,7 @@ export function useRuntimeSync(areaId: string) {
             filePath,
             JSON.stringify(runtimeState, null, 2)
           );
+          await (window as any).electronAPI.setProjectState(projectPath, runtimeState);
         } catch (err) {
           // Non-fatal: runtime file is best-effort for AI context
           console.warn('[useRuntimeSync] Failed to write .dnote_runtime.json:', err);

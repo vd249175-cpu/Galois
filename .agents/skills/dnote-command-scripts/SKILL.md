@@ -1,18 +1,59 @@
 ---
 name: dnote-command-scripts
-description: Covenants and guidelines for DNOTE notebook project commands, commands.json, reactive expressions, lifecycle hooks, environment variables, JSON output, and project-owned dependency management.
+description: "Use for Galois notebook project capabilities: commands.json, slash content commands, background script commands, reactive expressions, lifecycle hooks, project-level Python/uv dependencies, and script environment variables."
 ---
 
-# DNOTE Notebook Project Commands and Scripts
+# Galois Notebook Project Commands and Scripts
 
 This guide covers notebook project scripts. These are different from
 application dependencies and plugin service scripts.
 
 Read `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md` before changing script
 execution behavior.
-For assistant workspace boundaries, also read `docs/EXTENSION_WORKSPACE.md`.
+For APP page/button/shortcut development, also read
+`docs/APP_DEVELOPMENT_SCENARIOS.md`.
+
+## 0. Mode Routing
+
+Most Galois users are in **Assist Mode** inside a notebook project. This skill
+belongs to Assist Mode because it changes project-owned notes, commands,
+scripts, lifecycle hooks, and dependencies rather than Galois APP/CORE code.
+
+Treat the session as Assist Mode when the assistant starts under
+`~/Documents/` and the current directory or one of its parents has notebook
+project markers such as `.dnote_runtime.json`, `command/commands.json`,
+`.dnote/`, `script/`, `media/`, or Markdown note files.
+
+Use this skill in **Assist Mode** when the user wants help writing or inserting
+note content that uses existing command/script syntax:
+
+- Explain or insert a slash `content` command.
+- Write a reactive expression into the current note.
+- Explain why a project command failed.
+- Use `.dnote_runtime.json` to locate the active file and selection before
+  editing note content.
+
+Use this skill in **Assist Mode / notebook project scripting** when the user
+wants to create or change reusable project behavior:
+
+- Add or edit `{projectPath}/command/commands.json`.
+- Add or edit scripts under `{projectPath}/script/`.
+- Add lifecycle hooks `on_project_open.py`, `on_project_run.py`,
+  `on_project_close.py`.
+- Add `pyproject.toml`, `uv.lock`, PEP 723 metadata, or `.dnote/config.json` for
+  project-owned dependencies.
+
+Do not use this skill for APP pages, right sidebar buttons, renderer shortcuts,
+themes, Settings UI, plugin manifests, or plugin-owned services. Those belong
+to Build Mode or Source Development Mode with `dnote-app-plugins` and
+`dnote-configs`.
 
 ## 1. Ownership
+
+Use this skill only for notebook project commands, scripts, dynamic tags,
+reactive expressions, lifecycle hooks, and slash menu content snippets. If the
+user asks for APP plugins, renderer pages, toolbar buttons, shortcuts, plugin
+manifests, or plugin-owned services, use the APP/plugin workflow instead.
 
 Notebook project scripts belong to the selected notebook project. They live
 inside that project, usually under:
@@ -30,9 +71,26 @@ The application layer is packaged by Electron and should not require end users
 to manage Node dependencies. Plugin service scripts belong to their plugin. A
 notebook project's lifecycle hooks and commands own their own dependencies.
 
+Do not place APP plugin code in a notebook project. APP plugin work belongs to
+the current source repository in Source Development Mode, or to the full
+external workbench in Build Mode:
+
+```text
+~/Documents/Galois/workbench/Galois-vscode-core/APP/[plugin]/
+```
+
 ## 2. commands.json
 
 Notebook commands are declared in `command/commands.json`.
+
+Naming rules:
+
+- Notebook command ids should be project-scoped, for example
+  `project.noteStats` or `custom.insertStatus`.
+- Do not reuse APP action ids such as `editor.save` or `graphView.recenter` for
+  notebook project commands.
+- Commands with `script` are automation actions; commands with `content` are
+  editor insertion snippets.
 
 ```json
 {
@@ -139,10 +197,24 @@ Notebook projects should be self-describing.
 Supported project-level options:
 
 - `.venv/` for a project-local Python interpreter.
+- `.dnote/environment.json` for declaration-driven package repair.
 - `.dnote/config.json` to override interpreters.
 - `pyproject.toml` and `uv.lock` for project-managed Python dependencies.
 - PEP 723 metadata inside individual Python scripts for single-file dependency
   declarations.
+
+Package declarations are discovered from:
+
+- `.dnote/environment.json`: `python.packages`, `packages.python`, or objects
+  like `{ "name": "pandas>=2", "import": "pandas" }`.
+- `pyproject.toml`: `[project] dependencies = [...]`.
+- PEP 723 metadata in `script/*.py`.
+
+`inspectProjectEnvironment(projectPath)` reports `usesUv`, `hasPyproject`,
+`manifestPath`, `pyprojectPath`, and package install status.
+`repairProjectEnvironment(projectPath)` runs `uv sync` when `pyproject.toml`
+exists; otherwise it creates `.venv` and installs missing declared packages with
+`uv pip install`.
 
 Prefer `uv` for portable project scripts. A packaged DMG should guide users
 through installing or configuring `uv`; project scripts should still fail
@@ -174,6 +246,11 @@ should cleanly stop background processes and write final project state.
 Lifecycle hooks should use project-level dependency declarations. They should
 not depend on application source directories or plugin service directories.
 
+Lifecycle hooks receive `DNOTE_PROJECT_PATH`, `DNOTE_THREAD_ID`, and
+`DNOTE_OUTPUT_FILE`. `on_project_run` must be idempotent enough to tolerate app
+reloads, and long-running daemons should write a PID or shutdown marker that
+`on_project_close` can consume.
+
 ## 8. Implementation Status
 
 Project commands, reactive expression scripts, and dynamic tag scripts should
@@ -181,9 +258,36 @@ use `electronAPI.runProjectScript`. New work should keep project script
 execution on that bridge so interpreter setup, environment construction,
 stdout/stderr, and Blood event updates remain centralized.
 
-`runProjectScript` keeps `scriptName` execution inside the notebook project's
-`script/` directory. If a command needs broader shell behavior, it must be
-declared as a project-owned `command` and treated as trusted project automation.
+Bridge signature:
+
+```typescript
+runProjectScript(projectPath: string, request: {
+  command?: string;
+  scriptName?: string;
+  cwd?: string;
+  stdin?: string;
+  envExtra?: Record<string, string>;
+  useUv?: boolean;
+}): Promise<{ stdout: string; stderr: string }>
+```
+
+Parameter rules:
+
+- `projectPath` must be the notebook project root and must be writable.
+- `scriptName` runs inside `{projectPath}/script/` by default.
+- `cwd` is optional but must stay inside `projectPath`.
+- If `command` is omitted and `scriptName` is provided, CORE builds
+  `uv run <scriptPath>` by default.
+- Set `useUv: false` only for a script that should be executed directly.
+- `stdin` is passed to the child process stdin.
+- `envExtra` is merged after the secure base env and after
+  `DNOTE_PROJECT_PATH`; use it for `DNOTE_ACTIVE_FILE`,
+  `DNOTE_OUTPUT_FILE`, `DNOTE_CURSOR_LINE`, `DNOTE_CURSOR_COL`,
+  `DNOTE_SELECTED_TEXT`, `DNOTE_THREAD_ID`, or note-specific values.
+
+If a command needs broader shell behavior, declare it as a project-owned
+`command` and treat it as trusted project automation. Do not use APP plugin
+service scripts for notebook project automation.
 
 Some non-script shell operations may still use `execCommand`, for example
 opening a folder or running a media helper. Do not copy those patterns for
@@ -191,7 +295,7 @@ notebook project scripts.
 
 ## 9. Editor Mode Notes
 
-DNOTE now exposes Live Preview and Reading as the two user-facing editor modes.
+Galois now exposes Live Preview and Reading as the two user-facing editor modes.
 Source editing is kept as an internal fallback, not the primary UX.
 
 When testing command insertion:

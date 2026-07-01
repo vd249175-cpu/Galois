@@ -22,6 +22,7 @@ export interface ExtensionCommandContribution {
 
 export interface RuntimeInfo {
   mode: 'source-dev' | 'installed-app';
+  classicCodePath: string;
   extensionPath: string;
   extensionDevPaths: string[];
   sourcePluginPath: string;

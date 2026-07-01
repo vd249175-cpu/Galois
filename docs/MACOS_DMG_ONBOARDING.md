@@ -1,9 +1,9 @@
 # macOS DMG Onboarding Plan
 
-This document defines the first-run setup that a packaged DNOTE DMG should
+This document defines the first-run setup that a packaged Galois DMG should
 guide users through.
 
-DNOTE currently targets unsigned local/internal DMG builds. Developer ID
+Galois currently targets unsigned local/internal DMG builds. Developer ID
 signing, notarization, and stapling are intentionally not part of the current
 release plan.
 
@@ -22,15 +22,17 @@ It should verify:
 - Python availability or project-local `.venv` availability.
 - Shell access for project commands.
 - Optional command-line assistant availability.
+- Git availability for external runtime workbench rollback.
 - A writable notebook project location.
-- A writable user extension workspace at Electron `userData/extensions/`.
+- A writable external runtime workbench at
+  `~/Documents/Galois/workbench/Galois-vscode-core/`.
 - Clear unsigned-app guidance for macOS Gatekeeper prompts.
 
 ## First-Run States
 
 ### Ready
 
-All required checks pass. DNOTE opens the last project or copies the template
+All required checks pass. Galois opens the last project or copies the template
 project into the user's Documents folder.
 
 ### Needs Setup
@@ -45,18 +47,25 @@ uv --version
 python3 --version
 $SHELL --version
 agy --version
+git --version
 ```
 
 `agy` is optional. Missing `agy` should not block note editing or project
-scripts. DNOTE does not bundle `agy/Antigravity`; users install and update it
+scripts. Galois does not bundle `agy/Antigravity`; users install and update it
 outside the app.
+
+Install `agy` manually if the terminal assistant workflow is desired:
+
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
 
 The app exposes these checks through `app:getEnvironmentStatus` and mirrors the
 result into `system.environmentStatus`.
 
 Current implementation also exposes a Settings tab named "环境与扩展" that can
 re-run these checks, configure interpreter overrides, show project `.venv`
-status, display install commands, and open the user extension workspace.
+status, display install commands, and open the external runtime workbench.
 
 The current implementation also shows a first-run setup screen before the main
 workspace is used for the first time. The screen can jump directly to
@@ -72,7 +81,7 @@ Limited mode applies when:
 - `uv` is missing and no project `.venv` is configured.
 - Shell execution is unavailable.
 - A plugin service runtime is missing.
-- The user extension directory cannot be created or written.
+- The external runtime workbench cannot be created or written.
 
 ## User Guidance
 
@@ -96,7 +105,7 @@ Recommended Python installation:
 brew install python
 ```
 
-If the user prefers per-project environments, DNOTE should point them to
+If the user prefers per-project environments, Galois should point them to
 project-level `.venv`, `.dnote/config.json`, `pyproject.toml`, or PEP 723 script
 metadata.
 
@@ -110,8 +119,18 @@ The packaged template project should not include runtime state:
 - PID files
 - machine-local logs
 
-Keep source examples, markdown notes, command definitions, scripts, media, and
-dependency manifests.
+Keep source examples, markdown notes, command definitions, scripts, user-facing
+project media, and dependency manifests.
+
+Media ownership rule:
+
+- Dropped Markdown images, audio, and video files belong in the notebook project
+  under `{projectPath}/media/`.
+- Generated video timeline assets belong in `{projectPath}/.dnote_assets/`.
+- App-level configuration, shortcuts, layout, and logs belong under
+  `~/Documents/Galois/`.
+- APP/CORE source development belongs under
+  `~/Documents/Galois/workbench/Galois-vscode-core/`.
 
 ## Build Prerequisites
 
@@ -133,17 +152,19 @@ interactively because it is intended for a writable repository checkout.
 
 The installed DMG should use a first-run setup screen instead.
 
-## Extension Workspace
+## External Source Workbench
 
 Installed apps should never ask users or the assistant to edit the `.app`
-bundle. Plugin development after installation should happen in:
+bundle. The packaged `.app` is a launcher, classic seed, and recovery source.
+When opened, it should hand off to:
 
 ```text
-${userData}/extensions/
+~/Documents/Galois/workbench/Galois-vscode-core/
 ```
 
-This directory is created by `app:ensureExtensionsDir` and reported by
-`app:getRuntimeInfo`. The command-line assistant adds it to its workspace
-context automatically.
+This directory contains the active external `CORE/`, `APP/`, `.agents/`,
+`docs/`, and root build files. The command-line assistant adds it to its
+workspace context automatically.
 
-See `docs/EXTENSION_WORKSPACE.md`.
+If Git is available, this workbench is initialized as a Git repository. Agent
+recovery should use Git first; classic-code restore is the final fallback.

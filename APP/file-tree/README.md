@@ -1,6 +1,6 @@
 # 🌲 Lattice Explorer（文件浏览器插件）
 
-Lattice Explorer 是 DNOTE 的**数据根源器官**，负责笔记项目的打开与管理、文件列表渲染、标签解析，以及项目生命周期的调度。所有其他插件（编辑器、图谱、终端）所依赖的 `projectPath` 和 `resolvedTags` 均由此插件写入 Blood 状态总线。
+Lattice Explorer 是 Galois 的**数据根源器官**，负责笔记项目的打开与管理、文件列表渲染、标签解析，以及项目生命周期的调度。所有其他插件（编辑器、图谱、终端）所依赖的 `projectPath` 和 `resolvedTags` 均由此插件写入 Blood 状态总线。
 
 ---
 

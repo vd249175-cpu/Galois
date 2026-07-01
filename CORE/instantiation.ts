@@ -6,7 +6,7 @@
  * - src/vs/platform/instantiation/common/serviceCollection.ts
  * - src/vs/platform/instantiation/common/instantiationService.ts
  *
- * This project keeps only the small DI kernel needed by DNOTE instead of
+ * This project keeps only the small DI kernel needed by Galois instead of
  * vendoring the full VS Code platform.
  */
 const DI_DEPENDENCIES = '$di$dependencies';

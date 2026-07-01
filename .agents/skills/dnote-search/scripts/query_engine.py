@@ -164,7 +164,7 @@ def search_files(directory, query):
     return results
 
 def main():
-    parser = argparse.ArgumentParser(description="DNOTE Offline Tag and File Query Engine")
+    parser = argparse.ArgumentParser(description="Galois Offline Tag and File Query Engine")
     parser.add_argument('--dir', required=True, help="Directory to search")
     parser.add_argument('--query', required=True, help="Query string")
     args = parser.parse_args()

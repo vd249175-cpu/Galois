@@ -53,20 +53,24 @@ export function parseFrontmatterTags(content: string): string[] {
   return tags;
 }
 
+export function extractBodyHashtags(content: string): string[] {
+  const resolved = new Set<string>();
+  const bodyText = parseMarkdownBody(content);
+  const tagChar = String.raw`[\p{L}\p{N}_-]`;
+  const hashtagRegex = new RegExp(String.raw`(?:^|[^\p{L}\p{N}_#/-])#(${tagChar}+(?:/${tagChar}+)*)`, 'gu');
+  for (const match of bodyText.matchAll(hashtagRegex)) {
+    const val = match[1].trim();
+    if (val && isNaN(Number(val))) resolved.add(val);
+  }
+  return Array.from(resolved);
+}
+
 // Helper to resolve regex tags dynamically from the document body content
 export function resolveTagsSync(rawTags: string[], content: string): string[] {
   const resolved = new Set<string>();
   const bodyText = parseMarkdownBody(content);
 
-  // Extract body hashtags (e.g. #tag, #中文标签)
-  const hashtagRegex = /(?:^|[^a-zA-Z0-9_\u4e00-\u9fa5#])#([a-zA-Z0-9_\u4e00-\u9fa5]+)/g;
-  const hashMatches = bodyText.matchAll(hashtagRegex);
-  for (const m of hashMatches) {
-    const val = m[1].trim();
-    if (val && isNaN(Number(val))) {
-      resolved.add(val);
-    }
-  }
+  extractBodyHashtags(content).forEach((tag) => resolved.add(tag));
 
   for (const tag of rawTags) {
     if (tag.startsWith('re:')) {

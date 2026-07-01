@@ -36,6 +36,8 @@ if (typeof window !== 'undefined') {
 // Auto-register plugins from APP/ folder into ComponentRegistry before rendering App
 const modules = import.meta.glob('./APP/*/index.ts', { eager: true });
 for (const path in modules) {
+  if (path.includes('/APP/agent/')) continue;
+  if (path.includes('/APP/link-graph/')) continue;
   const mod = modules[path] as any;
   for (const key in mod) {
     const exportVal = mod[key];

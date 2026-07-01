@@ -78,7 +78,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
       height: '30px',
       borderRadius: '8px',
       padding: '0 8px',
-      fontSize: '11px',
+      fontSize: 'var(--sidebar-label-size, 11px)',
       fontWeight: 600,
       display: 'flex',
       flexDirection: 'row',
@@ -106,7 +106,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
         </div>
         {displayMode === 'text' && (
           <span style={{
-            fontSize: '11px',
+            fontSize: 'var(--sidebar-label-size, 11px)',
             fontWeight: 600,
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -166,7 +166,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
               height: '30px',
               borderRadius: '8px',
               padding: '0 8px',
-              fontSize: '11px',
+              fontSize: 'var(--sidebar-label-size, 11px)',
               fontWeight: 600,
               display: 'flex',
               flexDirection: 'row',
@@ -186,7 +186,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
             </div>
             {displayMode === 'text' && (
               <span style={{
-                fontSize: '11px',
+                fontSize: 'var(--sidebar-label-size, 11px)',
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -221,7 +221,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
               height: '30px',
               borderRadius: '8px',
               padding: '0 8px',
-              fontSize: '11px',
+              fontSize: 'var(--sidebar-label-size, 11px)',
               fontWeight: 600,
               display: 'flex',
               flexDirection: 'row',
@@ -239,7 +239,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
             </div>
             {displayMode === 'text' && (
               <span style={{
-                fontSize: '11px',
+                fontSize: 'var(--sidebar-label-size, 11px)',
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -261,7 +261,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
               height: '30px',
               borderRadius: '8px',
               padding: '0 8px',
-              fontSize: '11px',
+              fontSize: 'var(--sidebar-label-size, 11px)',
               fontWeight: 600,
               display: 'flex',
               flexDirection: 'row',
@@ -278,7 +278,7 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
             </div>
             {displayMode === 'text' && (
               <span style={{
-                fontSize: '11px',
+                fontSize: 'var(--sidebar-label-size, 11px)',
                 fontWeight: 600,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',

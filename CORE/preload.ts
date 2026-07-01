@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('dialog:openDirectory'),
   archiveMedia: (srcPath: string, projectPath: string) =>
     ipcRenderer.invoke('fs:archiveMedia', { srcPath, projectPath }),
+  archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) =>
+    ipcRenderer.invoke('fs:archiveMediaData', { fileName, mimeType, data, projectPath }),
   getPathForFile: (file: File) =>
     webUtils.getPathForFile(file),
 
@@ -62,11 +64,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   diagnoseExtensionService: (extensionId: string, serviceName: string) =>
     ipcRenderer.invoke('shell:diagnoseExtensionService', extensionId, serviceName),
 
-  /** 获取 Electron app 根目录（DNOTE 程序目录） */
+  /** 获取 Electron app 根目录（Galois 程序目录） */
   getAppPath: () =>
     ipcRenderer.invoke('app:getAppPath'),
   getRuntimeInfo: () =>
     ipcRenderer.invoke('app:getRuntimeInfo'),
+  getClassicCodeWorkspace: () =>
+    ipcRenderer.invoke('app:getClassicCodeWorkspace'),
+  restoreClassicCodeWorkspace: () =>
+    ipcRenderer.invoke('app:restoreClassicCodeWorkspace'),
   ensureExtensionsDir: () =>
     ipcRenderer.invoke('app:ensureExtensionsDir'),
   listExtensions: () =>
@@ -147,6 +153,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:getConfig'),
   setConfig: (config: any) =>
     ipcRenderer.invoke('app:setConfig', config),
+  listThemes: () =>
+    ipcRenderer.invoke('app:listThemes'),
+  getThemeCss: (themeId: string) =>
+    ipcRenderer.invoke('app:getThemeCss', themeId),
   getShortcuts: () =>
     ipcRenderer.invoke('app:getShortcuts'),
   setShortcuts: (shortcuts: any) =>
@@ -155,4 +165,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:getLayout'),
   setLayout: (layout: any) =>
     ipcRenderer.invoke('app:setLayout', layout),
+  getProjectState: (projectPath: string) =>
+    ipcRenderer.invoke('app:getProjectState', projectPath),
+  setProjectState: (projectPath: string, state: any) =>
+    ipcRenderer.invoke('app:setProjectState', projectPath, state),
 });

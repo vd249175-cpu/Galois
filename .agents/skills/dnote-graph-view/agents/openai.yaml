@@ -1,0 +1,4 @@
+interface:
+  display_name: "Galois Graph View"
+  short_description: "Build and debug Galois tag topology graph algorithms."
+  default_prompt: "Use this when working on Galois graph-view tag topology, lattice aggregation, node-count controls, or graph/search linking."

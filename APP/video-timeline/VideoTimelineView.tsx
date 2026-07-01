@@ -278,6 +278,7 @@ function VideoTimelineView({
   const isScrubbingRef = useRef<boolean>(false);
   const scrubbedTimeRef = useRef<number | null>(null);
   const wasMutedRef = useRef<boolean>(false);
+  const wasPlayingBeforeScrubRef = useRef<boolean>(false);
   const smoothTimeRef = useRef<number>(0);
   const scrubLoopActiveRef = useRef<boolean>(false);
   const lastSeekTimeRef = useRef<number>(0);
@@ -728,6 +729,29 @@ function VideoTimelineView({
     return { minZ, maxZ };
   };
 
+  const zoomAroundPlayhead = (direction: 'in' | 'out') => {
+    const el = timelineRef.current;
+    if (!el || duration <= 0 || isNaN(duration)) return;
+
+    const { minZ, maxZ } = getMinMaxZoom();
+    const zoomFactor = direction === 'in' ? 1.25 : 1 / 1.25;
+
+    setZoom(prev => {
+      const nextZoom = Math.max(minZ, Math.min(maxZ, prev * zoomFactor));
+      if (nextZoom === prev) return prev;
+
+      const playheadPct = currentTimeRef.current / duration;
+      const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
+
+      requestAnimationFrame(() => {
+        const newScrollWidth = el.clientWidth * nextZoom;
+        el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
+      });
+
+      return nextZoom;
+    });
+  };
+
   // Alt + Mouse Wheel timeline zooming listener, and vertical scroll horizontal redirection
   useEffect(() => {
     const el = timelineRef.current;
@@ -737,25 +761,7 @@ function VideoTimelineView({
       if (e.altKey || e.metaKey || e.ctrlKey) {
         e.preventDefault();
         e.stopPropagation();
-
-        const { minZ, maxZ } = getMinMaxZoom();
-        const zoomFactor = e.deltaY < 0 ? 1.25 : 0.8;
-        
-        setZoom(prev => {
-          const nextZoom = Math.max(minZ, Math.min(maxZ, prev * zoomFactor));
-          if (nextZoom === prev) return prev;
-
-          // Align scrollLeft to keep the playhead pointer stable in the viewport
-          const playheadPct = currentTimeRef.current / duration;
-          const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
-
-          requestAnimationFrame(() => {
-            const newScrollWidth = el.clientWidth * nextZoom;
-            el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
-          });
-
-          return nextZoom;
-        });
+        zoomAroundPlayhead(e.deltaY < 0 ? 'in' : 'out');
       } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
         // Horizontal trackpad swipe: let browser scroll natively for butter-smooth OS momentum!
         // Do NOT preventDefault() or stopPropagation()
@@ -784,45 +790,14 @@ function VideoTimelineView({
         return;
       }
 
-      const el = timelineRef.current;
-      if (!el || duration <= 0 || isNaN(duration)) return;
-
       if (e.key === '=' || e.key === '+') {
         e.preventDefault();
         e.stopPropagation();
-        const { minZ, maxZ } = getMinMaxZoom();
-        setZoom(prev => {
-          const nextZoom = Math.max(minZ, Math.min(maxZ, prev * 1.25));
-          if (nextZoom === prev) return prev;
-
-          // Align scrollLeft to keep the playhead pointer stable in the viewport
-          const playheadPct = currentTimeRef.current / duration;
-          const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
-
-          requestAnimationFrame(() => {
-            const newScrollWidth = el.clientWidth * nextZoom;
-            el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
-          });
-          return nextZoom;
-        });
+        zoomAroundPlayhead('in');
       } else if (e.key === '-' || e.key === '_') {
         e.preventDefault();
         e.stopPropagation();
-        const { minZ, maxZ } = getMinMaxZoom();
-        setZoom(prev => {
-          const nextZoom = Math.max(minZ, Math.min(maxZ, prev / 1.25));
-          if (nextZoom === prev) return prev;
-
-          // Align scrollLeft to keep the playhead pointer stable in the viewport
-          const playheadPct = currentTimeRef.current / duration;
-          const playheadOffset = playheadPct * el.scrollWidth - el.scrollLeft;
-
-          requestAnimationFrame(() => {
-            const newScrollWidth = el.clientWidth * nextZoom;
-            el.scrollLeft = playheadPct * newScrollWidth - playheadOffset;
-          });
-          return nextZoom;
-        });
+        zoomAroundPlayhead('out');
       } else if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
         e.stopPropagation();
@@ -947,7 +922,8 @@ function VideoTimelineView({
         e.stopPropagation();
 
         console.log('[VideoTimeline] Ruler/playhead mousedown: initiating playhead scrub at clientX =', e.clientX);
-        if (isPlaying && videoRef.current) {
+        wasPlayingBeforeScrubRef.current = !videoRef.current.paused;
+        if (wasPlayingBeforeScrubRef.current && videoRef.current) {
           console.log('[VideoTimeline] Video was playing, pausing during scrub');
           videoRef.current.pause();
           setIsPlaying(false);
@@ -1001,6 +977,18 @@ function VideoTimelineView({
         console.log('[VideoTimeline] MouseUp final video currentTime fallback to smoothTime:', smoothTimeRef.current);
         setCurrentTime(smoothTimeRef.current);
       }
+
+      if (videoRef.current && wasPlayingBeforeScrubRef.current) {
+        videoRef.current.play().then(() => {
+          setIsPlaying(true);
+        }).catch((err) => {
+          console.warn('[VideoTimeline] Failed to resume playback after scrub:', err);
+          setIsPlaying(false);
+        });
+      } else {
+        setIsPlaying(false);
+      }
+      wasPlayingBeforeScrubRef.current = false;
     };
 
     window.addEventListener('mousemove', handleMouseMove, { capture: true });
@@ -1193,7 +1181,7 @@ function VideoTimelineView({
   const renderFilmstripSlots = () => {
     if (thumbnails.length === 0) {
       return (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, opacity: 0.3 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--video-timeline-font-size, 11px)', opacity: 0.3 }}>
           正在初始化时间轴预览...
         </div>
       );
@@ -1268,6 +1256,7 @@ function VideoTimelineView({
         backgroundColor: 'var(--bg-main, #1e1e1e)',
         color: 'var(--text-main, #d4d4d4)',
         fontFamily: 'Outfit, Inter, sans-serif',
+        fontSize: 'var(--video-timeline-font-size, 11px)',
         userSelect: 'none',
         overflow: 'hidden',
         position: 'relative',
@@ -1319,7 +1308,7 @@ function VideoTimelineView({
               <path d="M9 10l3-3 3 3" />
             </svg>
           </div>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main, #d4d4d4)' }}>
+          <span style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', fontWeight: 600, color: 'var(--text-main, #d4d4d4)' }}>
             拖放视频文件以加载到时间轴中
           </span>
         </div>
@@ -1352,7 +1341,7 @@ function VideoTimelineView({
           color: var(--text-main, #d4d4d4);
           border-radius: 6px;
           padding: 6px 12px;
-          font-size: 12px;
+          font-size: calc(var(--video-timeline-font-size, 11px) + 1px);
           cursor: pointer;
           display: inline-flex;
           align-items: center;
@@ -1380,7 +1369,7 @@ function VideoTimelineView({
           flex-direction: column;
           justify-content: space-between;
           padding: 6px 8px;
-          font-size: 11px;
+          font-size: var(--video-timeline-font-size, 11px);
           color: white;
           cursor: grab;
           transition: border-color 0.2s, background-color 0.2s;
@@ -1406,7 +1395,7 @@ function VideoTimelineView({
           justify-content: center;
           color: white;
           cursor: pointer;
-          font-size: 10px;
+          font-size: calc(var(--video-timeline-font-size, 11px) - 1px);
           opacity: 0;
           transition: opacity 0.2s;
         }
@@ -1445,7 +1434,7 @@ function VideoTimelineView({
           color: white;
           border-radius: 4px;
           padding: 4px 8px;
-          font-size: 12px;
+          font-size: calc(var(--video-timeline-font-size, 11px) + 1px);
           width: 48px;
           text-align: center;
         }
@@ -1477,8 +1466,8 @@ function VideoTimelineView({
               <path d="M12 7v6" />
               <path d="M9 10l3-3 3 3" />
             </svg>
-            <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>拖拽视频文件到此区域</div>
-            <div style={{ fontSize: 11, opacity: 0.5 }}>支持 .mp4, .webm, .ogg 格式</div>
+            <div style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 3px)', fontWeight: 500, marginBottom: 6 }}>拖拽视频文件到此区域</div>
+            <div style={{ fontSize: 'var(--video-timeline-font-size, 11px)', opacity: 0.5 }}>支持 .mp4, .webm, .ogg 格式</div>
             <input
               type="file"
               ref={fileInputRef}
@@ -1491,7 +1480,7 @@ function VideoTimelineView({
           {/* Saved Video Projects list */}
           {savedAssets.length > 0 && (
             <div style={{ marginTop: 24, textAlign: 'left', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.7 }}>
                   <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -1523,18 +1512,18 @@ function VideoTimelineView({
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden', marginRight: 16 }}>
-                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.95)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', color: 'rgba(255,255,255,0.95)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {asset.videoName}
                       </span>
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
+                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
                         {asset.videoPath}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-                      <span style={{ fontSize: 11, color: '#ff3b30', background: 'rgba(255,59,48,0.1)', padding: '2px 8px', borderRadius: 10, fontWeight: 500 }}>
+                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: '#ff3b30', background: 'rgba(255,59,48,0.1)', padding: '2px 8px', borderRadius: 10, fontWeight: 500 }}>
                         {asset.segments.length} 个剪辑点
                       </span>
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
                         {new Date(asset.updatedAt).toLocaleDateString()}
                       </span>
                     </div>
@@ -1571,7 +1560,7 @@ function VideoTimelineView({
                 const err = videoRef.current?.error;
                 console.error('[VideoTimeline] Video load error:', err ? { code: err.code, message: err.message } : e);
               }}
-              style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
 
             {/* Selected segment boundary highlight banner */}
@@ -1584,7 +1573,7 @@ function VideoTimelineView({
                   background: 'rgba(0,0,0,0.7)',
                   borderRadius: 6,
                   padding: '4px 10px',
-                  fontSize: 11,
+                  fontSize: 'var(--video-timeline-font-size, 11px)',
                   border: '1px solid rgba(255,255,255,0.15)',
                   display: 'flex',
                   alignItems: 'center',
@@ -1618,7 +1607,7 @@ function VideoTimelineView({
                   background: 'rgba(0,0,0,0.8)',
                   borderRadius: 4,
                   padding: '4px 8px',
-                  fontSize: 10,
+                  fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)',
                   color: 'rgba(255,255,255,0.7)',
                   display: 'flex',
                   alignItems: 'center',
@@ -1652,7 +1641,7 @@ function VideoTimelineView({
                 className="ctrl-btn"
                 onClick={() => handleJump('backward')}
                 title={`后退 ${jumpSeconds} 秒 (Left)`}
-                style={{ padding: '3px 6px', fontSize: 10 }}
+                style={{ padding: '3px 6px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
               >
                 ◀◀
               </button>
@@ -1660,7 +1649,7 @@ function VideoTimelineView({
                 className="ctrl-btn"
                 onClick={() => handleStepFrame('backward')}
                 title="退后1帧 (Comma)"
-                style={{ padding: '3px 6px', fontSize: 10 }}
+                style={{ padding: '3px 6px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
               >
                 ◀
               </button>
@@ -1668,7 +1657,7 @@ function VideoTimelineView({
                 className={`ctrl-btn ${isPlaying ? 'active' : ''}`}
                 onClick={handlePlayPause}
                 title="播放/暂停 (Space)"
-                style={{ width: 32, padding: '3px 0', fontSize: 10 }}
+                style={{ width: 32, padding: '3px 0', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
               >
                 {isPlaying ? '⏸' : '▶'}
               </button>
@@ -1676,7 +1665,7 @@ function VideoTimelineView({
                 className="ctrl-btn"
                 onClick={() => handleStepFrame('forward')}
                 title="前进1帧 (Period)"
-                style={{ padding: '3px 6px', fontSize: 10 }}
+                style={{ padding: '3px 6px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
               >
                 ▶
               </button>
@@ -1684,7 +1673,7 @@ function VideoTimelineView({
                 className="ctrl-btn"
                 onClick={() => handleJump('forward')}
                 title={`前进 ${jumpSeconds} 秒 (Right)`}
-                style={{ padding: '3px 6px', fontSize: 10 }}
+                style={{ padding: '3px 6px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
               >
                 ▶▶
               </button>
@@ -1692,7 +1681,7 @@ function VideoTimelineView({
               <button
                 className="ctrl-btn"
                 onClick={handleSplit}
-                style={{ border: '1px solid #ff3b30', background: 'rgba(255, 59, 48, 0.08)', color: '#ff3b30', marginLeft: 6, padding: '3px 8px', fontSize: 10, fontWeight: 600 }}
+                style={{ border: '1px solid #ff3b30', background: 'rgba(255, 59, 48, 0.08)', color: '#ff3b30', marginLeft: 6, padding: '3px 8px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)', fontWeight: 600 }}
                 title="在当前位置切分视频 (C)"
               >
                 ✂️ 切分
@@ -1703,11 +1692,11 @@ function VideoTimelineView({
                 <button
                   className="ctrl-btn"
                   onClick={handleMergeSelected}
-                  style={{ border: '1px solid #5ac8fa', background: 'rgba(90,200,250,0.1)', color: '#5ac8fa', marginLeft: 4, padding: '3px 8px', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+                  style={{ border: '1px solid #5ac8fa', background: 'rgba(90,200,250,0.1)', color: '#5ac8fa', marginLeft: 4, padding: '3px 8px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
                   title={`合并 ${selectedSegmentIds.size} 个选中片段为一个`}
                 >
                   <span>⊕ 合并</span>
-                  <span style={{ background: '#5ac8fa', color: '#000', borderRadius: 8, fontSize: 9, padding: '0 4px', fontWeight: 700 }}>
+                  <span style={{ background: '#5ac8fa', color: '#000', borderRadius: 8, fontSize: 'calc(var(--video-timeline-font-size, 11px) - 2px)', padding: '0 4px', fontWeight: 700 }}>
                     {selectedSegmentIds.size}
                   </span>
                 </button>
@@ -1715,7 +1704,7 @@ function VideoTimelineView({
             </div>
 
             {/* Readout of current playhead / duration - content managed via ref to survive scrubbing re-renders */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'monospace', fontSize: 'var(--video-timeline-font-size, 11px)', color: 'rgba(255,255,255,0.7)' }}>
               <span ref={timeReadoutRef} style={{ color: '#ff3b30', fontWeight: 'bold' }} />
               <span style={{ opacity: 0.4 }}>/</span>
               <span>{formatTime(duration)}</span>
@@ -1724,7 +1713,7 @@ function VideoTimelineView({
             {/* Compact controls block: jump delta, play speed, zoom indicator, close button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {/* Jump span */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--video-timeline-font-size, 11px)' }}>
                 <span style={{ opacity: 0.5 }}>跨度:</span>
                 <select
                   style={{
@@ -1733,7 +1722,7 @@ function VideoTimelineView({
                     color: 'white',
                     borderRadius: 4,
                     padding: '2px 4px',
-                    fontSize: 10,
+                    fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)',
                     outline: 'none'
                   }}
                   value={jumpSeconds.toString()}
@@ -1750,7 +1739,7 @@ function VideoTimelineView({
               </div>
 
               {/* Speed multiplier */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--video-timeline-font-size, 11px)' }}>
                 <span style={{ opacity: 0.5 }}>速度:</span>
                 <select
                   style={{
@@ -1759,7 +1748,7 @@ function VideoTimelineView({
                     color: 'white',
                     borderRadius: 4,
                     padding: '2px 4px',
-                    fontSize: 10,
+                    fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)',
                     outline: 'none'
                   }}
                   value={playbackRate}
@@ -1774,9 +1763,24 @@ function VideoTimelineView({
               </div>
 
               {/* Zoom multiplier indicator */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 11, opacity: 0.6 }} title="缩放比例">
-                <span>🔍</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 'var(--video-timeline-font-size, 11px)', opacity: 0.8 }} title="以时间指针为中心缩放">
+                <button
+                  className="ctrl-btn"
+                  onClick={() => zoomAroundPlayhead('out')}
+                  style={{ width: 22, height: 22, padding: 0, fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)' }}
+                  title="缩小时间轴"
+                >
+                  −
+                </button>
                 <span style={{ fontFamily: 'monospace' }}>{zoom.toFixed(1)}x</span>
+                <button
+                  className="ctrl-btn"
+                  onClick={() => zoomAroundPlayhead('in')}
+                  style={{ width: 22, height: 22, padding: 0, fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)' }}
+                  title="放大时间轴"
+                >
+                  +
+                </button>
               </div>
 
               {/* Tighter separator */}
@@ -1786,7 +1790,7 @@ function VideoTimelineView({
               <button
                 className="ctrl-btn"
                 onClick={() => setVideoPath('')}
-                style={{ padding: '2px 6px', fontSize: 10, background: 'rgba(255,255,255,0.02)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.08)' }}
+                style={{ padding: '2px 6px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)', background: 'rgba(255,255,255,0.02)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.08)' }}
                 title="关闭视频并返回拖拽区域"
               >
                 ✖ 关闭
@@ -1868,7 +1872,7 @@ function VideoTimelineView({
                             justifyContent: 'space-between',
                             padding: '6px 8px',
                             color: 'white',
-                            fontSize: '11px',
+                            fontSize: 'var(--video-timeline-font-size, 11px)',
                             cursor: 'grab',
                             overflow: 'hidden',
                             boxShadow: isMultiSelected ? 'inset 0 0 6px rgba(90,200,250,0.2)' : 'inset 0 0 6px rgba(0,0,0,0.3)',
@@ -1894,11 +1898,11 @@ function VideoTimelineView({
                           }}
                           title={`拖拽到编辑器插入剪辑引用 | Shift/Ctrl+点击 多选`}
                         >
-                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 11 }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600, fontSize: 'var(--video-timeline-font-size, 11px)' }}>
                             {seg.name}
                           </div>
                           
-                          <div style={{ fontSize: 9, opacity: 0.8, fontFamily: 'monospace' }}>
+                          <div style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) - 2px)', opacity: 0.8, fontFamily: 'monospace' }}>
                             {(seg.end - seg.start).toFixed(1)}s
                           </div>
 

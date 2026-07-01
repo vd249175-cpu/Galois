@@ -1,17 +1,27 @@
 ---
 name: dnote-tags
-description: Development guide for DNOTE tag indexing syntax, covering static inline tags, regular expression matches, and python script-based dynamic tags resolver covenants.
+description: "Use when assisting with or building Galois note tags: frontmatter tags, body #hashtags, regex re: tags, run: dynamic tag scripts, file icons, tag search, and tag resolver behavior."
 ---
 
-# DNOTE Tags Specification & Indexing Rules (`dnote-tags`)
+# Galois Tags Specification & Indexing Rules (`dnote-tags`)
 
-本文档定义 DNOTE 笔记项目中标签的书写格式、索引与解析机制，以及动态脚本标签的开发规范。
+本文档定义 Galois 笔记项目中标签的书写格式、索引与解析机制，以及动态脚本标签的开发规范。
+
+## 0. 模式边界
+
+**Assist Mode**：用户要给当前笔记加标签、解释标签、整理标签、用正文 `#标签` 标注内容、设计搜索语句、新增标签计算脚本、正则标签规则或 `run:` 动态标签脚本时，先读取 `{projectPath}/.dnote_runtime.json`，再处理当前笔记项目。
+
+**Build Mode**：只有当用户要修改 Galois 应用本身的标签解析流程、文件树标签展示、保存时自动同步 frontmatter、或图谱/搜索联动实现时，才修改 `APP/file-tree`、`APP/editor` 或相关 APP/CORE 代码。
+
+不要把 APP 插件服务脚本当成笔记项目标签脚本。笔记项目标签脚本属于 `script/`，通过 `electronAPI.runProjectScript` 执行。
+
+正文 `#标签` 会被解析为标签，并在保存时补入文件开头的 Frontmatter `tags:`，以保证文件卡片和标签展示直观。
 
 ---
 
 ## 1. YAML Frontmatter 标签声明
 
-DNOTE 的标签系统基于 Markdown 文件头部的 YAML Frontmatter（`---` 块）。
+Galois 的标签系统基于 Markdown 文件头部的 YAML Frontmatter（`---` 块）。
 所有标签在 `tags:` 字段下以列表形式声明：
 
 ```markdown
@@ -40,7 +50,7 @@ tags:
 tags:
   - dog
   - 聪明
-  - DNOTE
+  - Galois
   - 知识管理
 ```
 
@@ -171,7 +181,7 @@ fileTree 器官检测到 projectPath 或 fileSaved 变化
 
 ## 7. 文件图标
 
-除标签外，DNOTE 还支持在 Frontmatter 中声明每个笔记的显示图标：
+除标签外，Galois 还支持在 Frontmatter 中声明每个笔记的显示图标：
 
 ```yaml
 ---

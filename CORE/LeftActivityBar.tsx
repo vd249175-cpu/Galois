@@ -111,7 +111,7 @@ export function LeftActivityBar() {
               </div>
               {isTextMode && (
                 <span style={{
-                  fontSize: '11px',
+                  fontSize: 'var(--sidebar-label-size, 11px)',
                   fontWeight: 600,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',

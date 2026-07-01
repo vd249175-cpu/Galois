@@ -11,6 +11,7 @@ interface UseMediaDropOptions {
 }
 
 type DropEvent = React.DragEvent | DragEvent;
+type PasteEvent = React.ClipboardEvent | ClipboardEvent;
 
 export function useMediaDrop({
   projectPath,
@@ -52,6 +53,25 @@ export function useMediaDrop({
     return `![media](${relativePath})`;
   };
 
+  const isSupportedMediaFile = (file: File): boolean => {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    return (
+      ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'mp4', 'webm', 'ogg'].includes(ext) ||
+      file.type.startsWith('image/') ||
+      file.type.startsWith('audio/') ||
+      file.type.startsWith('video/')
+    );
+  };
+
+  const archiveFile = async (file: File): Promise<string> => {
+    const sysPath = (window as any).electronAPI.getPathForFile(file);
+    if (sysPath) {
+      return (window as any).electronAPI.archiveMedia(sysPath, projectPath);
+    }
+    const data = await file.arrayBuffer();
+    return (window as any).electronAPI.archiveMediaData(file.name || 'pasted-image.png', file.type || 'image/png', data, projectPath);
+  };
+
   const insertBlockAtIndex = (source: string, insertIndex: number, blockText: string): string => {
     const safeIndex = Math.max(0, Math.min(insertIndex, source.length));
     const before = source.substring(0, safeIndex);
@@ -66,16 +86,18 @@ export function useMediaDrop({
     return `${source}${prefix}${blockText}\n`;
   };
 
-  const archiveAndInsert = async (filesInput: FileList | File[], insertAtLine?: number, insertAtIndex?: number) => {
+  const archiveAndInsert = async (
+    filesInput: FileList | File[],
+    insertAtLine?: number,
+    insertAtIndex?: number,
+    sourceContent?: string
+  ) => {
     if (!projectPath || !currentFile) {
       setStatusMessage('Open a notebook directory and select a note first.');
       return;
     }
     const files = Array.from(filesInput);
-    const mediaFiles = files.filter((file) => {
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      return ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'mp4', 'webm', 'ogg'].includes(ext);
-    });
+    const mediaFiles = files.filter(isSupportedMediaFile);
     if (mediaFiles.length === 0) {
       setStatusMessage('Only image, audio, and video files are supported.');
       return;
@@ -85,24 +107,23 @@ export function useMediaDrop({
       setStatusMessage(mediaFiles.length > 1 ? `Archiving ${mediaFiles.length} media files...` : 'Archiving media...');
       const markups: string[] = [];
       for (const file of mediaFiles) {
-        const sysPath = (window as any).electronAPI.getPathForFile(file);
-        if (!sysPath) throw new Error(`Could not retrieve file path for ${file.name}.`);
-        const relativePath = await (window as any).electronAPI.archiveMedia(sysPath, projectPath);
+        const relativePath = await archiveFile(file);
         markups.push(buildMediaMarkup(relativePath));
       }
       const blockText = markups.join('\n');
+      const baseContent = sourceContent ?? contentRef.current;
 
       let nextContent = '';
       if (insertAtLine !== undefined) {
-        const lines = contentRef.current.split('\n');
+        const lines = baseContent.split('\n');
         lines.splice(insertAtLine + 1, 0, ...markups);
         nextContent = lines.join('\n');
       } else if (insertAtIndex !== undefined) {
-        nextContent = insertBlockAtIndex(contentRef.current, insertAtIndex, blockText);
+        nextContent = insertBlockAtIndex(baseContent, insertAtIndex, blockText);
       } else if (isPreviewMode) {
-        nextContent = appendBlock(contentRef.current, blockText);
+        nextContent = appendBlock(baseContent, blockText);
       } else {
-        nextContent = appendBlock(contentRef.current, blockText);
+        nextContent = appendBlock(baseContent, blockText);
       }
 
       setContent(nextContent);
@@ -188,6 +209,13 @@ export function useMediaDrop({
     await archiveAndInsert(files, undefined, insertIndex);
   };
 
+  const handlePasteAtIndex = async (e: PasteEvent, insertIndex: number, sourceContent?: string) => {
+    e.preventDefault();
+    const files = Array.from(e.clipboardData?.files || []).filter(isSupportedMediaFile);
+    if (files.length === 0) return;
+    await archiveAndInsert(files, undefined, insertIndex, sourceContent);
+  };
+
   const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -201,8 +229,10 @@ export function useMediaDrop({
         const allLines = contentRef.current.split('\n');
         const lineText = allLines[sourceLineIdx];
         if (lineText !== undefined) {
+          let insertIdx = lineIdx + 1;
+          if (sourceLineIdx < insertIdx) insertIdx -= 1;
           allLines.splice(sourceLineIdx, 1);
-          allLines.splice(lineIdx, 0, lineText);
+          allLines.splice(Math.max(0, Math.min(insertIdx, allLines.length)), 0, lineText);
           const nextContent = allLines.join('\n');
           setContent(nextContent);
           saveNodeFile(nextContent);
@@ -239,6 +269,7 @@ export function useMediaDrop({
     handleDragOver,
     handleDrop,
     handleDropAtIndex,
+    handlePasteAtIndex,
     handleLineDrop,
   };
 }

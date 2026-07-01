@@ -154,6 +154,8 @@ interface MarkdownPreviewProps {
   hoveredLineIndex: number | null;
   setHoveredLineIndex: React.Dispatch<React.SetStateAction<number | null>>;
   handleLineDrop: (e: React.DragEvent, lineIdx: number) => void;
+  handleDropAtIndex: (e: React.DragEvent, insertIndex: number) => void;
+  handlePasteAtIndex: (e: React.ClipboardEvent, insertIndex: number, sourceContent?: string) => void;
   currentFile: string;
   slashCommands?: any[];
   getShortcutDisplay?: (id: string) => string;
@@ -172,6 +174,8 @@ export function MarkdownPreview({
   hoveredLineIndex,
   setHoveredLineIndex,
   handleLineDrop,
+  handleDropAtIndex,
+  handlePasteAtIndex,
   currentFile,
   slashCommands = [],
   getShortcutDisplay = () => '',
@@ -180,7 +184,6 @@ export function MarkdownPreview({
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
   const [draggedBlockKey, setDraggedBlockKey] = useState<string | null>(null);
-  const [dragContent, setDragContent] = useState<string | null>(null);
   const [isDraggingOverBottom, setIsDraggingOverBottom] = useState(false);
   const [previewSlashMenu, setPreviewSlashMenu] = useState<{
     show: boolean;
@@ -195,13 +198,53 @@ export function MarkdownPreview({
   const previewSlashDraftRef = useRef<string | null>(null);
   const isExecutingPreviewSlashRef = useRef(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const editingDraftRef = useRef<{ lineIdx: number; value: string } | null>(null);
+  const suppressClickAfterDragRef = useRef(false);
+  const readingScrollKey = projectPath && currentFile
+    ? `galois_reading_scroll:${projectPath}:${currentFile}`
+    : '';
 
-  const effectiveContent = dragContent ?? content;
+  useEffect(() => {
+    const container = previewContainerRef.current;
+    if (!container || !readingScrollKey) return;
+    const saved = Number(localStorage.getItem(readingScrollKey) || 0);
+    requestAnimationFrame(() => {
+      container.scrollTop = Number.isFinite(saved) ? saved : 0;
+    });
+  }, [readingScrollKey]);
+
+  const persistReadingScroll = () => {
+    const container = previewContainerRef.current;
+    if (!container || !readingScrollKey) return;
+    localStorage.setItem(readingScrollKey, String(container.scrollTop));
+  };
 
   const updateMarkdownLines = (startLineIdx: number, endLineIdx: number, newLines: string[]) => {
     const allLines = content.split('\n');
     allLines.splice(startLineIdx, endLineIdx - startLineIdx + 1, ...newLines);
     onContentChange(allLines.join('\n'));
+  };
+
+  const commitEditingDraft = (clearEditing = true) => {
+    const draft = editingDraftRef.current;
+    if (!draft) {
+      if (clearEditing) setEditingLineIdx(null);
+      return;
+    }
+    const allLines = content.split('\n');
+    if (allLines[draft.lineIdx] !== undefined && allLines[draft.lineIdx] !== draft.value) {
+      allLines.splice(draft.lineIdx, 1, ...draft.value.split('\n'));
+      onContentChange(allLines.join('\n'));
+    }
+    editingDraftRef.current = null;
+    if (clearEditing) setEditingLineIdx(null);
+  };
+
+  const beginEditingLine = (lineIdx: number) => {
+    if (editingDraftRef.current?.lineIdx !== lineIdx) {
+      commitEditingDraft(false);
+    }
+    setEditingLineIdx(lineIdx);
   };
 
   const getAbsoluteIndex = (lineIdx: number, offset: number) => {
@@ -281,6 +324,31 @@ export function MarkdownPreview({
     updateMarkdownLines(lineIdx, lineIdx, [newLineText]);
   };
 
+  const openTrailingEditableLine = (extraBlankRows = 0) => {
+    const lines = content ? content.split('\n') : [''];
+    const lastNonEmpty = (() => {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].trim() !== '') return i;
+      }
+      return -1;
+    })();
+    const targetLineIdx = Math.max(lastNonEmpty + 1 + extraBlankRows, 0);
+    while (lines.length <= targetLineIdx) lines.push('');
+    onContentChange(lines.join('\n'));
+    beginEditingLine(targetLineIdx);
+  };
+
+  const countTrailingEmptyLines = () => {
+    if (!content) return 0;
+    const lines = content.split('\n');
+    let count = 0;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (lines[i].trim() !== '') break;
+      count++;
+    }
+    return count;
+  };
+
   const focusTableCell = (tableKey: string, order: number) => {
     requestAnimationFrame(() => {
       const root = previewContainerRef.current;
@@ -315,6 +383,15 @@ export function MarkdownPreview({
       const lines = content.split('\n');
       lines.splice(lineIdx, 1, ...lineText.split('\n'));
       return lines.join('\n');
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const files = Array.from(e.clipboardData?.files || []);
+      if (!files.some((file) => file.type.startsWith('image/'))) return;
+      const textarea = e.currentTarget;
+      const selectionStart = textarea.selectionStart ?? textarea.value.length;
+      const draft = replaceLineInDraft(textarea.value);
+      handlePasteAtIndex(e, getAbsoluteIndex(lineIdx, selectionStart), draft);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -460,16 +537,15 @@ export function MarkdownPreview({
             isJumpingToNextLineRef.current = false;
             return;
           }
-          const newText = e.currentTarget.value || '';
-          const newLines = newText.split('\n');
-          updateMarkdownLines(lineIdx, lineIdx, newLines);
-          setEditingLineIdx(null);
+          editingDraftRef.current = { lineIdx, value: e.currentTarget.value || '' };
+          commitEditingDraft(true);
         }}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         style={{
           fontFamily: 'inherit',
-          fontSize: '13px',
-          lineHeight: '1.6',
+          fontSize: 'inherit',
+          lineHeight: 'inherit',
           color: 'var(--text-main)',
           background: 'rgba(255,255,255,0.04)',
           border: '1.2px dashed var(--accent-color, #7000ff)',
@@ -486,6 +562,7 @@ export function MarkdownPreview({
         ref={(el) => {
           if (el) {
             el.focus();
+            editingDraftRef.current = { lineIdx, value: el.value };
             const targetPos = pendingCaretPosRef.current !== null ? pendingCaretPosRef.current : el.value.length;
             el.selectionStart = el.selectionEnd = targetPos;
             pendingCaretPosRef.current = null;
@@ -495,6 +572,7 @@ export function MarkdownPreview({
         }}
         onInput={(e) => {
           const el = e.currentTarget;
+          editingDraftRef.current = { lineIdx, value: el.value };
           el.style.height = 'auto';
           el.style.height = `${el.scrollHeight + 3}px`;
           updatePreviewSlashQuery(el, lineIdx);
@@ -652,7 +730,7 @@ export function MarkdownPreview({
     return blocks;
   };
 
-  const blocks = parseMarkdownIntoBlocks(effectiveContent);
+  const blocks = parseMarkdownIntoBlocks(content);
 
   const handleDeleteBlock = (block: ParsedBlock) => {
     const allLines = content.split('\n');
@@ -660,22 +738,66 @@ export function MarkdownPreview({
     onContentChange(allLines.join('\n'));
   };
 
+  const shouldTreatBlockAsMedia = (rawText: string) => {
+    const trimText = rawText.trim();
+    return (
+      (trimText.startsWith('![') && trimText.endsWith(')')) ||
+      (trimText.startsWith('@video[') && trimText.endsWith(')'))
+    );
+  };
+
+  const finishBlockDrag = () => {
+    setDraggedBlockKey(null);
+    setHoveredLineIndex(null);
+    setIsDraggingOverBottom(false);
+    suppressClickAfterDragRef.current = true;
+    window.setTimeout(() => {
+      suppressClickAfterDragRef.current = false;
+    }, 180);
+  };
+
+  const beginEditingLineFromClick = (e: React.MouseEvent, lineIdx: number) => {
+    const target = e.target as HTMLElement | null;
+    if (
+      suppressClickAfterDragRef.current ||
+      target?.closest('button, input, textarea, select, a, video, audio, img, .inline-clip-player, [contenteditable="true"]')
+    ) {
+      e.stopPropagation();
+      return;
+    }
+    beginEditingLine(lineIdx);
+  };
+
   const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
     if (!isPreviewMode) return <React.Fragment key={block.key}>{element}</React.Fragment>;
 
     const isCurrentlyDragged = draggedBlockKey === block.key;
 
-    const trimText = block.rawText.trim();
-    const isMedia = (
-      (trimText.startsWith('![') && trimText.endsWith(')')) ||
-      (trimText.startsWith('@video[') && trimText.endsWith(')'))
-    );
+    const isMedia = shouldTreatBlockAsMedia(block.rawText);
     const isDeletable = isMedia || block.type === 'code';
+    const startBlockDrag = (e: React.DragEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('button, input, textarea, select, a, video, audio, .inline-clip-player, [contenteditable="true"]')) {
+        e.preventDefault();
+        return;
+      }
+      if (window.getSelection()?.toString()) {
+        e.preventDefault();
+        return;
+      }
+      setDraggedBlockKey(block.key);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/x-dnote-block-line', String(block.startLine));
+      e.dataTransfer.setData('text/plain', block.rawText);
+    };
 
     return (
       <div
         key={block.key}
         className="preview-block-wrapper"
+        draggable={isMedia}
+        onDragStart={startBlockDrag}
+        onDragEnd={finishBlockDrag}
         {...getLineDragProps(block)}
         style={getLineStyle(block, {
           display: 'flex',
@@ -693,19 +815,9 @@ export function MarkdownPreview({
           draggable
           onDragStart={(e) => {
             e.stopPropagation();
-            setDraggedBlockKey(block.key);
-            setDragContent(content);
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/x-dnote-block-line', String(block.startLine));
-            e.dataTransfer.setData('text/plain', block.rawText);
+            startBlockDrag(e);
           }}
-          onDragEnd={() => {
-            if (dragContent !== null) {
-              onContentChange(dragContent);
-              setDragContent(null);
-            }
-            setDraggedBlockKey(null);
-          }}
+          onDragEnd={finishBlockDrag}
           className="drag-handle"
           style={{
             position: 'absolute',
@@ -752,67 +864,39 @@ export function MarkdownPreview({
       onDragOver: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!draggedBlockKey) {
-          if (
-            e.dataTransfer.types.includes('Files') ||
-            e.dataTransfer.types.includes('text/x-dnote-clip')
-          ) {
-            setHoveredLineIndex(block.startLine);
-          }
+        if (
+          draggedBlockKey ||
+          e.dataTransfer.types.includes('Files') ||
+          e.dataTransfer.types.includes('text/x-dnote-clip')
+        ) {
+          setHoveredLineIndex(block.startLine);
         }
       },
       onDragLeave: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (!draggedBlockKey) {
-          setHoveredLineIndex((prev) => (prev === block.startLine ? null : prev));
-        }
+        setHoveredLineIndex((prev) => (prev === block.startLine ? null : prev));
       },
       onDragEnter: (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        if (draggedBlockKey && draggedBlockKey !== block.key) {
-          const currentMD = dragContent ?? content;
-          const parsed = parseMarkdownIntoBlocks(currentMD);
-          
-          const sourceIdx = parsed.findIndex(b => b.key === draggedBlockKey);
-          const targetIdx = parsed.findIndex(b => b.key === block.key);
-          
-          if (sourceIdx !== -1 && targetIdx !== -1) {
-            const nextBlocks = [...parsed];
-            const [movedBlock] = nextBlocks.splice(sourceIdx, 1);
-            nextBlocks.splice(targetIdx, 0, movedBlock);
-            
-            let frontmatterLinesOffset = 0;
-            const body = parseMarkdownBody(currentMD);
-            if (body !== currentMD) {
-              const bodyIndex = currentMD.indexOf(body);
-              const prefix = currentMD.substring(0, bodyIndex);
-              frontmatterLinesOffset = prefix.split('\n').length - 1;
-            }
-            const allLines = currentMD.split('\n');
-            const frontmatterLines = allLines.slice(0, frontmatterLinesOffset);
-            
-            const rebuiltBodyLines = nextBlocks.map(b => b.rawText);
-            const nextContent = [...frontmatterLines, ...rebuiltBodyLines].join('\n');
-            setDragContent(nextContent);
-          }
+        if (draggedBlockKey || e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('text/x-dnote-clip')) {
+          setHoveredLineIndex(block.startLine);
         }
       },
       onDrop: (e: React.DragEvent) => {
-        if (!draggedBlockKey) {
-          handleLineDrop(e, block.startLine);
-        }
+        handleLineDrop(e, block.startLine);
+        setDraggedBlockKey(null);
+        setHoveredLineIndex(null);
       }
     };
   };
 
   const getLineStyle = (block: ParsedBlock, baseStyle: React.CSSProperties = {}): React.CSSProperties => {
-    if (isPreviewMode && !draggedBlockKey && hoveredLineIndex === block.startLine) {
+    if (isPreviewMode && hoveredLineIndex === block.startLine) {
       return {
         ...baseStyle,
-        borderTop: '3px solid var(--accent-color, #7000ff)',
+        borderBottom: '3px solid var(--accent-color, #7000ff)',
         backgroundColor: 'rgba(112, 0, 255, 0.05)',
         transition: 'all 0.1s ease',
       };
@@ -831,6 +915,16 @@ export function MarkdownPreview({
       const blockEl = isEditing ? (
         <textarea
           defaultValue={codeText}
+          onPaste={(e) => {
+            const files = Array.from(e.clipboardData?.files || []);
+            if (!files.some((file) => file.type.startsWith('image/'))) return;
+            const textarea = e.currentTarget;
+            const selectionStart = textarea.selectionStart ?? textarea.value.length;
+            const draftLines = content.split('\n');
+            const newCodeLines = textarea.value.split('\n');
+            draftLines.splice(block.startLine, block.endLine - block.startLine + 1, ['```' + lang, ...newCodeLines, '```'].join('\n'));
+            handlePasteAtIndex(e, getAbsoluteIndex(block.startLine + 1, selectionStart), draftLines.join('\n'));
+          }}
           onBlur={(e) => {
             const newCode = e.currentTarget.value;
             const newLines = ['```' + lang, ...newCode.split('\n'), '```'];
@@ -857,7 +951,7 @@ export function MarkdownPreview({
           }}
         />
       ) : (
-        <div onClick={() => setEditingLineIdx(block.startLine)} style={{ cursor: 'text', width: '100%' }}>
+        <div onClick={(e) => beginEditingLineFromClick(e, block.startLine)} style={{ cursor: 'text', width: '100%' }}>
           {lang.toLowerCase() === 'mermaid' ? (
             <MermaidRenderer key={`mermaid_${idx}`} code={codeText} />
           ) : (
@@ -1159,8 +1253,8 @@ export function MarkdownPreview({
       ) : (
         <h1
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
-          style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '20px', fontWeight: '700', cursor: 'text' }}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
+          style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '1.55em', fontWeight: '700', cursor: 'text' }}
         >
           {renderInline(contentVal.substring(2), block.startLine)}
         </h1>
@@ -1174,8 +1268,8 @@ export function MarkdownPreview({
       ) : (
         <h2
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
-          style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '16px', fontWeight: '600', cursor: 'text' }}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
+          style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '1.3em', fontWeight: '600', cursor: 'text' }}
         >
           {renderInline(contentVal.substring(3), block.startLine)}
         </h2>
@@ -1189,8 +1283,8 @@ export function MarkdownPreview({
       ) : (
         <h3
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
-          style={{ margin: '14px 0 6px 0', fontSize: '14px', fontWeight: '600', cursor: 'text' }}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
+          style={{ margin: '14px 0 6px 0', fontSize: '1.12em', fontWeight: '600', cursor: 'text' }}
         >
           {renderInline(contentVal.substring(4), block.startLine)}
         </h3>
@@ -1205,7 +1299,7 @@ export function MarkdownPreview({
       ) : (
         <div
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text', opacity: isChecked ? 0.55 : 1 }}
         >
           <input type="checkbox" disabled checked={isChecked} />
@@ -1223,8 +1317,8 @@ export function MarkdownPreview({
       ) : (
         <li
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
-          style={{ marginLeft: '16px', margin: '4px 0', fontSize: '13px', cursor: 'text' }}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
+          style={{ marginLeft: '16px', margin: '4px 0', fontSize: 'inherit', cursor: 'text' }}
         >
           {renderInline(contentVal.substring(2), block.startLine)}
         </li>
@@ -1238,7 +1332,7 @@ export function MarkdownPreview({
       ) : (
         <blockquote
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
           style={{ borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' }}
         >
           {renderInline(contentVal.substring(2), block.startLine)}
@@ -1253,7 +1347,7 @@ export function MarkdownPreview({
       ) : (
         <div
           key={idx}
-          onClick={() => setEditingLineIdx(block.startLine)}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
           style={{
             minHeight: '26px',
             margin: '6px 0',
@@ -1283,13 +1377,20 @@ export function MarkdownPreview({
     }
 
     // Default paragraph (p)
+    const isMediaParagraph = shouldTreatBlockAsMedia(block.rawText);
     const blockEl = isEditing ? (
       renderBlockEditor(block.startLine, contentVal)
     ) : (
       <p
         key={idx}
-        onClick={() => setEditingLineIdx(block.startLine)}
-        style={{ margin: '6px 0', lineHeight: '1.6', fontSize: '13px', cursor: 'text' }}
+        onClick={(e) => {
+          if (isMediaParagraph) {
+            e.stopPropagation();
+            return;
+          }
+          beginEditingLineFromClick(e, block.startLine);
+        }}
+        style={{ margin: '6px 0', lineHeight: 'inherit', fontSize: 'inherit', cursor: isMediaParagraph ? 'default' : 'text' }}
       >
         {renderInline(contentVal, block.startLine)}
       </p>
@@ -1301,7 +1402,7 @@ export function MarkdownPreview({
     let parts: React.ReactNode[] = [text];
 
     // -1. @video clip embeds — @video[label](filename?t=start,end) (supports legacy #t= format as well)
-    parts = splitByRegex(parts, /@video\[([^\]]*)\]\(([^#?)]+)[#?]t=([\d.]+),([\d.]+)\)/g, (match, idx) => {
+    parts = splitByRegex(parts, /@video\[([^\]]*)\]\((.+?)[#?]t=([\d.]+),([\d.]+)\)/g, (match, idx) => {
       const label = match[1];
       const fileName = match[2];
       const start = parseFloat(match[3]);
@@ -1417,7 +1518,10 @@ export function MarkdownPreview({
             key={`video_${url}_${idx}`}
             src={finalSrc}
             controls
+            draggable={false}
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onDragStart={(e) => e.preventDefault()}
             style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid var(--border-color)', margin: '8px 0', display: 'block' }}
           />
         );
@@ -1428,7 +1532,10 @@ export function MarkdownPreview({
             key={`audio_${url}_${idx}`}
             src={finalSrc}
             controls
+            draggable={false}
             onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onDragStart={(e) => e.preventDefault()}
             style={{ width: '100%', margin: '8px 0', display: 'block' }}
           />
         );
@@ -1440,7 +1547,16 @@ export function MarkdownPreview({
           src={finalSrc}
           alt={alt}
           onClick={(e) => e.stopPropagation()}
-          style={{ maxWidth: '100%', maxHeight: '320px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'block', margin: '10px 0' }}
+          style={{
+            width: '100%',
+            maxWidth: '100%',
+            height: 'auto',
+            borderRadius: '8px',
+            border: '1px solid var(--border-color)',
+            display: 'block',
+            margin: '10px 0',
+            objectFit: 'contain',
+          }}
         />
       );
     });
@@ -1536,6 +1652,7 @@ export function MarkdownPreview({
     <div
       ref={previewContainerRef}
       className="markdown-preview-container"
+      onScroll={persistReadingScroll}
       onDragOver={(e) => {
         e.preventDefault();
         const hasClip = e.dataTransfer.types.includes('text/x-dnote-clip');
@@ -1564,15 +1681,15 @@ export function MarkdownPreview({
           handleLineDrop(e, allLines.length - 1);
         }
       }}
-      onClick={(e) => {
+      onDoubleClick={(e) => {
         if (e.target === e.currentTarget) {
           const allLines = content.split('\n');
           const lastLineIdx = allLines.length - 1;
           if (allLines[lastLineIdx].trim() !== '') {
             updateMarkdownLines(lastLineIdx, lastLineIdx, [allLines[lastLineIdx], '']);
-            setEditingLineIdx(lastLineIdx + 1);
+            beginEditingLine(lastLineIdx + 1);
           } else {
-            setEditingLineIdx(lastLineIdx);
+            beginEditingLine(lastLineIdx);
           }
         }
       }}
@@ -1582,6 +1699,9 @@ export function MarkdownPreview({
         padding: '20px 40px',
         backgroundColor: 'transparent',
         color: 'var(--text-main)',
+        fontSize: 'var(--editor-font-size, 14px)',
+        lineHeight: 'var(--editor-line-height, 1.6)',
+        fontFamily: 'var(--editor-font-family, var(--font-sans))',
         userSelect: 'text',
         display: 'flex',
         flexDirection: 'column',
@@ -1596,6 +1716,15 @@ export function MarkdownPreview({
           width: 100%;
           padding-left: 20px;
           margin-left: -20px;
+          cursor: grab;
+        }
+        .markdown-preview-container {
+          font-size: var(--editor-font-size, 14px);
+          line-height: var(--editor-line-height, 1.6);
+          font-family: var(--editor-font-family, var(--font-sans));
+        }
+        .preview-block-wrapper:active {
+          cursor: grabbing;
         }
         .preview-block-wrapper:hover .drag-handle {
           opacity: 0.5 !important;
@@ -1650,14 +1779,81 @@ export function MarkdownPreview({
           border-color: var(--accent-color, #7000ff) !important;
           background: var(--highlight-color, rgba(112, 0, 255, 0.08)) !important;
         }
+        .reading-buffer-row {
+          min-height: 34px;
+          margin: 4px 0;
+          border-radius: 8px;
+          border: 1px dashed transparent;
+          display: flex;
+          align-items: center;
+          padding: 0 12px;
+          opacity: 0.38;
+          cursor: text;
+          transition: border-color 0.14s ease, background-color 0.14s ease, opacity 0.14s ease;
+        }
+        .reading-buffer-row:hover,
+        .reading-buffer-row.is-over {
+          opacity: 1;
+          border-color: var(--accent-color, #7000ff);
+          background: rgba(112, 0, 255, 0.06);
+        }
       ` }} />
-      {effectiveContent ? (
+      {content ? (
         blocks.map((block, idx) => renderParsedBlock(block, idx))
       ) : (
-        <div style={{ fontStyle: 'italic', color: 'var(--text-muted)' }}>
-          No content. Switch to edit mode to write.
-        </div>
+        <div
+          onDoubleClick={() => openTrailingEditableLine(0)}
+          style={{ minHeight: '20px', cursor: 'text' }}
+        />
       )}
+      {Array.from({ length: Math.max(0, 4 - countTrailingEmptyLines()) }).map((_, row) => {
+        const lines = content ? content.split('\n') : [''];
+        const insertAfterLine = Math.max(lines.length - 1 + row, -1);
+        const insertIndex = content.length;
+        const isOver = hoveredLineIndex === insertAfterLine || (row === 0 && isDraggingOverBottom);
+        return (
+          <div
+            key={`reading_buffer_row_${row}`}
+            className={`reading-buffer-row${isOver ? ' is-over' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              openTrailingEditableLine(row);
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              openTrailingEditableLine(row);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setHoveredLineIndex(insertAfterLine);
+              setIsDraggingOverBottom(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setHoveredLineIndex((prev) => (prev === insertAfterLine ? null : prev));
+              setIsDraggingOverBottom(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setIsDraggingOverBottom(false);
+              setHoveredLineIndex(null);
+              const hasLinePayload =
+                e.dataTransfer.files.length > 0 ||
+                e.dataTransfer.types.includes('text/x-dnote-clip') ||
+                e.dataTransfer.getData('text/x-dnote-block-line') !== '';
+              if (hasLinePayload) {
+                handleLineDrop(e, insertAfterLine);
+              } else {
+                handleDropAtIndex(e, insertIndex);
+              }
+            }}
+            title="点击编辑，或拖入媒体/区块插入到这里"
+          />
+        );
+      })}
       <SlashMenu
         show={previewSlashMenu.show}
         filteredCommands={filteredPreviewCommands}
@@ -1667,25 +1863,6 @@ export function MarkdownPreview({
         handleExecuteCommand={executePreviewSlashCommand}
         getShortcutDisplay={getShortcutDisplay}
       />
-      {isDraggingOverBottom && (
-        <div style={{
-          height: '40px',
-          border: '2px dashed var(--accent-color, #7000ff)',
-          borderRadius: '6px',
-          backgroundColor: 'rgba(112, 0, 255, 0.05)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--accent-color, #7000ff)',
-          fontSize: '12px',
-          fontWeight: 500,
-          marginTop: '16px',
-          marginBottom: '16px',
-          pointerEvents: 'none',
-        }}>
-          + 释放以追加到笔记末尾
-        </div>
-      )}
     </div>
   );
 }

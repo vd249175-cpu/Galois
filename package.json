@@ -1,96 +1,102 @@
 {
-  "name": "dnote",
+  "name": "galois",
   "version": "1.0.0",
   "description": "",
   "main": "dist-electron/main.js",
   "scripts": {
     "clean:template": "node scripts/clean-template.js",
+    "clean:release": "node scripts/clean-release-artifacts.js",
     "build:icon": "python3 scripts/generate_app_icon.py",
     "build:vite": "vite build",
     "build:electron": "tsc CORE/main.ts CORE/preload.ts --outDir dist-electron --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop true --ignoreConfig",
+    "prepare:launcher": "node scripts/prepare-launcher-app.js",
+    "fix:native": "node scripts/fix-native-binaries.js",
     "dev:vite": "vite",
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
-    "dev": "concurrently -k \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
+    "dev": "npm run fix:native && concurrently -k \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
     "build": "npm run build:icon && npm run build:vite && npm run build:electron",
     "start": "NODE_ENV=production electron .",
-    "package": "npm run clean:template && npm run build && electron-builder",
-    "package:mac": "npm run clean:template && npm run build && electron-builder --mac"
+    "package": "npm run clean:release && npm run clean:template && npm run build && npm run prepare:launcher && electron-builder",
+    "package:mac": "npm run clean:release && npm run clean:template && npm run build && npm run prepare:launcher && electron-builder --mac"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.0",
     "@codemirror/view": "^6.43.4",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/addon-web-links": "^0.12.0",
-    "@xterm/xterm": "^6.0.0",
-    "liquid-glass-react": "^1.1.1",
-    "node-pty": "^1.1.0",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
-  "devDependencies": {
     "@electron/rebuild": "^4.0.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
     "concurrently": "^10.0.3",
     "electron": "^42.4.1",
     "electron-builder": "^26.15.3",
     "electron-rebuild": "^3.2.9",
+    "liquid-glass-react": "^1.1.1",
+    "node-pty": "^1.1.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"
   },
   "build": {
-    "appId": "com.dnote.app",
-    "productName": "DNOTE",
+    "appId": "com.galois.app",
+    "productName": "Galois",
     "icon": "assets/app-icon.icns",
     "electronDist": "node_modules/electron/dist",
+    "disableDefaultIgnoredFiles": true,
+    "disableSanityCheckAsar": true,
+    "afterPack": "scripts/after-pack-launcher.js",
+    "extraMetadata": {
+      "main": "dist-electron/main.js"
+    },
     "directories": {
+      "app": ".launcher-app",
       "output": ".build"
     },
     "files": [
-      "dist/**/*",
-      "dist-electron/**/*",
-      "index.html"
+      "**/*"
     ],
     "extraResources": [
       {
-        "from": "template-project",
-        "to": "template-project",
+        "from": ".",
+        "to": "classic-code",
         "filter": [
-          "**/*",
+          "APP/**/*",
+          "CORE/**/*",
+          ".agents/**/*",
+          "assets/**/*",
+          "docs/**/*",
+          "scripts/**/*",
+          "template-project/**/*",
+          "AGENTS.md",
+          "README.md",
+          "index.html",
+          "index.tsx",
+          ".gitignore",
+          "package.json",
+          "package-lock.json",
+          "run.sh",
+          "tsconfig.json",
+          "vite.config.ts",
           "!**/.DS_Store",
-          "!**/.venv",
+          "!**/.git/**/*",
+          "!**/node_modules/**/*",
+          "!**/.build/**/*",
+          "!**/dist/**/*",
+          "!**/dist-electron/**/*",
           "!**/.venv/**/*",
-          "!**/.dnote_runtime.json",
-          "!**/.dnote_cache",
           "!**/.dnote_cache/**/*",
-          "!**/on_project_run.json",
-          "!**/output.json",
-          "!**/run_once_demo.json",
-          "!**/sys_monitor.json"
-        ]
-      },
-      {
-        "from": "APP",
-        "to": "APP",
-        "filter": [
-          "**/services/**/*",
-          "!**/.DS_Store"
-        ]
-      },
-      {
-        "from": "extensions",
-        "to": "extensions",
-        "filter": [
-          "**/*",
-          "!**/.DS_Store"
+          "!**/.dnote_runtime.json"
         ]
       }
     ],

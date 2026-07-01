@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
-import { parseFrontmatterTags, parseMarkdownBody } from '../utils';
+import { extractBodyHashtags, parseFrontmatterTags, parseMarkdownBody } from '../utils';
 import { updateYamlFrontmatterTags, parseExpression } from './editorUtils';
 import { MarkdownPreview } from './MarkdownPreview';
 import { TagToolbar } from './TagToolbar';
@@ -64,6 +64,7 @@ export const EditorComponent = {
     BC.system.resolvedTags,
     BC.system.staticTags,
     BC.events.openFile(areaId),
+    BC.system.editorCursor(areaId),
     BC.system.focusedAreaId,
     BC.system.activeEditors,
     BC.system.lastFocusedEditorId,
@@ -77,6 +78,7 @@ export const EditorComponent = {
       BC.system.resolvedTags,       // 解析后的全局标签 map（由 fileTree 写入）
       BC.system.staticTags,         // 所有文件的原始/静态标签 map（由 fileTree 写入）
       BC.events.openFile('*'),      // 打开文件请求（由 fileTree/graphView 写入）
+      BC.system.editorCursor('*'),  // 恢复项目状态中的编辑器光标
       BC_PREFIX.fileSavedAll,       // 读取外部脚本修改文件的保存事件
       BC.system.focusedAreaId,
       BC.system.activeEditors,
@@ -87,6 +89,7 @@ export const EditorComponent = {
       BC.system.activeEditors,          // 注册/注销自身
       BC.system.lastFocusedEditorId,    // 聚焦时更新
       BC.system.focusedAreaId,          // 聚焦时更新
+      BC.system.editorCursor('*'),      // 光标位置与选区状态
       BC.events.openFile('*'),          // WikiLink 跳转时写入目标 areaId
     ],
     dependsOn: ['fileTree'],           // 需要 fileTree 提供 system.resolvedTags
@@ -122,6 +125,7 @@ function EditorView({
   const [newTagInput, setNewTagInput] = useState('');
   const [ruleMatches, setRuleMatches] = useState<Record<string, string[]>>({});
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
+  const projectPath = state[BC.system.projectPath] || '';
 
   // Sync runtime coordinates to .dnote_runtime.json in the project root.
   // Migrated from CORE/App.tsx to keep editor-specific logic inside the editor plugin.
@@ -135,19 +139,55 @@ function EditorView({
   const lastSavedContentRef = useRef<string>('');
   const isComposingRef = useRef<boolean>(false);
   const triggeredImmediateRefs = useRef<Set<string>>(new Set());
+  const restoredCursorForFileRef = useRef<string>('');
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     triggeredImmediateRefs.current.clear();
+    restoredCursorForFileRef.current = '';
   }, [currentFile]);
+
+  const mergeInlineTagsIntoFrontmatter = (draft: string) => {
+    const frontmatterTags = parseFrontmatterTags(draft);
+    const inlineTags = extractBodyHashtags(draft);
+    if (inlineTags.length === 0) {
+      return { text: draft, tags: frontmatterTags, changed: false, delta: 0 };
+    }
+    const mergedTags = Array.from(new Set([...frontmatterTags, ...inlineTags])).sort();
+    const missingInlineTag = inlineTags.some((tag) => !frontmatterTags.includes(tag));
+    if (!missingInlineTag) {
+      return { text: draft, tags: mergedTags, changed: false, delta: 0 };
+    }
+    const nextText = updateYamlFrontmatterTags(draft, mergedTags);
+    return { text: nextText, tags: mergedTags, changed: nextText !== draft, delta: nextText.length - draft.length };
+  };
 
   // ── saveNodeFile ──────────────────────────────────────────────────────────
   const saveNodeFile = async (customContent?: string) => {
     if (!currentFile) { setStatusMessage('无打开的笔记可保存'); return; }
-    const fullContent = customContent !== undefined ? customContent : contentRef.current;
+    const sourceContent = customContent !== undefined ? customContent : contentRef.current;
+    const normalized = mergeInlineTagsIntoFrontmatter(sourceContent);
+    const fullContent = normalized.text;
     if (fullContent === lastSavedContentRef.current) return;
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
+      if (normalized.changed) {
+        const editor = textareaRef.current;
+        const selectionStart = editor?.selectionStart ?? 0;
+        const selectionEnd = editor?.selectionEnd ?? selectionStart;
+        const scroll = editor?.getScrollPosition?.();
+        setTags(normalized.tags);
+        setContent(fullContent);
+        requestAnimationFrame(() => {
+          if (!textareaRef.current) return;
+          textareaRef.current.setSelectionRange(selectionStart + normalized.delta, selectionEnd + normalized.delta);
+          if (scroll) textareaRef.current.setScrollPosition?.(scroll.top, scroll.left);
+        });
+      }
       setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
       updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
       
@@ -169,16 +209,17 @@ function EditorView({
     handleRedo,
     historyTimerRef,
     lastHistoryContentRef,
+    markHistoryContent,
   } = useEditorHistory({
     content,
     setContent,
     currentFile,
+    projectPath,
     saveNodeFile,
     textareaRef,
     setStatusMessage,
   });
 
-  const projectPath = state[BC.system.projectPath] || '';
   const openedFile = state[BC.events.openFile(areaId)] || '';
   const isFocused = state[BC.system.focusedAreaId] === areaId;
   const configPath = projectPath ? `${projectPath}/command/commands.json` : '';
@@ -538,24 +579,24 @@ function EditorView({
   });
 
   const SLASH_COMMANDS = [
-    { id: 'bold', label: 'Bold', desc: 'Make text bold', icon: 'B', category: '格式' },
-    { id: 'italic', label: 'Italic', desc: 'Make text italic', icon: 'I', category: '格式' },
-    { id: 'code-inline', label: 'Inline Code', desc: 'Insert monospace code', icon: '`', category: '格式' },
-    { id: 'strike', label: 'Strikethrough', desc: 'Strike selected text', icon: 'S', category: '格式' },
-    { id: 'highlight', label: 'Highlight', desc: 'Highlight selected text', icon: '==', category: '格式' },
-    { id: 'link', label: 'Link', desc: 'Create a hyperlink', icon: '🔗', category: '链接' },
-    { id: 'wiki-link', label: 'Wiki Link', desc: 'Link to another note', icon: '[[', category: '链接' },
-    { id: 'h1', label: 'Heading 1', desc: 'Big section heading', icon: 'H1', category: '基础块' },
-    { id: 'h2', label: 'Heading 2', desc: 'Medium section heading', icon: 'H2', category: '基础块' },
-    { id: 'h3', label: 'Heading 3', desc: 'Small section heading', icon: 'H3', category: '基础块' },
-    { id: 'quote', label: 'Blockquote', desc: 'Blockquote section', icon: '“', category: '基础块' },
-    { id: 'callout', label: 'Callout', desc: 'Obsidian-style callout block', icon: '!', category: '基础块' },
-    { id: 'hr', label: 'Divider', desc: 'Horizontal rule', icon: '—', category: '基础块' },
-    { id: 'todo', label: 'To-Do List', desc: 'Checkbox for tasks', icon: '☑', category: '列表' },
-    { id: 'bullet', label: 'Bullet List', desc: 'Simple bullet point', icon: '•', category: '列表' },
-    { id: 'number', label: 'Numbered List', desc: 'Numbered sequence', icon: '1.', category: '列表' },
-    { id: 'table', label: 'Table', desc: 'Insert a 2-column table', icon: '▦', category: '表格' },
-    { id: 'code-block', label: 'Code Block', desc: 'Code wrapper', icon: '💻', category: '代码' }
+    { id: 'bold', label: 'Bold', desc: '加粗所选文本', icon: 'B', category: '格式' },
+    { id: 'italic', label: 'Italic', desc: '将所选文本设为斜体', icon: 'I', category: '格式' },
+    { id: 'code-inline', label: 'Inline Code', desc: '插入行内等宽代码', icon: '`', category: '格式' },
+    { id: 'strike', label: 'Strikethrough', desc: '给所选文本加删除线', icon: 'S', category: '格式' },
+    { id: 'highlight', label: 'Highlight', desc: '高亮所选文本', icon: '==', category: '格式' },
+    { id: 'link', label: 'Link', desc: '插入外部超链接', icon: '🔗', category: '链接' },
+    { id: 'wiki-link', label: 'Wiki Link', desc: '链接到另一篇笔记', icon: '[[', category: '链接' },
+    { id: 'h1', label: 'Heading 1', desc: '插入一级标题', icon: 'H1', category: '基础块' },
+    { id: 'h2', label: 'Heading 2', desc: '插入二级标题', icon: 'H2', category: '基础块' },
+    { id: 'h3', label: 'Heading 3', desc: '插入三级标题', icon: 'H3', category: '基础块' },
+    { id: 'quote', label: 'Blockquote', desc: '插入引用块', icon: '“', category: '基础块' },
+    { id: 'callout', label: 'Callout', desc: '插入提示块', icon: '!', category: '基础块' },
+    { id: 'hr', label: 'Divider', desc: '插入分隔线', icon: '—', category: '基础块' },
+    { id: 'todo', label: 'To-Do List', desc: '插入待办列表', icon: '☑', category: '列表' },
+    { id: 'bullet', label: 'Bullet List', desc: '插入无序列表', icon: '•', category: '列表' },
+    { id: 'number', label: 'Numbered List', desc: '插入有序列表', icon: '1.', category: '列表' },
+    { id: 'table', label: 'Table', desc: '插入两列表格', icon: '▦', category: '表格' },
+    { id: 'code-block', label: 'Code Block', desc: '插入代码块', icon: '💻', category: '代码' }
   ];
 
   const allCommands = useMemo(() => {
@@ -593,7 +634,7 @@ function EditorView({
       {
         id: 'custom.add_new',
         label: 'Create Custom Command (新增自定义命令)',
-        desc: 'Define your own text snippet slash command',
+        desc: '创建可复用的自定义文本命令',
         icon: React.createElement(
           'svg',
           { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
@@ -605,7 +646,7 @@ function EditorView({
       {
         id: 'custom.manage',
         label: 'Manage Custom Commands (管理自定义命令)',
-        desc: 'View, edit or delete custom slash commands',
+        desc: '查看、编辑或删除自定义命令',
         icon: React.createElement(
           'svg',
           { width: 11, height: 11, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 2 },
@@ -683,7 +724,7 @@ function EditorView({
       const snippet = cmd.content || '';
       const textAfterInsert = before + snippet + after;
       setContent(textAfterInsert);
-      lastHistoryContentRef.current = textAfterInsert;
+      markHistoryContent(textAfterInsert);
       saveNodeFile(textAfterInsert);
       setShowSlashMenu(false);
       restoreSelection(actualStart + snippet.length, actualStart + snippet.length);
@@ -700,7 +741,7 @@ function EditorView({
         const snippet = projCmd.content || '';
         const textAfterInsert = before + snippet + after;
         setContent(textAfterInsert);
-        lastHistoryContentRef.current = textAfterInsert;
+        markHistoryContent(textAfterInsert);
         saveNodeFile(textAfterInsert);
         setShowSlashMenu(false);
         restoreSelection(actualStart + snippet.length, actualStart + snippet.length);
@@ -715,7 +756,7 @@ function EditorView({
       const cleanContent = before + after;
       
       setContent(cleanContent);
-      lastHistoryContentRef.current = cleanContent;
+      markHistoryContent(cleanContent);
       saveNodeFile(cleanContent);
       setShowSlashMenu(false);
       
@@ -744,7 +785,7 @@ function EditorView({
         pushStateToUndoStack(workingContent, start, start);
         const res = applyFormatting('link', baseContent, start, start, url);
         setContent(res.text);
-        lastHistoryContentRef.current = res.text;
+        markHistoryContent(res.text);
         saveNodeFile(res.text);
         restoreSelection(res.newStart, res.newEnd);
       });
@@ -754,7 +795,7 @@ function EditorView({
     pushStateToUndoStack(workingContent, start, start);
     const res = applyFormatting(cmd.id, baseContent, start, start);
     setContent(res.text);
-    lastHistoryContentRef.current = res.text;
+    markHistoryContent(res.text);
     saveNodeFile(res.text);
 
     setShowSlashMenu(false);
@@ -1001,13 +1042,127 @@ function EditorView({
       pushStateToUndoStack(contentRef.current, 0, 0);
     }
     setContent(resolvedVal);
-    lastHistoryContentRef.current = resolvedVal;
+    markHistoryContent(resolvedVal);
   };
 
   const handlePreviewContentChange = (newContent: string) => {
+    if (newContent === contentRef.current) return;
+    pushStateToUndoStack(contentRef.current, 0, 0);
     setContent(newContent);
+    markHistoryContent(newContent);
     saveNodeFile(newContent);
   };
+
+  const insertTextAtCurrentCursor = (snippet: string) => {
+    const editor = textareaRef.current;
+    const start = editor?.selectionStart ?? contentRef.current.length;
+    const end = editor?.selectionEnd ?? start;
+    const source = contentRef.current;
+    const before = source.slice(0, start);
+    const after = source.slice(end);
+    const prefix = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+    const suffix = after.length > 0 && !after.startsWith('\n') ? '\n' : '\n';
+    const nextContent = `${before}${prefix}${snippet}${suffix}${after}`;
+    const nextCursor = before.length + prefix.length + snippet.length;
+    pushStateToUndoStack(source, start, end);
+    setContent(nextContent);
+    markHistoryContent(nextContent);
+    saveNodeFile(nextContent);
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+
+  const stopRecordingTracks = () => {
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  };
+
+  const finishAudioRecording = async (mimeType: string) => {
+    try {
+      const blob = new Blob(recordingChunksRef.current, { type: mimeType || 'audio/webm' });
+      recordingChunksRef.current = [];
+      if (blob.size === 0) {
+        setStatusMessage('录音为空，未插入。');
+        return;
+      }
+      if (!projectPath || !currentFile) {
+        setStatusMessage('请先打开笔记项目和笔记，再开始录音。');
+        return;
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const data = await blob.arrayBuffer();
+      const relativePath = await (window as any).electronAPI.archiveMediaData(
+        `voice-${timestamp}.webm`,
+        mimeType || 'audio/webm',
+        data,
+        projectPath
+      );
+      insertTextAtCurrentCursor(`![audio](${relativePath})`);
+      setStatusMessage('录音已保存到当前笔记项目媒体目录。');
+    } catch (err: any) {
+      console.error('[Editor] Audio recording save failed:', err);
+      setStatusMessage(`录音保存失败: ${err.message}`);
+    } finally {
+      stopRecordingTracks();
+      setIsRecordingAudio(false);
+    }
+  };
+
+  const handleToggleAudioRecording = async () => {
+    if (isRecordingAudio) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (!projectPath || !currentFile) {
+      setStatusMessage('请先打开笔记项目和笔记，再开始录音。');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setStatusMessage('当前环境不支持浏览器录音。');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+      recordingStreamRef.current = stream;
+      recordingChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onerror = (event: any) => {
+        console.error('[Editor] Audio recording failed:', event.error || event);
+        setStatusMessage(`录音失败: ${event.error?.message || '未知错误'}`);
+        stopRecordingTracks();
+        setIsRecordingAudio(false);
+      };
+      recorder.onstop = () => {
+        finishAudioRecording(mimeType);
+      };
+      recorder.start();
+      setIsRecordingAudio(true);
+      setStatusMessage('正在录音，再次点击可停止并插入音频。');
+    } catch (err: any) {
+      console.error('[Editor] Audio recording start failed:', err);
+      stopRecordingTracks();
+      setIsRecordingAudio(false);
+      setStatusMessage(`无法开始录音: ${err.message}`);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      stopRecordingTracks();
+    };
+  }, []);
 
   const {
     isDraggingFile,
@@ -1018,6 +1173,7 @@ function EditorView({
     handleDragOver,
     handleDrop,
     handleDropAtIndex,
+    handlePasteAtIndex,
     handleLineDrop,
   } = useMediaDrop({
     projectPath,
@@ -1117,11 +1273,17 @@ function EditorView({
     const loadMarkdownFile = async () => {
       try {
         const rawContent = await (window as any).electronAPI.readFile(openedFile);
-        if (rawContent === contentRef.current || rawContent === lastSavedContentRef.current) return;
-        const parsedTags = parseFrontmatterTags(rawContent);
-        lastSavedContentRef.current = rawContent;
+        const normalized = mergeInlineTagsIntoFrontmatter(rawContent);
+        const loadedContent = normalized.text;
+        if (loadedContent === contentRef.current || loadedContent === lastSavedContentRef.current) return;
+        const parsedTags = normalized.tags;
+        if (normalized.changed) {
+          await (window as any).electronAPI.writeFile(openedFile, loadedContent);
+          updateBloodKey(BC.events.fileSaved(openedFile), Date.now());
+        }
+        lastSavedContentRef.current = loadedContent;
         setTags(parsedTags);
-        setContent(rawContent);
+        setContent(loadedContent);
         setCurrentFile(openedFile);
         const noteName = openedFile.split('/').pop()?.replace('.md', '') || '';
         setStatusMessage(`Editing Note: ${noteName}`);
@@ -1155,10 +1317,55 @@ function EditorView({
     loadMarkdownFile();
   }, [openedFile, fileSavedEvent]);
 
+  useEffect(() => {
+    const savedCursor = state[BC.system.editorCursor(areaId)];
+    if (!currentFile || !content) return;
+    if (restoredCursorForFileRef.current === currentFile) return;
+    if (editorMode === 'reading') return;
+
+    let selectionStart = 0;
+    let selectionEnd = 0;
+    let scrollTop = 0;
+    let scrollLeft = 0;
+    if (projectPath) {
+      try {
+        const perFile = JSON.parse(localStorage.getItem(`galois_live_view:${projectPath}:${currentFile}`) || 'null');
+        if (perFile) {
+          selectionStart = Math.max(0, Math.min(content.length, Number(perFile.selectionStart || 0)));
+          selectionEnd = Math.max(0, Math.min(content.length, Number(perFile.selectionEnd || selectionStart)));
+          scrollTop = Number(perFile.scrollTop || 0);
+          scrollLeft = Number(perFile.scrollLeft || 0);
+        }
+      } catch (_) {}
+    }
+    if (selectionStart === 0 && selectionEnd === 0 && savedCursor?.filePath === currentFile) {
+      const line = Math.max(1, Number(savedCursor.line || 1));
+      const column = Math.max(1, Number(savedCursor.column || 1));
+      const lines = content.split('\n');
+      const before = lines.slice(0, line - 1).reduce((sum, item) => sum + item.length + 1, 0);
+      selectionStart = Math.min(content.length, before + Math.min(column - 1, (lines[line - 1] || '').length));
+      selectionEnd = selectionStart;
+      scrollTop = Number(savedCursor.scrollTop || 0);
+      scrollLeft = Number(savedCursor.scrollLeft || 0);
+    }
+
+    restoredCursorForFileRef.current = currentFile;
+    setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(selectionStart, selectionEnd);
+      requestAnimationFrame(() => {
+        textareaRef.current?.setScrollPosition?.(scrollTop, scrollLeft);
+      });
+    }, 0);
+  }, [areaId, content, currentFile, editorMode, projectPath, state[BC.system.editorCursor(areaId)]]);
+
   // ── Tag resolver ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentFile || !projectPath) return;
-    const staticTags = tags.filter((t) => !t.startsWith('re:') && !t.startsWith('run:'));
+    const staticTags = Array.from(new Set([
+      ...tags.filter((t) => !t.startsWith('re:') && !t.startsWith('run:')),
+      ...extractBodyHashtags(content),
+    ]));
     const bodyText = parseMarkdownBody(content);
     const matchesMap: Record<string, string[]> = {};
     const allRegexMatches: string[] = [];
@@ -1226,7 +1433,7 @@ function EditorView({
     }
     
     setContent(fullContent);
-    lastHistoryContentRef.current = fullContent;
+    markHistoryContent(fullContent);
     try {
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
@@ -1396,11 +1603,22 @@ function EditorView({
     const line = lines.length;
     const column = lines[lines.length - 1].length + 1;
     const selectedText = currentVal.substring(selectionStart, selectionEnd);
+    const scroll = textareaRef.current.getScrollPosition?.();
+    if (projectPath && currentFile) {
+      localStorage.setItem(`galois_live_view:${projectPath}:${currentFile}`, JSON.stringify({
+        selectionStart,
+        selectionEnd,
+        scrollTop: scroll?.top || 0,
+        scrollLeft: scroll?.left || 0,
+      }));
+    }
     
     updateBloodKey(`system.editorCursor.${areaId}`, {
       line,
       column,
       selectedText,
+      scrollTop: scroll?.top || 0,
+      scrollLeft: scroll?.left || 0,
       filePath: currentFile
     });
   };
@@ -1475,7 +1693,7 @@ function EditorView({
           pushStateToUndoStack(content, start, end);
           const res = applyFormatting('link', content, start, end, url);
           setContent(res.text);
-          lastHistoryContentRef.current = res.text;
+          markHistoryContent(res.text);
           saveNodeFile(res.text);
           
           setTimeout(() => {
@@ -1489,7 +1707,7 @@ function EditorView({
         pushStateToUndoStack(content, start, end);
         const res = applyFormatting(matchedType, content, start, end);
         setContent(res.text);
-        lastHistoryContentRef.current = res.text;
+        markHistoryContent(res.text);
         saveNodeFile(res.text);
         
         setTimeout(() => {
@@ -1532,7 +1750,7 @@ function EditorView({
         e.preventDefault();
         pushStateToUndoStack(content, start, end);
         setContent(result.text);
-        lastHistoryContentRef.current = result.text;
+        markHistoryContent(result.text);
         saveNodeFile(result.text);
         setTimeout(() => {
           textareaRef.current?.focus();
@@ -1548,7 +1766,7 @@ function EditorView({
         e.preventDefault();
         pushStateToUndoStack(content, start, end);
         setContent(result.text);
-        lastHistoryContentRef.current = result.text;
+        markHistoryContent(result.text);
         if (result.text !== content) saveNodeFile(result.text);
         setTimeout(() => {
           textareaRef.current?.focus();
@@ -1572,6 +1790,27 @@ function EditorView({
       }
     }
   };
+
+  useEffect(() => {
+    if (!isFocused || !isReadingMode) return;
+    const handleReadingUndoRedo = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+    window.addEventListener('keydown', handleReadingUndoRedo, true);
+    return () => window.removeEventListener('keydown', handleReadingUndoRedo, true);
+  }, [isFocused, isReadingMode, handleUndo, handleRedo]);
 
   const handleEditorDrop = (event: React.DragEvent) => {
     if (event.defaultPrevented) return;
@@ -1606,7 +1845,7 @@ function EditorView({
     >
       {/* Editor Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 12px', borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-header)', height: '26px', overflow: 'hidden' }}>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
+        <span style={{ fontSize: 'var(--panel-title-size, 11px)', color: 'var(--text-muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
           <span>{modeLabel}</span>
           {currentFile && (
             <>
@@ -1644,7 +1883,7 @@ function EditorView({
           <button
             className="area-btn"
             onClick={() => setIsTagGroupsOpen(true)}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: 'var(--panel-title-size, 11px)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
@@ -1654,13 +1893,39 @@ function EditorView({
           <button
             className="area-btn"
             onClick={() => setIsCustomCommandsOpen(true)}
-            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+            style={{ width: 'auto', height: '18px', padding: '0 8px', fontSize: 'var(--panel-title-size, 11px)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
           >
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="8" cy="8" r="2.5" />
               <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" />
             </svg>
             自定义命令
+          </button>
+          <button
+            className="area-btn"
+            onClick={handleToggleAudioRecording}
+            title={isRecordingAudio ? '停止录音并插入到当前笔记' : '录制一段声音并插入到当前笔记'}
+            style={{
+              width: 'auto',
+              height: '18px',
+              padding: '0 8px',
+              fontSize: 'var(--panel-title-size, 11px)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              color: isRecordingAudio ? '#ff3b30' : 'var(--text-muted)',
+              borderColor: isRecordingAudio ? 'rgba(255, 59, 48, 0.45)' : undefined,
+              backgroundColor: isRecordingAudio ? 'rgba(255, 59, 48, 0.08)' : undefined,
+            }}
+          >
+            <span style={{
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              backgroundColor: isRecordingAudio ? '#ff3b30' : 'currentColor',
+              boxShadow: isRecordingAudio ? '0 0 0 3px rgba(255, 59, 48, 0.14)' : 'none',
+            }} />
+            {isRecordingAudio ? '停止' : '录音'}
           </button>
           <div
             role="group"
@@ -1679,7 +1944,7 @@ function EditorView({
                     width: 'auto',
                     height: '18px',
                     padding: '0 8px',
-                    fontSize: '11px',
+                    fontSize: 'var(--panel-title-size, 11px)',
                     borderColor: active ? 'var(--accent-color)' : 'transparent',
                     backgroundColor: active ? 'var(--highlight-color)' : 'transparent',
                     color: active ? 'var(--accent-color)' : 'var(--text-muted)',
@@ -1724,6 +1989,8 @@ function EditorView({
           hoveredLineIndex={hoveredLineIndex}
           setHoveredLineIndex={setHoveredLineIndex}
           handleLineDrop={handleLineDrop}
+          handleDropAtIndex={handleDropAtIndex}
+          handlePasteAtIndex={handlePasteAtIndex}
           currentFile={currentFile}
           slashCommands={allCommands}
           getShortcutDisplay={getShortcutDisplay}
@@ -1734,7 +2001,7 @@ function EditorView({
       ) : (
         <React.Suspense
           fallback={
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 'var(--ui-font-size, 12px)' }}>
               正在加载编辑器内核...
             </div>
           }
@@ -1764,13 +2031,13 @@ function EditorView({
               const lastChar = nextVal.charAt(selectionStart - 1);
               if (diffLen > 6 || lastChar === ' ' || lastChar === '\n') {
                 pushStateToUndoStack(lastHistoryContentRef.current, selectionStart, selectionStart);
-                lastHistoryContentRef.current = nextVal;
+                markHistoryContent(nextVal);
               } else {
                 // Debounce pushing history state if user stops typing for 500ms
                 const prevVal = lastHistoryContentRef.current;
                 historyTimerRef.current = setTimeout(() => {
                   pushStateToUndoStack(prevVal, selectionStart, selectionStart);
-                  lastHistoryContentRef.current = nextVal;
+                  markHistoryContent(nextVal);
                 }, 500);
               }
 
@@ -1802,6 +2069,7 @@ function EditorView({
             }}
             onKeyDown={handleKeyDown}
             onDropAtPosition={handleDropAtIndex}
+            onPasteAtPosition={handlePasteAtIndex}
             onFocus={handleFocus}
             onSelectionChange={() => updateCursorState()}
             placeholder="Start writing note..."
@@ -1837,8 +2105,8 @@ function EditorView({
               </svg>
             </span>
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>松手插入到当前位置</span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>支持媒体文件和 CLIP 片段</span>
+              <span style={{ fontSize: 'var(--ui-font-size, 12px)', fontWeight: 700, color: 'var(--text-main)' }}>松手插入到当前位置</span>
+              <span style={{ fontSize: 'calc(var(--ui-font-size, 12px) - 2px)', color: 'var(--text-muted)' }}>支持媒体文件和 CLIP 片段</span>
             </div>
           </div>
         </div>

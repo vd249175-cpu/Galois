@@ -29,7 +29,7 @@ export class ExtensionHostService implements IExtensionHostService {
   async refreshExtensions(): Promise<ExtensionRecord[]> {
     const extensionDir = await this.platformService.ensureExtensionsDir();
     const extensions = await this.platformService.seedExtensions();
-    this.setExtensions(extensions);
+    this.publishExtensions(extensions);
     await this.syncRuntimeInfo();
     if (!this.stateService.getValue(BC.system.extensionPath, '')) {
       this.stateService.updateKey(BC.system.extensionPath, extensionDir);
@@ -47,14 +47,14 @@ export class ExtensionHostService implements IExtensionHostService {
       return { extensions: [], selectedPath: null };
     }
     const extensions = await this.platformService.addExtensionDevPath(selectedPath);
-    this.setExtensions(extensions);
+    this.publishExtensions(extensions);
     await this.syncRuntimeInfo();
     return { extensions, selectedPath };
   }
 
   async removeDevelopmentPath(devPath: string): Promise<ExtensionRecord[]> {
     const extensions = await this.platformService.removeExtensionDevPath(devPath);
-    this.setExtensions(extensions);
+    this.publishExtensions(extensions);
     await this.syncRuntimeInfo();
     return extensions;
   }
@@ -93,6 +93,13 @@ export class ExtensionHostService implements IExtensionHostService {
 
   private setExtensions(extensions: ExtensionRecord[]) {
     this.commands = extensions.flatMap((extension) => this.readCommandContributions(extension));
+  }
+
+  private publishExtensions(extensions: ExtensionRecord[]) {
+    this.setExtensions(extensions);
+    this.stateService.updateKey(BC.system.extensions, extensions);
+    this.stateService.updateKey(BC.system.extensionCommands, this.commands);
+    this.stateService.updateKey(BC.system.extensionRefreshTimestamp, Date.now());
   }
 
   private readCommandContributions(extension: ExtensionRecord): ExtensionCommandContribution[] {

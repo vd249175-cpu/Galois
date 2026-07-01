@@ -11,6 +11,8 @@ export interface EditorTextHandle {
   selectionEnd: number;
   focus: () => void;
   setSelectionRange: (start: number, end: number) => void;
+  getScrollPosition: () => { top: number; left: number };
+  setScrollPosition: (top: number, left?: number) => void;
   getCaretCoordinates: (position: number) => { left: number; top: number };
   getPositionAtCoordinates: (clientX: number, clientY: number) => number | null;
 }
@@ -25,6 +27,7 @@ interface LiveMarkdownEditorProps {
   onCompositionStart: () => void;
   onCompositionEnd: (nextValue: string) => void;
   onDropAtPosition?: (event: DragEvent, position: number) => void;
+  onPasteAtPosition?: (event: ClipboardEvent, position: number) => void;
   livePreview?: boolean;
   projectPath?: string;
   onWikiLink?: (target: string) => void;
@@ -38,11 +41,11 @@ function createTheme(): Extension {
       height: '100%',
       color: 'var(--text-main)',
       backgroundColor: 'transparent',
-      fontSize: '12px',
+      fontSize: 'var(--editor-font-size, 14px)',
     },
     '.cm-scroller': {
-      fontFamily: 'var(--font-mono)',
-      lineHeight: '1.55',
+      fontFamily: 'var(--editor-font-family, var(--font-mono))',
+      lineHeight: 'var(--editor-line-height, 1.6)',
       overflow: 'auto',
     },
     '.cm-content': {
@@ -99,6 +102,7 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
       onCompositionStart,
       onCompositionEnd,
       onDropAtPosition,
+      onPasteAtPosition,
       livePreview = false,
       projectPath = '',
       onWikiLink = () => {},
@@ -116,6 +120,7 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
       onCompositionStart,
       onCompositionEnd,
       onDropAtPosition,
+      onPasteAtPosition,
     });
     valueRef.current = value;
     callbacksRef.current = {
@@ -126,6 +131,7 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
       onCompositionStart,
       onCompositionEnd,
       onDropAtPosition,
+      onPasteAtPosition,
     };
 
     useImperativeHandle(ref, () => ({
@@ -152,6 +158,16 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
           selection: { anchor: safeStart, head: safeEnd },
           scrollIntoView: true,
         });
+      },
+      getScrollPosition() {
+        const scrollDOM = viewRef.current?.scrollDOM;
+        return { top: scrollDOM?.scrollTop || 0, left: scrollDOM?.scrollLeft || 0 };
+      },
+      setScrollPosition(top: number, left = 0) {
+        const scrollDOM = viewRef.current?.scrollDOM;
+        if (!scrollDOM) return;
+        scrollDOM.scrollTop = top;
+        scrollDOM.scrollLeft = left;
       },
       getCaretCoordinates(position: number) {
         const view = viewRef.current;
@@ -226,6 +242,10 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
                 callbacksRef.current.onSelectionChange();
                 return false;
               },
+              scroll: () => {
+                callbacksRef.current.onSelectionChange();
+                return false;
+              },
               compositionstart: () => {
                 callbacksRef.current.onCompositionStart();
                 return false;
@@ -238,8 +258,17 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
                 const hasClip = event.dataTransfer?.types.includes('text/x-dnote-clip') ?? false;
                 const hasFile = event.dataTransfer?.types.includes('Files') ?? false;
                 if (!hasClip && !hasFile) return false;
+                event.preventDefault();
                 const position = currentView.posAtCoords({ x: event.clientX, y: event.clientY }) ?? currentView.state.selection.main.head;
                 callbacksRef.current.onDropAtPosition?.(event, position);
+                return true;
+              },
+              paste: (event, currentView) => {
+                const files = Array.from(event.clipboardData?.files || []);
+                const hasImage = files.some((file) => file.type.startsWith('image/'));
+                if (!hasImage) return false;
+                event.preventDefault();
+                callbacksRef.current.onPasteAtPosition?.(event, currentView.state.selection.main.head);
                 return true;
               },
             }),
@@ -283,9 +312,16 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
       const selection = view.state.selection.main;
       const anchor = Math.min(selection.anchor, value.length);
       const head = Math.min(selection.head, value.length);
+      const scrollDOM = view.scrollDOM;
+      const scrollTop = scrollDOM.scrollTop;
+      const scrollLeft = scrollDOM.scrollLeft;
       view.dispatch({
         changes: { from: 0, to: current.length, insert: value },
         selection: { anchor, head },
+      });
+      requestAnimationFrame(() => {
+        scrollDOM.scrollTop = scrollTop;
+        scrollDOM.scrollLeft = scrollLeft;
       });
     }, [value]);
 

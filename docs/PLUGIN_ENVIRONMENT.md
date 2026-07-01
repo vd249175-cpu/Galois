@@ -1,21 +1,41 @@
 # Plugin Environment Contract
 
-This document defines how APP plugins describe plugin-owned runtime needs.
+This document defines how Galois APP plugins describe plugin-owned runtime
+needs across source development and packaged-app runtime.
 
-Plugin environment is separate from notebook project environment. A plugin may
-ship service scripts under `APP/[plugin]/services/`; those scripts are packaged
-with the application and are owned by the plugin.
+## Current Workspace Rule
+
+In source development, the active workspace is the current Galois source
+repository. APP plugin code and service scripts belong under:
+
+```text
+APP/[plugin]/
+```
+
+In packaged app mode, the packaged `.app` is a launcher, classic seed, and
+recovery source. It is not the editable runtime. On startup, Galois ensures and
+launches:
+
+```text
+~/Documents/Galois/workbench/Galois-vscode-core/
+```
+
+This external workbench contains the packaged app's running `CORE/`, `APP/`,
+`.agents/`, `docs/`, and root build files. Packaged-app APP plugin code and
+plugin service scripts belong there:
+
+```text
+~/Documents/Galois/workbench/Galois-vscode-core/APP/[plugin]/
+```
+
+Notebook project scripts are separate and stay in the selected notebook project
+under `command/`, `script/`, `.dnote/`, `pyproject.toml`, or `.venv/`.
 
 ## plugin.json Fields
 
-`plugin.json` is metadata. Runtime registration still comes from
-`APP/[plugin]/index.ts`, but `plugin.json` is used as the stable description for
-packaging, tooling, and future extension management.
-
-Built-in source plugins live under `APP/`. User extension projects live under
-Electron `userData/extensions/`; see `docs/EXTENSION_WORKSPACE.md`.
-Side-loaded script extensions are hosted by the built-in Extension Lab organ
-until a dynamic renderer bundle loader exists.
+`plugin.json` is plugin metadata. Renderer registration still comes from
+`APP/[plugin]/index.ts`, but `plugin.json` is the stable place for interpreter
+and package declarations.
 
 Recommended shape:
 
@@ -25,12 +45,6 @@ Recommended shape:
   "name": "Lattice Graph",
   "version": "1.0.0",
   "description": "Force-directed DAG visualization of tag relations.",
-  "dependencies": ["fileTree"],
-  "bloodChannels": [
-    "system.projectPath",
-    "system.resolvedTags",
-    "events.fileSaved.*"
-  ],
   "interpreters": {
     "python": "uv run",
     "node": "node",
@@ -39,7 +53,7 @@ Recommended shape:
   },
   "packages": {
     "python": [
-      { "name": "numpy>=1.26", "import": "numpy" }
+      { "name": "networkx>=3.0", "import": "networkx" }
     ]
   },
   "services": [
@@ -49,29 +63,32 @@ Recommended shape:
       "entry": "services/lattice.py",
       "dependencies": ["networkx"]
     }
-  ],
-  "triggerConditions": {}
+  ]
 }
 ```
 
+## Naming Protocol
+
+- Product name: `Galois`.
+- Built-in APP plugin folder: `APP/[kebab-name]/`.
+- Built-in plugin `typeId`: lower camelCase, for example `graphView`.
+- Organ action id: `[pluginName].[actionName]`, for example
+  `editor.save`.
+- Notebook command id: project-scoped, for example `project.noteStats`.
+- Legacy script environment variables still use `DNOTE_*` until a deliberate
+  compatibility migration is implemented.
+
 ## Interpreter Resolution
 
-For plugin service scripts, interpreter lookup should use this order:
+For APP plugin service scripts, interpreter lookup uses this order:
 
-1. `APP/[plugin]/plugin.json` `interpreters`.
-2. User extension plugin `userData/extensions/[plugin]/plugin.json`
-   `interpreters`.
-3. Global app config `interpreters`.
+1. Active runtime tree `APP/[plugin]/plugin.json` `interpreters`.
+2. Packaged classic seed `APP/[plugin]/plugin.json` `interpreters` when running packaged mode.
+3. Global app config interpreter defaults.
 4. Built-in fallback such as `uv run`, `node`, or `bash`.
 
 Plugin scripts should not automatically use a notebook project's `.venv`.
 Notebook environments belong to notebook project scripts.
-
-App-external development extension paths participate in interpreter resolution:
-when a service script lives inside a registered development extension root, the
-app reads that extension's `plugin.json` before falling back to built-in APP
-plugin manifests, same-id user extension manifests, global app config, and
-built-in defaults.
 
 ## Service Scripts
 
@@ -79,12 +96,6 @@ Service scripts live under:
 
 ```text
 APP/[plugin]/services/
-```
-
-Packaged app path:
-
-```text
-Contents/Resources/APP/[plugin]/services/
 ```
 
 Renderer code should resolve service scripts through:
@@ -96,46 +107,42 @@ const scriptPath = await window.electronAPI.getServiceScriptPath(
 );
 ```
 
-Then run it through the shared script bridge:
+Then run them through the shared script bridge:
 
 ```typescript
 await window.electronAPI.runScript(scriptPath, stdinPayload, projectPath, env);
 ```
 
+Prefer `uv run script.py` for Python service scripts with PEP 723 inline
+dependencies. Do not use `uv run python script.py` for scripts that rely on
+PEP 723 metadata, because that bypasses script metadata resolution.
+
 ## Dependency Style
 
 Prefer one of these styles:
 
-- Python PEP 723 inline metadata for single-file service scripts.
-- `plugin.json` package declarations for side-loaded plugin packages:
-  `packages.python[*]` for plugin-wide packages, and
-  `services[*].dependencies` for service-local packages.
-- Global interpreter fallback only for simple scripts with standard-library
-  dependencies.
+- PEP 723 inline metadata for single-file Python service scripts.
+- `plugin.json` package declarations for plugin-wide or service-local packages.
+- Standard-library-only scripts with the built-in interpreter fallback.
 
-Extension Lab treats `plugin.json` as the plugin environment contract. When a
-`.zip` extension package is dropped into Extension Lab, DNOTE imports it into
-Electron `userData/extensions/`, reads `plugin.json`, creates a plugin-local
-`uv` environment, and installs missing packages declared by the plugin.
+Avoid hidden dependency on the developer machine. A plugin should fail clearly
+if its runtime is missing.
 
-Notebook project dependencies are not used for plugin service scripts. A plugin
-service receives the selected notebook path through `DNOTE_PROJECT_PATH`, but
-its process `cwd` is the plugin root so `uv` resolves the plugin's own
-environment.
+## Editor Boundary
 
-Use `uv run` rather than `uv run python` for Python service scripts that contain
-PEP 723 metadata. `uv run script.py` lets uv read the script's inline
-dependencies, while `uv run python script.py` bypasses that metadata.
+APP service scripts may read project context through `DNOTE_PROJECT_PATH` and
+`{projectPath}/.dnote_runtime.json`, and may return JSON to the host. They are
+not yet a formal editor mutation API.
 
-Avoid hidden dependency on the developer machine. A plugin should fail with a
-clear error if its runtime is missing.
+Cursor-sensitive editing should be implemented as editor actions or notebook
+project `commands.json` `content` commands until Galois exposes a stable editor
+patch API for plugin services.
 
-## Known Migration Target
+## Git And Recovery
 
-Current code still has some direct shell execution in APP plugins for non-script
-tasks. New script execution should use `runScript` for plugin services or
-`runProjectScript` for notebook project scripts.
+The current source repository and packaged external workbench should both use
+Git as the safety net when available. Agent recovery should prefer Git status,
+branches, commits, `git restore`, or `git revert`.
 
-Dynamic renderer loading of user extension UI bundles is not implemented yet.
-The extension directory currently supports writable script-extension packages,
-metadata/interpreter lookup, and command-line assistant context.
+Classic-code restore from the packaged app is the final fallback, not the normal
+development flow.

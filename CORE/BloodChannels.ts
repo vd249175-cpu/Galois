@@ -42,10 +42,19 @@ export const BC = {
     /** 当前 App 运行模式。Writer: App(runtime bootstrap) → Reader: terminal, settings */
     runtimeMode: 'system.runtimeMode' as const,
 
-    /** 用户级扩展目录。Writer: App(runtime bootstrap) → Reader: terminal, settings */
+    /** 历史扩展目录字段。当前默认开发入口是 external whole-code workbench。 */
     extensionPath: 'system.extensionPath' as const,
 
-    /** 源码插件目录，仅源码开发模式可写。Writer: App(runtime bootstrap) → Reader: terminal */
+    /** 历史扩展清单字段。当前不作为默认运行路径。 */
+    extensions: 'system.extensions' as const,
+
+    /** 历史扩展命令字段。当前不作为默认运行路径。 */
+    extensionCommands: 'system.extensionCommands' as const,
+
+    /** 历史扩展刷新信号字段。当前不作为默认运行路径。 */
+    extensionRefreshTimestamp: 'system.extensionRefreshTimestamp' as const,
+
+    /** 外部 workbench 中的 APP 器官源码目录。Writer: App(runtime bootstrap) → Reader: terminal */
     sourcePluginPath: 'system.sourcePluginPath' as const,
 
     /** 源码插件目录是否可写。Writer: App(runtime bootstrap) → Reader: terminal, settings */

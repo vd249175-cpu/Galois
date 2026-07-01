@@ -5,6 +5,8 @@ node_modules/
 dist/
 dist-electron/
 .build/
+.launcher-app/
+.launcher-app-asar/
 
 # OS files
 .DS_Store

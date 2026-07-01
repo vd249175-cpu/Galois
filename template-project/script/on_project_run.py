@@ -13,7 +13,7 @@ def main():
     with open(pid_file, "w") as f:
         f.write(str(os.getpid()))
         
-    print(f"[Daemon] DNOTE background daemon started. PID: {os.getpid()}")
+    print(f"[Daemon] Galois background daemon started. PID: {os.getpid()}")
     
     # Establish output path
     output_file = os.environ.get('DNOTE_OUTPUT_FILE')
@@ -127,7 +127,7 @@ def main():
         }
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(offline_data, f, indent=2, ensure_ascii=False)
-        print("[Daemon] DNOTE background daemon stopped.")
+        print("[Daemon] Galois background daemon stopped.")
 
 if __name__ == '__main__':
     main()

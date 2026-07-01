@@ -26,7 +26,6 @@ import {
   CommandService, ICommandService
 } from './services';
 import { PlatformService, IPlatformService } from './platform';
-import { ExtensionHostService, IExtensionHostService } from './extensionHost';
 
 
 
@@ -41,8 +40,7 @@ services.set(IWorkspaceService, new WorkspaceService(stateService));
 services.set(IFileService, new FileService(stateService));
 services.set(IScriptExecutionService, new ScriptExecutionService(stateService));
 services.set(ICommandService, new CommandService());
-const platformService = services.set(IPlatformService, new PlatformService());
-services.set(IExtensionHostService, new ExtensionHostService(platformService, stateService));
+services.set(IPlatformService, new PlatformService());
 
 const globalInstantiationService = new InstantiationService(services);
 
@@ -71,12 +69,38 @@ export function App() {
       const root = document.documentElement;
       
       const sidebarIconSize = config.appearance?.sidebarIconSize ?? 14;
+      const uiFontSize = config.appearance?.uiFontSize ?? 12;
+      const panelTitleSize = config.appearance?.panelTitleSize ?? 11;
+      const sidebarLabelSize = config.appearance?.sidebarLabelSize ?? 11;
       const fileTreeTitleSize = config.appearance?.fileTreeTitleSize ?? 11;
       const fileTreeTagSize = config.appearance?.fileTreeTagSize ?? 8.5;
+      const slashMenuTitleSize = config.appearance?.slashMenuTitleSize ?? 11;
+      const slashMenuDescriptionSize = config.appearance?.slashMenuDescriptionSize ?? 9;
+      const timelineFontSize = config.appearance?.timelineFontSize ?? 11;
+      const editorFontSize = config.editor?.fontSize ?? 14;
+      const editorFontFamily = config.editor?.fontFamily || 'Fira Code';
+      const editorLineHeight = config.editor?.lineHeight ?? 1.6;
+      const graphNodeFontSize = config.graph?.nodeFontSize ?? 9;
+      const graphControlFontSize = config.graph?.controlFontSize ?? 11;
+      const graphDrawerFontSize = config.graph?.drawerFontSize ?? 12;
+      const terminalFontSize = config.terminal?.fontSize ?? 13;
       
       root.style.setProperty('--sidebar-icon-size', `${sidebarIconSize}px`);
+      root.style.setProperty('--ui-font-size', `${uiFontSize}px`);
+      root.style.setProperty('--panel-title-size', `${panelTitleSize}px`);
+      root.style.setProperty('--sidebar-label-size', `${sidebarLabelSize}px`);
       root.style.setProperty('--file-tree-title-size', `${fileTreeTitleSize}px`);
       root.style.setProperty('--file-tree-tag-size', `${fileTreeTagSize}px`);
+      root.style.setProperty('--slash-menu-title-size', `${slashMenuTitleSize}px`);
+      root.style.setProperty('--slash-menu-description-size', `${slashMenuDescriptionSize}px`);
+      root.style.setProperty('--video-timeline-font-size', `${timelineFontSize}px`);
+      root.style.setProperty('--editor-font-size', `${editorFontSize}px`);
+      root.style.setProperty('--editor-font-family', editorFontFamily);
+      root.style.setProperty('--editor-line-height', String(editorLineHeight));
+      root.style.setProperty('--graph-node-font-size', `${graphNodeFontSize}px`);
+      root.style.setProperty('--graph-control-font-size', `${graphControlFontSize}px`);
+      root.style.setProperty('--graph-drawer-font-size', `${graphDrawerFontSize}px`);
+      root.style.setProperty('--terminal-font-size', `${terminalFontSize}px`);
     };
 
     const loadConfig = async () => {
@@ -217,18 +241,33 @@ export function App() {
         } catch (_) {}
       }
 
-      // 2. Load custom shortcuts from userData
+      // 2. Load custom shortcuts from the user-visible Galois home.
       try {
         const shortcuts = await window.electronAPI.getShortcuts();
         if (shortcuts) {
           ActionRegistry.loadShortcuts(shortcuts);
-          console.log('[App] Custom shortcuts loaded from userData.');
+          console.log('[App] Custom shortcuts loaded from Galois home.');
         }
       } catch (_) {}
 
-      // 3. Load layout state from layout.json in userData
+      // 3. Load layout state from the user-visible Galois home.
       try {
         const savedLayout = await window.electronAPI.getLayout();
+        const normalizeLayout = (node: AreaLayout): AreaLayout => {
+          if (node.type === 'area') {
+            const componentType = node.componentType === 'linkGraph'
+              ? 'graphView'
+              : ComponentRegistry.getComponent(node.componentType)
+                ? node.componentType
+                : 'editor';
+            return { ...node, componentType };
+          }
+          return {
+            ...node,
+            first: normalizeLayout(node.first),
+            second: normalizeLayout(node.second),
+          };
+        };
         // Guard: only restore a layout that actually contains at least one area node.
         // An empty/null layout (from a prior session where all panels were closed)
         // would leave the user with a blank screen, so fall back to defaultLayout.
@@ -238,8 +277,8 @@ export function App() {
           return hasAnyArea(node.first) || hasAnyArea(node.second);
         };
         if (savedLayout && hasAnyArea(savedLayout)) {
-          setLayout(savedLayout);
-          console.log('[App] Layout loaded from layout.json in userData.');
+          setLayout(normalizeLayout(savedLayout));
+          console.log('[App] Layout loaded from Galois home.');
         } else if (savedLayout) {
           console.warn('[App] Saved layout has no area nodes — falling back to defaultLayout.');
         }
@@ -247,6 +286,47 @@ export function App() {
     };
 
     initApp();
+
+    let restoreTimer: ReturnType<typeof setTimeout> | null = null;
+    const restoreProjectState = async (projectPath: string) => {
+      if (!projectPath) return;
+      try {
+        const projectState = await window.electronAPI.getProjectState(projectPath);
+        if (!projectState) return;
+
+        const openFiles = projectState.openFiles || {};
+        Object.entries(openFiles).forEach(([editorId, filePath]) => {
+          if (typeof filePath === 'string' && filePath) {
+            Blood.updateKey(BC.events.openFile(editorId), filePath);
+          }
+        });
+
+        if (Object.keys(openFiles).length === 0 && projectState.activeFile) {
+          Blood.updateKey(BC.events.openFile(projectState.activeEditorId || 'editor-root'), projectState.activeFile);
+        }
+
+        const cursors = projectState.cursors || {};
+        Object.entries(cursors).forEach(([editorId, cursor]) => {
+          if (cursor && typeof cursor === 'object') {
+            Blood.updateKey(BC.system.editorCursor(editorId), cursor);
+          }
+        });
+
+        if (projectState.activeEditorId) {
+          Blood.updateKey(BC.system.lastFocusedEditorId, projectState.activeEditorId);
+          Blood.updateKey(BC.system.focusedAreaId, projectState.activeEditorId);
+        }
+      } catch (err) {
+        console.warn('[App] Failed to restore project state:', err);
+      }
+    };
+
+    const unsubscribeProjectRestore = Blood.subscribe((changedKeys) => {
+      if (!changedKeys.has(BC.system.projectPath)) return;
+      const nextProjectPath = Blood.getValue<string>(BC.system.projectPath, '');
+      if (restoreTimer) clearTimeout(restoreTimer);
+      restoreTimer = setTimeout(() => restoreProjectState(nextProjectPath), 150);
+    });
 
     // Validate plugin dependency graph on startup (dev only)
     if (process.env.NODE_ENV === 'development') {
@@ -257,6 +337,11 @@ export function App() {
         console.log('[App] All plugin dependencies satisfied.');
       }
     }
+
+    return () => {
+      if (restoreTimer) clearTimeout(restoreTimer);
+      unsubscribeProjectRestore();
+    };
   }, [isPopped]);
 
   // Listen for popped-out secondary windows closing to restore them in the main window layout grid
@@ -355,9 +440,8 @@ export function App() {
       editor: '编辑器',
       fileTree: '文件浏览器',
       graphView: '标签拓扑图',
-      linkGraph: '关系图',
       terminal: '终端控制台',
-      agent: '智能副驾驶'
+      videoTimeline: '视频时间轴'
     };
     const title = poppedTitleMap[poppedType] || '工作区窗格';
 

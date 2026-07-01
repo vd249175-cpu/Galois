@@ -5,7 +5,7 @@
  * 从 CORE/App.tsx 拆分至此。
  */
 
-export function TitleBar({ title = 'DNOTE Workspace' }: { title?: string }) {
+export function TitleBar({ title = 'Galois Workspace' }: { title?: string }) {
   const isMac = typeof window !== 'undefined' && navigator.userAgent.includes('Mac');
   return (
     <div className="window-titlebar" style={{ paddingLeft: isMac ? '80px' : '12px' }}>

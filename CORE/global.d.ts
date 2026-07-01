@@ -7,6 +7,7 @@ export interface ElectronAPI {
   pathExists: (targetPath: string) => Promise<boolean>;
   openDirectory: () => Promise<string | null>;
   archiveMedia: (srcPath: string, projectPath: string) => Promise<string>;
+  archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) => Promise<string>;
   getPathForFile: (file: File) => string;
 
   execCommand: (command: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
@@ -41,7 +42,8 @@ export interface ElectronAPI {
     mode: 'source-dev' | 'installed-app';
     isPackaged: boolean;
     appPath: string;
-    userDataPath: string;
+    galoisHomePath: string;
+    classicCodePath: string;
     extensionPath: string;
     extensionDevPaths: string[];
     sourcePluginPath: string;
@@ -60,6 +62,15 @@ export interface ElectronAPI {
       developmentPath?: string;
       writable?: boolean;
     }>;
+  }>;
+  getClassicCodeWorkspace: () => Promise<{
+    sourcePath: string;
+    workspacePath: string;
+  }>;
+  restoreClassicCodeWorkspace: () => Promise<{
+    sourcePath: string;
+    workspacePath: string;
+    copied: boolean;
   }>;
   ensureExtensionsDir: () => Promise<string>;
   listExtensions: () => Promise<Array<{
@@ -181,10 +192,14 @@ export interface ElectronAPI {
   getDevDefaultProject: () => Promise<string>;
   getConfig: () => Promise<any>;
   setConfig: (config: any) => Promise<boolean>;
+  listThemes: () => Promise<Array<{ id: string; name: string; path: string; source: string }>>;
+  getThemeCss: (themeId: string) => Promise<string>;
   getShortcuts: () => Promise<any>;
   setShortcuts: (shortcuts: any) => Promise<boolean>;
   getLayout: () => Promise<any>;
   setLayout: (layout: any) => Promise<boolean>;
+  getProjectState: (projectPath: string) => Promise<any>;
+  setProjectState: (projectPath: string, state: any) => Promise<boolean>;
 }
 
 declare global {

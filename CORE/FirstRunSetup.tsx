@@ -46,18 +46,23 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
   const { environmentStatus, runtimeMode, projectPath } = runtimeSnapshot;
 
   const requiredReady = Boolean(environmentStatus.uv?.available && environmentStatus.node?.available);
+  const canRepairProject = Boolean(projectPath && !repairing);
 
   const rows: Array<[string, ToolStatus | undefined, boolean, string]> = [
     ['uv', environmentStatus.uv, false, '笔记项目 Python 环境、依赖安装和脚本运行'],
     ['Node.js', environmentStatus.node, false, '插件开发、扩展包工具链和源码模式构建'],
     ['Python', environmentStatus.python, true, '通常由 uv 自动创建项目解释器'],
-    ['agy', environmentStatus.agy, true, '外部命令行助手，不随 DNOTE 打包'],
+    ['agy', environmentStatus.agy, true, '外部命令行助手，不随 Galois 打包'],
   ];
 
   const handleRepairProjectEnvironment = async () => {
-    if (!projectPath || repairing) return;
+    if (repairing) return;
+    if (!projectPath) {
+      setRepairMessage('未检测到当前项目，无法执行修复。请先打开一个笔记项目。');
+      return;
+    }
     setRepairing(true);
-    setRepairMessage('正在根据项目声明安装缺失包...');
+    setRepairMessage('正在检查当前项目声明并同步缺失包...');
     try {
       const result = await window.electronAPI.repairProjectEnvironment(projectPath);
       Blood.updateKey(BC.system.projectEnvironmentRepair, {
@@ -108,13 +113,13 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
           }}
         >
           <div style={{ fontSize: '11px', letterSpacing: '0.16em', color: 'var(--text-muted)' }}>
-            DNOTE FIRST RUN
+            GALOIS FIRST RUN
           </div>
           <h2 style={{ margin: '8px 0 8px', fontSize: '24px', color: 'var(--text-main)' }}>
             先把环境边界理清楚
           </h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.65, fontSize: '13px' }}>
-            DNOTE 不要求用户手动维护 Python 包。App 本体负责启动和调度；笔记项目默认通过
+            Galois 不要求用户手动维护 Python 包。App 本体负责启动和调度；笔记项目默认通过
             <code> uv</code> 声明、创建并修复 Python 环境；插件开发则依赖 Node.js 和可写扩展目录。
           </p>
         </div>
@@ -179,41 +184,81 @@ export function FirstRunSetup({ onDone, onOpenEnvironmentSettings }: FirstRunSet
           <div
             style={{
               borderRadius: '12px',
-              border: '1px solid var(--border-color)',
+              border: '1px dashed var(--border-color)',
               padding: '12px 14px',
-              display: 'grid',
-              gap: '10px',
-              background: 'color-mix(in srgb, var(--bg-main) 88%, var(--accent-color))',
+              color: 'var(--text-muted)',
+              fontSize: '12px',
+              lineHeight: 1.6,
+              background: environmentStatus.agy?.available
+                ? 'color-mix(in srgb, var(--bg-main) 92%, var(--accent-color))'
+                : 'transparent',
             }}
           >
-            <div style={{ color: 'var(--text-main)', fontSize: '12px', fontWeight: 700 }}>
-              项目依赖由声明自动安装
-            </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.6 }}>
-              当前笔记项目会读取 <code>pyproject.toml</code> 和脚本 PEP 723 依赖声明，然后用
-              <code> uv</code> 同步缺失包。插件包依赖则由 Extension Lab 读取插件自己的
-              <code> plugin.json</code>。
-            </div>
-            {repairMessage && (
-              <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{repairMessage}</div>
-            )}
-            <button
-              onClick={handleRepairProjectEnvironment}
-              disabled={!projectPath || repairing || !environmentStatus.uv?.available}
+            命令行助手 agy：{environmentStatus.agy?.available
+              ? '已检测到，可在终端面板中自动接入。'
+              : <>未检测到，可选安装：<code> curl -fsSL https://antigravity.google/cli/install.sh | bash</code></>}
+          </div>
+
+          {requiredReady ? (
+            <div
               style={{
-                justifySelf: 'start',
-                border: '1px solid var(--accent-color)',
-                background: repairing ? 'var(--bg-input)' : 'var(--accent-color)',
-                color: repairing ? 'var(--text-muted)' : 'var(--bg-main)',
-                padding: '8px 12px',
-                borderRadius: '9px',
-                cursor: repairing ? 'default' : 'pointer',
-                fontWeight: 700,
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                padding: '12px 14px',
+                display: 'grid',
+                gap: '8px',
+                background: 'color-mix(in srgb, var(--bg-main) 90%, var(--accent-color))',
               }}
             >
-              {repairing ? '正在修复...' : '一键修复当前项目环境'}
-            </button>
-          </div>
+              <div style={{ color: 'var(--text-main)', fontSize: '12px', fontWeight: 700 }}>
+                基础环境已就绪
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.6 }}>
+                你的电脑已经具备运行项目脚本和插件开发的基础条件，不需要现在执行环境修复。
+                如果之后打开的是新的笔记项目，项目依赖仍会按声明自动同步。
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: '12px',
+                border: '1px solid var(--border-color)',
+                padding: '12px 14px',
+                display: 'grid',
+                gap: '10px',
+                background: 'color-mix(in srgb, var(--bg-main) 88%, var(--accent-color))',
+              }}
+            >
+              <div style={{ color: 'var(--text-main)', fontSize: '12px', fontWeight: 700 }}>
+                项目依赖由声明自动安装
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.6 }}>
+                当前笔记项目会读取 <code>pyproject.toml</code> 和脚本 PEP 723 依赖声明，然后用
+                <code> uv</code> 同步缺失包。APP 插件依赖则由外部源码工作区里的
+                <code> APP/[plugin]/plugin.json</code> 声明。
+              </div>
+              {repairMessage && (
+                <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{repairMessage}</div>
+              )}
+              <button
+                onClick={handleRepairProjectEnvironment}
+                disabled={!canRepairProject || !environmentStatus.uv?.available}
+                style={{
+                  justifySelf: 'start',
+                  border: '1px solid var(--accent-color)',
+                  background: repairing ? 'var(--bg-input)' : 'var(--accent-color)',
+                  color: repairing ? 'var(--text-muted)' : 'var(--bg-main)',
+                  padding: '8px 12px',
+                  borderRadius: '9px',
+                  cursor: repairing ? 'default' : 'pointer',
+                  fontWeight: 700,
+                  opacity: !canRepairProject || !environmentStatus.uv?.available ? 0.75 : 1,
+                }}
+              >
+                {repairing ? '正在修复...' : '一键修复当前项目环境'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div

@@ -4,6 +4,7 @@ import { BC } from './BloodChannels';
 
 interface RuntimeInfo {
   mode: 'source-dev' | 'installed-app';
+  classicCodePath: string;
   extensionPath: string;
   extensionDevPaths: string[];
   sourcePluginPath: string;
@@ -116,7 +117,7 @@ export function EnvironmentPanel() {
   });
   const [localVenvPath, setLocalVenvPath] = useState('');
 
-  useBloodChannel([BC.system.runtimeMode, BC.system.extensionPath, BC.system.environmentStatus], () => {
+  useBloodChannel([BC.system.runtimeMode, BC.system.environmentStatus], () => {
     setEnvironmentStatus(Blood.getValue<Record<string, ToolStatus> | null>(BC.system.environmentStatus, null));
     return null;
   });
@@ -193,20 +194,31 @@ export function EnvironmentPanel() {
     Blood.updateKey(BC.system.config, mergedConfig);
   };
 
-  const openExtensions = async () => {
-    const extensionPath = await window.electronAPI.ensureExtensionsDir();
-    await window.electronAPI.openPath(extensionPath);
+  const openClassicCodeWorkspace = async () => {
+    const workspace = await window.electronAPI.getClassicCodeWorkspace();
+    await window.electronAPI.openPath(workspace.workspacePath);
   };
 
-  const openExtensionsTerminal = async () => {
-    const extensionPath = await window.electronAPI.ensureExtensionsDir();
-    await window.electronAPI.openTerminal(extensionPath);
+  const restoreClassicCodeWorkspace = async () => {
+    const ok = window.confirm('优先使用外部工作副本里的 Git 回滚改动。只有 Git 无法恢复或你确认要重置时，才使用这个经典代码恢复。继续会覆盖外部 Galois 源码工作副本。');
+    if (!ok) return;
+    setMessage('正在恢复经典 Galois 源码...');
+    try {
+      const result = await window.electronAPI.restoreClassicCodeWorkspace();
+      setMessage(`已恢复经典代码到 ${result.workspacePath}`);
+      Blood.updateKey(BC.system.agentWorkspace, {
+        readableDirs: [result.workspacePath],
+        writableDirs: [result.workspacePath],
+      });
+    } catch (err: any) {
+      setMessage(err?.message || '恢复经典代码失败');
+    }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-        这里用于确认 DMG/源码模式下的外部工具、扩展目录和命令行助手工作区。缺少 agy 不影响笔记编辑，缺少 uv 会影响 Python 插件服务和项目脚本。
+        这里用于确认 DMG/源码模式下的外部工具、源码工作区和命令行助手工作区。缺少 agy 不影响笔记编辑；缺少 Git 会让 agent 只能用经典代码恢复兜底。
       </div>
 
       <section style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '14px' }}>
@@ -223,14 +235,15 @@ export function EnvironmentPanel() {
         <div style={{ fontSize: '12px', color: 'var(--text-main)' }}>
           当前模式：<strong>{runtimeInfo?.mode === 'installed-app' ? '安装版 App' : '源码开发'}</strong>
         </div>
-        <PathBlock label="用户扩展目录（可写）" value={runtimeInfo?.extensionPath} />
-        {(runtimeInfo?.extensionDevPaths || []).map((devPath) => (
-          <PathBlock key={devPath} label="开发扩展目录（App 外部）" value={devPath} />
-        ))}
-        <PathBlock label={runtimeInfo?.canWriteSourcePlugins ? '源码插件目录（可写）' : '内置插件目录（只读上下文）'} value={runtimeInfo?.sourcePluginPath} />
+        <PathBlock label="完整源码工作副本（Agent 默认开发目录）" value={runtimeInfo?.classicCodePath} />
+        <PathBlock label="CORE 内核源码目录（外部启动使用）" value={runtimeInfo?.classicCodePath ? `${runtimeInfo.classicCodePath}/CORE` : undefined} />
+        <PathBlock label="APP 器官源码目录" value={runtimeInfo?.sourcePluginPath} />
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+          外部源码工作副本会优先初始化为 Git 仓库；开发出错时先让 agent 使用 Git 查看和回滚，经典代码恢复只作为最后兜底。
+        </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button className="settings-action-btn" onClick={openExtensions}>在 Finder 中打开扩展目录</button>
-          <button className="settings-action-btn" onClick={openExtensionsTerminal}>在终端中打开</button>
+          <button className="settings-action-btn" onClick={openClassicCodeWorkspace}>打开源码工作区</button>
+          <button className="settings-action-btn" onClick={restoreClassicCodeWorkspace}>恢复经典代码（兜底）</button>
           <button className="settings-action-btn" onClick={refresh}>重新检测</button>
         </div>
       </section>
@@ -240,6 +253,7 @@ export function EnvironmentPanel() {
         <StatusRow label="uv" status={environmentStatus?.uv} />
         <StatusRow label="Python" status={environmentStatus?.python} />
         <StatusRow label="Node.js" status={environmentStatus?.node} />
+        <StatusRow label="Git" status={environmentStatus?.git} />
         <StatusRow label="命令行助手 agy" status={environmentStatus?.agy} optional />
       </section>
 
@@ -296,6 +310,8 @@ export function EnvironmentPanel() {
         <CommandHint label="推荐安装 uv" command="brew install uv" />
         <CommandHint label="或使用官方安装脚本" command="curl -LsSf https://astral.sh/uv/install.sh | sh" />
         <CommandHint label="推荐安装 Python" command="brew install python" />
+        <CommandHint label="推荐安装 Git" command="brew install git" />
+        <CommandHint label="可选安装 agy 命令行助手" command="curl -fsSL https://antigravity.google/cli/install.sh | bash" />
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
           `agy` 是外部可选命令行助手。缺少它不会影响笔记和脚本执行，只会影响终端助手自动接入。
         </div>

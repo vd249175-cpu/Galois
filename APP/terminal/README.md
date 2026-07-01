@@ -1,6 +1,6 @@
 # 💻 Terminal Console（终端控制台插件）
 
-Terminal Console 是 DNOTE 的**命令执行器官**，提供基于 `xterm.js` + `node-pty` 的真实 PTY 终端体验。支持多标签页、项目工作目录自动切换，并可按用户设置接入外部 `agy` CLI 会话。
+Terminal Console 是 Galois 的**命令执行器官**，提供基于 `xterm.js` + `node-pty` 的真实 PTY 终端体验。支持多标签页、项目工作目录自动切换，并可按用户设置接入外部 `agy` CLI 会话。
 
 ---
 
@@ -21,12 +21,12 @@ Terminal Console 是 DNOTE 的**命令执行器官**，提供基于 `xterm.js` +
 - 组件重新挂载时自动将孤儿容器重新附加到新的 DOM wrapper 中，恢复输出显示
 
 ### 3. 🚀 命令行助手可选接入
-`agy/Antigravity` 是外部可选工具，不随 DNOTE 打包，也不由 DNOTE 管理更新。
+`agy/Antigravity` 是外部可选工具，不随 Galois 打包，也不由 Galois 管理更新。
 
 首次在项目目录创建终端标签时：
-1. 如果用户 shell 已经自动启动了 Antigravity，DNOTE 只发送 `/add-dir {projectPath}` 同步工作目录。
-2. 如果设置中启用了“启动时自动运行外部 agy”，DNOTE 会发送 `agy --add-dir {projectPath}`。
-3. 默认不主动启动 `agy`，避免 packaged app 与用户自己的助手版本管理打架。
+1. 如果用户 shell 已经自动启动了 Antigravity，Galois 不再重复启动。
+2. 如果未检测到 Antigravity，Galois 默认用可重复的 `--add-dir` 参数一次性传入笔记项目和用户扩展目录。
+3. 用户仍可在设置中关闭自动启动；`agy` 本体始终由用户自己的工具链安装和更新。
 
 ### 4. 🔄 项目切换自动追踪
 监听 `Blood: system.projectPath` 变化：

@@ -97,7 +97,7 @@ export function parseClipSyntax(text: string): {
   start: number;
   end: number;
 } | null {
-  const m = /@video\[([^\]]*)\]\(([^#?)]+)[#?]t=([\d.]+),([\d.]+)\)/.exec(text);
+  const m = /@video\[([^\]]*)\]\((.+?)[#?]t=([\d.]+),([\d.]+)\)/.exec(text);
   if (!m) return null;
   return {
     label: m[1],

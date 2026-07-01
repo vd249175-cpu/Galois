@@ -73,7 +73,7 @@ def main():
     # Generate report file content
     report_path = os.path.join(project_path, "知识库概览报告.md")
     
-    report_content = f"""# 📊 DNOTE 知识库概览报告
+    report_content = f"""# 📊 Galois 知识库概览报告
 
 该报告由项目自定义指令 `project.exportSummary` 自动生成。你可以随时在任意笔记中通过斜线指令 `/` 或快捷键运行该脚本重新生成。
 

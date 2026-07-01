@@ -1,8 +1,8 @@
-# 🐍 DNOTE 反应式脚本开发手册 (DNOTE Reactive Script Development Manual)
+# 🐍 Galois 反应式脚本开发手册 (Galois Reactive Script Development Manual)
 
-DNOTE 采用了一种非侵入式、极简的双向绑定架构。通过在 Markdown 笔记中插入表达式，编辑器会在后台自动调度运行 Python 脚本，捕获其 JSON 输出并更新局部渲染视图。
+Galois 采用了一种非侵入式、极简的双向绑定架构。通过在 Markdown 笔记中插入表达式，编辑器会在后台自动调度运行 Python 脚本，捕获其 JSON 输出并更新局部渲染视图。
 
-本手册旨在指导开发者如何在 DNOTE 工作区中正确创建、配置和调试这些脚本。
+本手册旨在指导开发者如何在 Galois 工作区中正确创建、配置和调试这些脚本。
 
 ---
 
@@ -23,7 +23,7 @@ DNOTE 采用了一种非侵入式、极简的双向绑定架构。通过在 Mark
 * **JSON 数据文件**：基本命名与 Python 脚本保持一致（例如：`sys_monitor.py` 对应 `sys_monitor.json`）。
 
 ### 🧬 三种数据隔离级别与物理文件命名映射
-DNOTE 在解析 Markdown 表达式时，支持通过 `isolate` 参数定义三种数据隔离模式。**强烈注意：输出文件的物理文件名会由编辑器层动态修改，您的脚本严禁在内部硬编码输出文件名，必须始终通过 `DNOTE_OUTPUT_FILE` 获取目标路径。**
+Galois 在解析 Markdown 表达式时，支持通过 `isolate` 参数定义三种数据隔离模式。**强烈注意：输出文件的物理文件名会由编辑器层动态修改，您的脚本严禁在内部硬编码输出文件名，必须始终通过 `DNOTE_OUTPUT_FILE` 获取目标路径。**
 
 | 隔离级别 (Mode) | 表达式声明示例 | 物理生成的文件名示例 | `DNOTE_THREAD_ID` 值 | 适用场景 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -35,7 +35,7 @@ DNOTE 在解析 Markdown 表达式时，支持通过 `isolate` 参数定义三�
 
 ## ⚙️ 2. 执行环境与依赖管理 (UV & PEP 723)
 
-DNOTE 底层使用 **[UV](https://github.com/astral-sh/uv)** 作为默认的 Python 运行时调度器。
+Galois 底层使用 **[UV](https://github.com/astral-sh/uv)** 作为默认的 Python 运行时调度器。
 `uv` 运行速度极快，且允许我们在**不配置繁琐的 `virtualenv` 或全局安装依赖**的情况下，运行包含第三方库的脚本。
 
 ### 📦 声明第三方库依赖 (PEP 723 inline metadata)
@@ -54,31 +54,31 @@ import json
 import requests
 import psutil
 ```
-当 DNOTE 执行 `uv run <script>.py` 时，`uv` 会自动在临时沙箱中下载并缓存这些依赖。即使在一台全新的电脑上打开该项目，脚本也能开箱即用！
+当 Galois 执行 `uv run <script>.py` 时，`uv` 会自动在临时沙箱中下载并缓存这些依赖。即使在一台全新的电脑上打开该项目，脚本也能开箱即用！
 
 ---
 
 ## 🌐 3. 环境变量注入
 
-DNOTE 在调用脚本时，会通过系统 Shell 将上下文信息注入到子进程的**环境变量**中。您的脚本需要读取这些变量来决定数据流向。
+Galois 在调用脚本时，会通过系统 Shell 将上下文信息注入到子进程的**环境变量**中。您的脚本需要读取这些变量来决定数据流向。
 
 | 环境变量名 | 说明 | 示例值 |
 | :--- | :--- | :--- |
 | `DNOTE_OUTPUT_FILE` | **【核心】** 脚本必须将最终的 JSON 结果写入该绝对路径。 | `/Users/.../template-project/script/sys_monitor.json` |
 | `DNOTE_THREAD_ID` | 当前调用该脚本的编辑器实例 ID，用于并发冲突控制。 | `editor-root` 或 dynamic UUID |
-| `PATH` | 系统可执行文件搜索路径。DNOTE 会自动拼接 Homebrew 及用户常用 bin 路径。 | `/opt/homebrew/bin:/usr/local/bin:...` |
+| `PATH` | 系统可执行文件搜索路径。Galois 会自动拼接 Homebrew 及用户常用 bin 路径。 | `/opt/homebrew/bin:/usr/local/bin:...` |
 
 ### 🛠️ Python 获取环境变量示例
 ```python
 import os
 
-# 读取输出文件的物理绝对路径 (DNOTE 会自动计算并传过来)
+# 读取输出文件的物理绝对路径 (Galois 会自动计算并传过来)
 output_path = os.environ.get('DNOTE_OUTPUT_FILE')
 # 读取调用线程 ID
 thread_id = os.environ.get('DNOTE_THREAD_ID', 'default')
 
 if not output_path:
-    raise RuntimeError("无法找到 DNOTE_OUTPUT_FILE 环境变量，请确保脚本在 DNOTE 的 Markdown 中被触发！")
+    raise RuntimeError("无法找到 DNOTE_OUTPUT_FILE 环境变量，请确保脚本在 Galois 的 Markdown 中被触发！")
 ```
 
 ---
@@ -176,16 +176,16 @@ if __name__ == '__main__':
    DNOTE_OUTPUT_FILE="test_output.json" uv run network_ping.py
    ```
    检查生成的 `test_output.json` 内容是否符合预期，以及是否有 Python 语法错误。
-2. **检查 DNOTE 控制台日志**：
+2. **检查 Galois 控制台日志**：
    在开发模式下，按 `Option + Cmd + I` 打开 Electron DevTools，在 Console 栏目中查看是否有 `[ReactiveExpression] Execution error` 等报错信息。
 
 ---
 
 ## 📂 7. 项目级全局生命周期脚本 (Workspace Lifecycle Hooks)
 
-除了渲染 Markdown 笔记内嵌入的占位符脚本外，DNOTE 还支持在笔记项目的**根目录加载/切换/卸载**阶段，执行项目级别的全局脚本钩子。
+除了渲染 Markdown 笔记内嵌入的占位符脚本外，Galois 还支持在笔记项目的**根目录加载/切换/卸载**阶段，执行项目级别的全局脚本钩子。
 
-开发者只需在 `script/` 目录下放置符合特定命名规范的脚本，DNOTE 的 Lattice Explorer（侧边栏文件管理器）便会在相应阶段自动触发执行：
+开发者只需在 `script/` 目录下放置符合特定命名规范的脚本，Galois 的 Lattice Explorer（侧边栏文件管理器）便会在相应阶段自动触发执行：
 
 ### 🛠️ 周期钩子列表
 
@@ -193,10 +193,10 @@ if __name__ == '__main__':
 | :--- | :--- | :--- | :--- |
 | **`on_project_open.py`** | **单次阻塞运行** | 打开/切换笔记本目录时（执行完毕后才会触发后续绑定） | 项目全局配置初始化、生成缓存、解析全量数据。 |
 | **`on_project_run.py`** | **后台常驻 (Daemon)** | 项目加载完成后（即 `on_project_open.py` 退出后） | 启动持续性监控、启动本地简易 HTTP API 服务器等。 |
-| **`on_project_close.py`** | **单次阻塞运行** | 切换到其他项目，或**关闭 DNOTE 应用窗口**时 | 销毁守护进程、释放端口占用、最终状态落盘、临时数据清理。 |
+| **`on_project_close.py`** | **单次阻塞运行** | 切换到其他项目，或**关闭 Galois 应用窗口**时 | 销毁守护进程、释放端口占用、最终状态落盘、临时数据清理。 |
 
 ### 🧬 项目卸载/软件退出防断机制 (Unload Interception)
-当用户选择切换项目，或直接退出 DNOTE 时，主进程的卸载拦截器（Unload Interception）会捕获该事件：
+当用户选择切换项目，或直接退出 Galois 时，主进程的卸载拦截器（Unload Interception）会捕获该事件：
 * 拦截器会暂停窗口注销，开始调度 `on_project_close.py`。
 * 该脚本会被自动注入 `DNOTE_OUTPUT_FILE` （目标路径为 `script/on_project_close.json`）。
 * 主程序会等待该脚本完全执行完毕并落盘，然后才会真正关闭窗口释放系统进程，从而确保您的收尾工作（如优雅杀死 `on_project_run.py` 进程）100% 成功执行。

@@ -519,17 +519,17 @@ function FileTreeView({
         <svg width="36" height="36" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)', marginBottom: '12px' }}>
           <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
         </svg>
-        <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>欢迎使用 TLKS</h4>
-        <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+        <h4 style={{ fontSize: 'calc(var(--panel-title-size, 11px) + 2px)', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>欢迎使用 TLKS</h4>
+        <p style={{ fontSize: 'var(--ui-font-size, 12px)', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
           打开一个笔记本目录以开始管理标签格子笔记。
         </p>
-        <button className="right-sidebar-btn" onClick={handleOpenFolder} style={{ width: 'auto', height: '30px', padding: '0 16px', fontSize: '11px', fontWeight: 600, marginBottom: '20px' }}>
+        <button className="right-sidebar-btn" onClick={handleOpenFolder} style={{ width: 'auto', height: '30px', padding: '0 16px', fontSize: 'var(--ui-font-size, 12px)', fontWeight: 600, marginBottom: '20px' }}>
           打开文件夹
         </button>
 
         {displayedHistory.length > 0 && (
           <div style={{ width: '100%', maxWidth: '240px', marginTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '6px' }}>
-            <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px', textAlign: 'left', marginBottom: '4px' }}>历史项目</span>
+            <span style={{ fontSize: 'calc(var(--ui-font-size, 12px) - 3px)', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px', textAlign: 'left', marginBottom: '4px' }}>历史项目</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
               {displayedHistory.map((item) => {
                 const name = item.split('/').pop() || item;
@@ -545,7 +545,7 @@ function FileTreeView({
                       border: '1.2px solid rgba(0, 0, 0, 0.08)',
                       backgroundColor: 'rgba(255, 255, 255, 0.45)',
                       color: 'var(--text-main)',
-                      fontSize: '11px',
+                      fontSize: 'var(--ui-font-size, 12px)',
                       fontWeight: 600,
                       cursor: 'pointer',
                       textAlign: 'left',
@@ -568,7 +568,7 @@ function FileTreeView({
                       {name}
                     </span>
                     {isDemo && (
-                      <span style={{ fontSize: '8px', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(255, 59, 48, 0.1)', color: 'var(--accent-color)' }}>
+                      <span style={{ fontSize: 'calc(var(--ui-font-size, 12px) - 4px)', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(255, 59, 48, 0.1)', color: 'var(--accent-color)' }}>
                         演示
                       </span>
                     )}
@@ -588,8 +588,8 @@ function FileTreeView({
     <div className="file-list" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 10px 8px 10px', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
-          <span style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px' }}>笔记本</span>
-          <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }} title={projectPath}>{folderName}</span>
+          <span style={{ fontSize: 'calc(var(--panel-title-size, 11px) - 2px)', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px' }}>笔记本</span>
+          <span style={{ fontSize: 'var(--panel-title-size, 11px)', fontWeight: 600, color: 'var(--text-main)' }} title={projectPath}>{folderName}</span>
         </div>
         <div style={{ display: 'flex', gap: '4px' }}>
           <button className="area-btn" onClick={handleCreateFile} title="新建笔记">
@@ -652,7 +652,7 @@ function FileTreeView({
               }
             }
           }}
-          style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '5px 8px', borderRadius: '6px', fontSize: '11px', outline: 'none' }}
+          style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '5px 8px', borderRadius: '6px', fontSize: 'var(--ui-font-size, 12px)', outline: 'none' }}
         />
 
         {showAutocomplete && filteredSuggestions.length > 0 && (
@@ -694,7 +694,7 @@ function FileTreeView({
                   }}
                   style={{
                     padding: '4px 8px',
-                    fontSize: '10px',
+                    fontSize: 'calc(var(--ui-font-size, 12px) - 2px)',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
@@ -707,7 +707,7 @@ function FileTreeView({
                     textOverflow: 'ellipsis',
                   }}
                 >
-                  <span style={{ fontSize: '9px', opacity: 0.7 }}>
+                  <span style={{ fontSize: 'calc(var(--ui-font-size, 12px) - 3px)', opacity: 0.7 }}>
                     {isRegex ? '⚡ 正则' : isScript ? '⚡ 脚本' : '#'}
                   </span>
                   <span style={{ fontWeight: isSelected ? 700 : 500 }}>{display}</span>
@@ -720,7 +720,7 @@ function FileTreeView({
 
       <div style={{ flexGrow: 1, overflowY: 'auto' }}>
         {filteredFiles.length === 0 ? (
-          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>没有找到任何笔记。</div>
+          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 'var(--ui-font-size, 12px)', color: 'var(--text-muted)' }}>没有找到任何笔记。</div>
         ) : (
           <div className="file-grid-container">
             {filteredFiles.map((file) => {

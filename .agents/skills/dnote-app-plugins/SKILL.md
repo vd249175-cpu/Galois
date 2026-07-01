@@ -1,11 +1,11 @@
 ---
 name: dnote-app-plugins
-description: Authoring guide for DNOTE APP plugins (organs), covering current Blood-based plugin registration, actions, plugin-owned services, and command-line assistant workflows.
+description: "Use in Galois Source Development Mode or Build Mode for APP organ development: standalone pages, right sidebar buttons, keyboard shortcuts, renderer interactions, plugin-owned services, plugin.json manifests, and Blood-based plugin registration."
 ---
 
-# DNOTE APP Organ Plugins Specification
+# Galois APP Organ Plugins Specification
 
-This guide describes the current plugin system. DNOTE is still Blood-first. A
+This guide describes the current plugin system. Galois is still Blood-first. A
 VS Code-style DI service layer exists, but plugins are not fully migrated to it.
 Use DI services when they already fit the local code, but do not assume Blood
 has been replaced.
@@ -13,10 +13,66 @@ has been replaced.
 Read `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md` before making large plugin or
 packaging changes.
 For plugin-owned runtimes, also read `docs/PLUGIN_ENVIRONMENT.md`.
-For source vs installed extension directories, also read
-`docs/EXTENSION_WORKSPACE.md`.
+For common page/button/shortcut tasks, also read
+`docs/APP_DEVELOPMENT_SCENARIOS.md`.
+
+## 0. Mode Scope
+
+Use this skill after choosing **Source Development Mode** or **Build Mode** for
+APP organ work.
+
+Mode target rule:
+
+- **Source Development Mode**: the working directory is not under
+  `~/Documents/Galois/` and is the real Galois source repository. Edit that
+  source repository.
+- **Build Mode**: the working directory is
+  `~/Documents/Galois/workbench/Galois-vscode-core/`, or the user asks inside
+  the app to build pages, buttons, shortcuts, themes, settings, or APP/CORE
+  behavior. Edit the full external workbench copy.
+- **Assist Mode**: the working directory is a notebook project, or the task is
+  note writing, note management, tags, media, search, or notebook project
+  scripts. Do not use APP organ development.
+
+APP organ build covers:
+
+- Standalone pages or panels under `APP/[plugin-name]/`.
+- Right sidebar toolbar buttons declared as APP actions.
+- Keyboard shortcuts backed by APP actions.
+- Plugin-owned services under `APP/[plugin-name]/services/`.
+- Plugin metadata and interpreter declarations in `APP/[plugin-name]/plugin.json`.
+- Renderer UX, hooks, state subscriptions, and Blood channel integration.
+
+Do not use this skill when the user is simply writing notes, adding note tags,
+or inserting current-note content. Use Assist Mode plus `dnote-runtime`,
+`dnote-tags`, or `dnote-command-scripts` instead.
+
+Do not put notebook project automation in `APP/`. If the requested feature is
+specific to one notebook project, use the notebook capability workflow:
+`command/commands.json`, `script/`, `.dnote/`, `pyproject.toml`, and `uv.lock`.
 
 ## 1. Plugin Directory Layout
+
+Use this skill only for APP organs, plugin manifests, plugin-owned service
+scripts, renderer pages, toolbar buttons, and shortcuts. If the user asks for
+notebook commands, dynamic tags, lifecycle hooks, reactive expressions, or slash
+menu content snippets, use the notebook project script workflow instead.
+
+In source development mode, the active development target is the current
+Galois source repository that contains this `SKILL.md`.
+
+In build mode for a packaged app, the active development target is the writable
+runtime workbench at:
+
+```text
+~/Documents/Galois/workbench/Galois-vscode-core/
+```
+
+That external workbench is for packaged-app Build Mode. It is not the target
+when the user is working in the real source repo.
+The packaged `.app` bundle is only a launcher, classic seed, and recovery
+source. Do not create separate agent-doc or plugin-development directories as
+the default answer.
 
 Every plugin under `APP/` should follow this layout:
 
@@ -35,15 +91,26 @@ APP/[plugin-name]/
 The main view file lives directly in the plugin root. Do not create a
 `components/` folder unless a future refactor establishes that convention.
 
-`services/` is for plugin-owned helper scripts or calculation assets. These are
-packaged as extra resources and can be resolved through
-`electronAPI.getServiceScriptPath(pluginFolder, scriptName)`.
+`services/` is for plugin-owned helper scripts or calculation assets. In source
+development they live in the current repo. In packaged mode they are copied
+into the external workbench and can be resolved through
+`electronAPI.getServiceScriptPath(pluginFolder, scriptName)`. Packaged Galois
+resolves the external workbench first, then falls back to the classic seed
+bundled inside the app.
 
 ## 2. Registration Entry
 
 The active renderer entry is the repository root `index.tsx`. It scans
 `./APP/*/index.ts` with `import.meta.glob(..., { eager: true })` and registers
 any exported object that has `typeId` and `component`.
+
+Naming rules:
+
+- Built-in APP plugin folders use `APP/[kebab-name]/`.
+- Renderer `typeId` values use stable lower camelCase, for example
+  `graphView`.
+- Action ids use `[plugin-name].[actionName]`.
+- Do not reuse notebook project command ids for APP actions.
 
 Each plugin `index.ts` should re-export its component object and actions:
 
@@ -126,6 +193,10 @@ actions.[plugin-name].[actionName].[areaId] = Date.now()
 into the plugin view. Plugin views should handle actions in a `useEffect` keyed
 on `lastAction`.
 
+`AreaComponent.dynamicActionPrefixes` may be used when a plugin needs to receive
+dynamic action ids, for example project commands or custom commands whose ids
+are not known at registration time.
+
 ## 5. Plugin-Owned Environment
 
 Plugins own their plugin-level runtime needs.
@@ -154,17 +225,47 @@ over hand-built shell strings when adding new plugin script execution. Existing
 non-script shell operations may still use direct `execCommand`; do not copy that
 pattern for plugin service scripts or notebook project scripts.
 
+Renderer bridge parameters:
+
+```typescript
+getServiceScriptPath(pluginFolder: string, scriptName: string): Promise<string>
+runScript(
+  scriptPath: string,
+  stdin: string,
+  cwd: string,
+  envExtra?: Record<string, string>
+): Promise<{ stdout: string; stderr: string }>
+```
+
+- `pluginFolder` is the folder under `APP/`, for example `graph-view`.
+- `scriptName` is resolved inside `APP/[pluginFolder]/services/`.
+- In packaged mode, service path resolution checks the external workbench first
+  and then the packaged classic seed.
+- `cwd` is usually the selected notebook project path so the service can read
+  project files via `DNOTE_PROJECT_PATH` or stdin payloads.
+- `envExtra` is merged after the secure base environment; use it only for
+  explicit context such as `DNOTE_PROJECT_PATH`.
+
 ## 6. Command-Line Assistant Workflow
 
 In source developer mode, the built-in terminal can start the command-line
-assistant and work directly inside the repository. It may create and edit
-plugins under `APP/`, update docs, and run checks.
+assistant and work directly inside the current source repository. It may create
+and edit plugins under `APP/`, update docs, and run checks.
 
-In packaged DMG mode, the installed `.app` bundle should not be treated as a
-writable plugin development workspace. The assistant should focus on the
-selected notebook project and the writable Electron `userData/extensions/`
-workspace. It may inspect packaged plugin files as read-only context, but it
-must not modify the installed app bundle.
+In packaged DMG mode, opening the app hands off to the external runtime
+workbench. The assistant should edit:
+
+```text
+~/Documents/Galois/workbench/Galois-vscode-core/
+```
+
+Use that workbench for packaged-app `APP/`, `CORE`, `.agents/skills/`,
+`AGENTS.md`, and `docs/` changes. It may inspect packaged plugin files as
+read-only seed context, but it must not modify the installed app bundle.
+
+The external workbench should be a Git repository when Git is available. Prefer
+`git status`, branches, commits, `git restore`, or `git revert` before using the
+classic restore script.
 
 When the assistant creates a plugin, it should update:
 
@@ -174,37 +275,16 @@ When the assistant creates a plugin, it should update:
 - `APP/[plugin]/plugin.json`
 - Any plugin-specific README or documentation if the behavior is nontrivial
 
-When the app is installed from a DMG and `system.canWriteSourcePlugins` is
-false, new user plugin work should be placed under `system.extensionPath`
-or a configured App-external development extension path instead of `APP/`.
-Dynamic UI loading from those directories is a migration target; today they
-support side-loaded script extensions, metadata/interpreter lookup, and
-assistant workspace context.
+APP service scripts are not VS Code extensions with a full editor mutation API.
+They may read project context through environment variables or
+`.dnote_runtime.json`, and they may return JSON to the host. Cursor-sensitive
+editing should be implemented as editor actions or notebook project
+`commands.json` `content` commands until Galois exposes a formal editor patch
+API for plugin services.
 
-The current built-in host for writable extensions is `APP/extension-lab/`.
-Extension Lab discovers `${userData}/extensions/` plus configured development
-paths, reads `plugin.json`, lists contributed commands, and runs declared
-service scripts through the extension host/platform bridge. It does not yet
-load arbitrary React UI bundles from user extension directories.
-
-Interpreter override lookup reads the manifest that owns the service script.
-For a service script inside a registered App-external development extension
-root, DNOTE reads that extension's `plugin.json` before falling back to built-in
-APP manifests, same-id user extension manifests, global app config, and built-in
-defaults.
-
-When authoring a side-loaded script extension, use this minimal shape:
-
-```text
-extensions/[extension-id]/
-├── plugin.json
-└── services/
-    └── [service].py
-```
-
-Declare command-to-service mappings in `contributes.commands[*].service` and
-runtime hints in `services[*].runtime`. Keep this compatible with
-`docs/EXTENSION_WORKSPACE.md`.
+Interpreter override lookup reads the owning APP plugin's `plugin.json` in the
+active runtime tree. Packaged app mode checks the external workbench before
+falling back to global defaults.
 
 ## 7. File Size and Modularity
 

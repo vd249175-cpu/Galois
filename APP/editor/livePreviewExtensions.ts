@@ -76,18 +76,37 @@ class MediaWidget extends WidgetType {
     private readonly kind: 'image' | 'audio' | 'video' | 'file',
     private readonly label: string,
     private readonly url: string,
-    private readonly projectPath: string
+    private readonly projectPath: string,
+    private readonly from: number,
+    private readonly to: number
   ) {
     super();
   }
 
   eq(other: MediaWidget) {
-    return this.kind === other.kind && this.label === other.label && this.url === other.url;
+    return this.kind === other.kind && this.label === other.label && this.url === other.url && this.from === other.from && this.to === other.to;
   }
 
-  toDOM() {
+  toDOM(view: EditorView) {
     const wrapper = document.createElement('span');
     wrapper.className = `cm-dnote-media cm-dnote-media-${this.kind}`;
+    wrapper.title = this.kind === 'image' ? '媒体。点击叉号可从正文移除引用。' : this.url;
+
+    const removeButton = document.createElement('button');
+    removeButton.className = 'cm-dnote-media-remove';
+    removeButton.type = 'button';
+    removeButton.textContent = '×';
+    removeButton.title = '从正文移除此媒体引用';
+    removeButton.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      view.dispatch({
+        changes: { from: this.from, to: this.to, insert: '' },
+        selection: { anchor: this.from },
+        scrollIntoView: true,
+      });
+      view.focus();
+    };
 
     if (this.kind === 'image') {
       const img = document.createElement('img');
@@ -95,13 +114,21 @@ class MediaWidget extends WidgetType {
       img.alt = this.label;
       img.loading = 'lazy';
       wrapper.appendChild(img);
+      wrapper.appendChild(removeButton);
       return wrapper;
     }
 
     const icon = this.kind === 'video' ? '▶' : this.kind === 'audio' ? '♪' : '□';
-    wrapper.textContent = `${icon} ${this.label || this.url}`;
+    const label = document.createElement('span');
+    label.textContent = `${icon} ${this.label || this.url}`;
+    wrapper.appendChild(label);
+    wrapper.appendChild(removeButton);
     wrapper.title = this.url;
     return wrapper;
+  }
+
+  ignoreEvent() {
+    return false;
   }
 }
 
@@ -317,7 +344,7 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
       addReplace(pending, hiddenRanges, view, start, start + match[0].length, new ReactiveWidget(match[1]));
     }
 
-    for (const match of text.matchAll(/@video\[([^\]]*)\]\(([^#?)]+)[#?]t=([\d.]+),([\d.]+)\)/g)) {
+    for (const match of text.matchAll(/@video\[([^\]]*)\]\((.+?)[#?]t=([\d.]+),([\d.]+)\)/g)) {
       const start = from + (match.index || 0);
       const range = `${match[3]}s-${match[4]}s`;
       addReplace(pending, hiddenRanges, view, start, start + match[0].length, new VideoClipWidget(match[1], match[2], range));
@@ -334,7 +361,7 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
           : ['mp3', 'wav', 'aac', 'm4a'].includes(ext)
             ? 'audio'
             : 'file';
-      addReplace(pending, hiddenRanges, view, start, start + match[0].length, new MediaWidget(kind, match[1], match[2], options.projectPath));
+      addReplace(pending, hiddenRanges, view, start, start + match[0].length, new MediaWidget(kind, match[1], match[2], options.projectPath, start, start + match[0].length));
     }
 
     for (const match of text.matchAll(/(^|[^!])\[([^\]\n]+)\]\(([^)\n]+)\)/g)) {

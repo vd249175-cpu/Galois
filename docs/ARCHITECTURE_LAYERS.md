@@ -1,11 +1,11 @@
-# DNOTE Architecture Layers
+# Galois Architecture Layers
 
-DNOTE follows the same architectural idea as VS Code: Electron is an
+Galois follows the same architectural idea as VS Code: Electron is an
 implementation detail, not the architecture itself.
 
 The current codebase includes a simplified VS Code-style instantiation kernel in
 `CORE/instantiation.ts`. It is inspired by VS Code's
-`src/vs/platform/instantiation/common/*`, but DNOTE does not vendor the full VS
+`src/vs/platform/instantiation/common/*`, but Galois does not vendor the full VS
 Code workbench, editor, platform, or extension host.
 
 ## Five Layers
@@ -64,34 +64,32 @@ project-specific command behavior, or Python dependency policy.
 
 ## 3. Extension Host
 
-Responsibility: load, inspect, and run built-in, side-loaded, and development
-extensions.
+Responsibility: host first-party APP organs and route plugin-owned services.
 
 Current implementation:
 
-- `CORE/extensionHost.ts`
-- Built-in first-party organs under `APP/`
-- Side-loaded script extensions under `${userData}/extensions/`
-- Development extension paths configured in `dnote.config.json`
-- Example script extension under `extensions/env-check/`
-- VS Code-style manifest concepts: `activationEvents` and
-  `contributes.commands`
+- `CORE/extensionHost.ts` is legacy infrastructure and should not define the
+  primary development workflow.
+- Built-in first-party organs live under `APP/` in the current source
+  repository during source development, and in the external runtime workbench
+  during packaged app execution.
+- Plugin-owned service scripts live under `APP/[plugin]/services/`.
+- `plugin.json` declares interpreter and package needs for APP services.
+- VS Code-style manifest concepts may inspire future APIs, but current renderer
+  registration still comes from root `index.tsx` importing `APP/*/index.ts`.
 
 Current scope:
 
-- Discover side-loaded script extensions.
-- Add and remove App-external development extension paths.
-- Read command contributions from extension manifests.
-- Run contributed commands by mapping them to declared service scripts.
-- Resolve and run extension service scripts through Platform.
-- Sync extension paths into `system.agentWorkspace` for the command-line
-  assistant.
+- Register APP organs at startup.
+- Resolve and run APP service scripts through Platform.
+- Keep plugin business logic inside APP organs rather than CORE.
+- Sync the external runtime workbench into `system.agentWorkspace` for the
+  packaged app command-line assistant.
 
 Migration target:
 
-- Load external renderer UI bundles.
-- Apply extension trust and permission checks.
-- Provide a stable `dnote.*` extension API rather than raw Electron IPC.
+- Provide a stable `galois.*` plugin API rather than raw Electron IPC.
+- Add trust and permission checks for plugin-owned services.
 
 ## 4. Platform
 
@@ -126,7 +124,7 @@ The OS layer is reached only through Electron main process and Node APIs.
 The first hard boundary now exists:
 
 ```text
-Extension Lab UI
+Extension development UI / command surface
   -> IExtensionHostService
   -> IPlatformService
   -> electronAPI / Electron main

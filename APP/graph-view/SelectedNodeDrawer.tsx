@@ -50,7 +50,7 @@ export function SelectedNodeDrawer({
       flexDirection: 'column',
       padding: '10px 14px',
       color: 'var(--text-main)',
-      fontSize: '12px',
+      fontSize: 'var(--graph-drawer-font-size, 12px)',
       fontFamily: 'var(--font-sans)',
       zIndex: 100,
       gap: '8px',
@@ -69,7 +69,7 @@ export function SelectedNodeDrawer({
           <span style={{ fontWeight: 600 }}>
             {node.isVirtual ? `分类标签聚类 (FCA Concept Node)` : `相关文件详情`}
           </span>
-          <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+          <span style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)' }}>
             {node.tags && node.tags.length > 0 ? `含有 ${node.tags.length} 个标签` : `无标签`}
           </span>
         </div>
@@ -80,7 +80,7 @@ export function SelectedNodeDrawer({
             border: 'none',
             color: 'var(--text-muted)',
             cursor: 'pointer',
-            fontSize: '12px',
+            fontSize: 'var(--graph-drawer-font-size, 12px)',
             fontWeight: 600,
             padding: '2px 6px',
             borderRadius: '4px',
@@ -98,7 +98,7 @@ export function SelectedNodeDrawer({
         {/* Tag Badges list */}
         {node.tags && node.tags.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 600 }}>包含标签:</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)', fontWeight: 600 }}>包含标签:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {node.tags.map((tag, tIdx) => (
                 <span
@@ -108,7 +108,7 @@ export function SelectedNodeDrawer({
                     borderRadius: '6px',
                     backgroundColor: 'rgba(0, 0, 0, 0.03)',
                     border: '1px solid var(--border-color)',
-                    fontSize: '11px',
+                    fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 1px)',
                     color: 'var(--text-main)',
                     display: 'flex',
                     alignItems: 'center',
@@ -125,12 +125,12 @@ export function SelectedNodeDrawer({
         {/* Note / Path details for real node */}
         {!node.isVirtual && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 600 }}>笔记路径 (双击打开):</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)', fontWeight: 600 }}>笔记路径 (双击打开):</div>
             <div
               onClick={() => handleNodeDoubleClick(node.id)}
               style={{
                 fontFamily: 'monospace',
-                fontSize: '10.5px',
+                fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 1.5px)',
                 color: 'var(--accent-color)',
                 cursor: 'pointer',
                 textDecoration: 'underline',
@@ -145,7 +145,7 @@ export function SelectedNodeDrawer({
         {/* Neighbors list */}
         {neighbors.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 600 }}>关联节点 (点击选中定位 / 虚线为概念节点):</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)', fontWeight: 600 }}>关联节点 (点击选中定位 / 虚线为概念节点):</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {neighbors.map((neighbor) => (
                 <span
@@ -170,7 +170,7 @@ export function SelectedNodeDrawer({
                     borderRadius: '6px',
                     backgroundColor: neighbor.isVirtual ? 'rgba(255,255,255,0.4)' : 'rgba(0, 0, 0, 0.02)',
                     border: neighbor.isVirtual ? `1.2px dashed ${getLevelColor(neighbor.level || 0)}` : '1.2px solid var(--border-color)',
-                    fontSize: '11px',
+                    fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 1px)',
                     color: neighbor.isVirtual ? getLevelColor(neighbor.level || 0) : 'var(--text-main)',
                     cursor: 'pointer',
                     transition: 'all 0.15s'

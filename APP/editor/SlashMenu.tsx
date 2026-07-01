@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { getSlashCommandCategory } from './slashCommandSearch';
 
 interface SlashMenuProps {
   show: boolean;
@@ -31,18 +30,21 @@ export function SlashMenu({
         const childTop = activeChild.offsetTop;
         const childHeight = activeChild.clientHeight;
 
-        if (childTop < container.scrollTop) {
-          container.scrollTop = childTop;
-        } else if (childTop + childHeight > container.scrollTop + containerHeight) {
-          container.scrollTop = childTop + childHeight - containerHeight;
+        const visibleTop = container.scrollTop;
+        const visibleBottom = visibleTop + containerHeight;
+        const childBottom = childTop + childHeight;
+        const padding = 6;
+
+        if (childTop < visibleTop + padding) {
+          container.scrollTop = Math.max(0, childTop - padding);
+        } else if (childBottom > visibleBottom - padding) {
+          container.scrollTop = childBottom - containerHeight + padding;
         }
       }
     }
   }, [slashMenuIndex, show]);
 
   if (!show || filteredCommands.length === 0) return null;
-
-  let lastCategory = '';
 
   return (
     <div
@@ -67,23 +69,8 @@ export function SlashMenu({
     >
       {filteredCommands.map((cmd, idx) => {
         const isSelected = idx === slashMenuIndex;
-        const category = getSlashCommandCategory(cmd);
-        const showCategory = category !== lastCategory;
-        lastCategory = category;
         return (
           <div key={cmd.id}>
-            {showCategory && (
-              <div style={{
-                padding: '7px 8px 3px',
-                fontSize: '9px',
-                fontWeight: 800,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'var(--text-muted)',
-              }}>
-                {category}
-              </div>
-            )}
             <div
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -101,7 +88,7 @@ export function SlashMenu({
                 color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
                 transition: 'background-color 0.1s, color 0.1s',
               }}
-              onMouseEnter={() => setSlashMenuIndex(idx)}
+              onMouseMove={() => setSlashMenuIndex(idx)}
             >
               <div style={{
                 width: '22px',
@@ -112,17 +99,21 @@ export function SlashMenu({
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 700,
-                fontSize: '10px',
+                fontSize: 'calc(var(--slash-menu-title-size, 11px) - 1px)',
                 flexShrink: 0,
               }}>
                 {cmd.icon}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0, flexGrow: 1 }}>
-                <span style={{ fontSize: '11px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.label}</span>
-                <span style={{ fontSize: '9px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.desc}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexGrow: 1, overflow: 'hidden' }}>
+                <span style={{ fontSize: 'var(--slash-menu-title-size, 11px)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {cmd.label}
+                </span>
+                <span style={{ fontSize: 'var(--slash-menu-description-size, 9px)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {cmd.desc}
+                </span>
               </div>
               {getShortcutDisplay(cmd.id) && (
-                <span style={{ fontSize: '9px', color: 'var(--accent-color)', opacity: 0.8, paddingLeft: '8px', flexShrink: 0, fontWeight: 700 }}>
+                <span style={{ fontSize: 'var(--slash-menu-description-size, 9px)', color: 'var(--accent-color)', opacity: 0.8, paddingLeft: '8px', flexShrink: 0, fontWeight: 700 }}>
                   {getShortcutDisplay(cmd.id)}
                 </span>
               )}

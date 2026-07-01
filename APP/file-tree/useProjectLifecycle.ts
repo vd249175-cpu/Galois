@@ -30,6 +30,7 @@ export function useProjectLifecycle(projectPath: string) {
         console.log('[Project Lifecycle] Executing open script:', openScriptPath);
         const outPath = `${projectPath}/script/on_project_open.json`;
         const envExtra = {
+          DNOTE_PROJECT_PATH: projectPath,
           DNOTE_THREAD_ID: "project_lifecycle",
           DNOTE_OUTPUT_FILE: outPath
         };
@@ -47,6 +48,7 @@ export function useProjectLifecycle(projectPath: string) {
         console.log('[Project Lifecycle] Executing run script (background daemon):', runScriptPath);
         const outPath = `${projectPath}/script/on_project_run.json`;
         const envExtra = {
+          DNOTE_PROJECT_PATH: projectPath,
           DNOTE_THREAD_ID: "project_lifecycle",
           DNOTE_OUTPUT_FILE: outPath
         };
@@ -75,6 +77,7 @@ export function useProjectLifecycle(projectPath: string) {
             console.log('[Project Lifecycle] Executing close script on unload:', closeScriptPath);
             const outPath = `${projectPath}/script/on_project_close.json`;
             const envExtra = {
+              DNOTE_PROJECT_PATH: projectPath,
               DNOTE_THREAD_ID: "project_lifecycle",
               DNOTE_OUTPUT_FILE: outPath
             };
@@ -104,6 +107,7 @@ export function useProjectLifecycle(projectPath: string) {
             console.log('[Project Lifecycle] Executing close script on switch:', closeScriptPath);
             const outPath = `${projectPath}/script/on_project_close.json`;
             const envExtra = {
+              DNOTE_PROJECT_PATH: projectPath,
               DNOTE_THREAD_ID: "project_lifecycle",
               DNOTE_OUTPUT_FILE: outPath
             };

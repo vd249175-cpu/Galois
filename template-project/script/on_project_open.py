@@ -2,7 +2,7 @@ import os
 import json
 import time
 
-print("[Lifecycle] DNOTE project opened successfully.")
+print("[Lifecycle] Galois project opened successfully.")
 # Create a cache directory and log the event
 project_path = os.environ.get('DNOTE_PROJECT_PATH', '.')
 cache_dir = os.path.join(project_path, '.dnote_cache')
