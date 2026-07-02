@@ -37,21 +37,31 @@ class ActionRegistryClass {
   private registry = new Map<string, Action>();
   private shortcuts = new Map<string, Set<string>>(); // combo -> actionIds
   private actionShortcuts = new Map<string, string>(); // actionId -> combo
+  private shortcutOverrides = new Map<string, string>(); // persisted/user shortcuts
 
   public register(action: Action) {
     const existing = this.registry.get(action.id);
     this.registry.set(action.id, { ...existing, ...action });
     if (action.defaultShortcut && !this.actionShortcuts.has(action.id)) {
-      this.registerShortcut(action.defaultShortcut, action.id);
+      this.bindShortcut(action.defaultShortcut, action.id);
+    }
+    const override = this.shortcutOverrides.get(action.id);
+    if (override) {
+      this.bindShortcut(override, action.id);
     }
   }
 
   public unregister(actionId: string) {
-    this.removeShortcutForAction(actionId);
+    this.removeShortcutBindingForAction(actionId);
     this.registry.delete(actionId);
   }
 
   public registerShortcut(combo: string, actionId: string) {
+    this.shortcutOverrides.set(actionId, combo);
+    this.bindShortcut(combo, actionId);
+  }
+
+  private bindShortcut(combo: string, actionId: string) {
     const action = this.registry.get(actionId);
     if (!action) {
       console.warn(`[ActionRegistry] Cannot bind shortcut for unknown action: ${actionId}`);
@@ -102,11 +112,23 @@ class ActionRegistryClass {
   }
 
   public removeShortcutForAction(actionId: string) {
+    this.shortcutOverrides.delete(actionId);
+    this.removeShortcutBindingForAction(actionId);
+  }
+
+  private removeShortcutBindingForAction(actionId: string) {
     const oldCombo = this.actionShortcuts.get(actionId);
     if (oldCombo) {
       this.removeActionFromShortcutMap(actionId, oldCombo);
       this.actionShortcuts.delete(actionId);
     }
+  }
+
+  public unregisterBySourceType(sourceType: string) {
+    const ids = this.getAllActions()
+      .filter((action) => action.sourceType === sourceType)
+      .map((action) => action.id);
+    ids.forEach((id) => this.unregister(id));
   }
 
   public getAction(id: string): Action | undefined {
@@ -144,6 +166,15 @@ class ActionRegistryClass {
   public loadShortcuts(data: Record<string, any> | string) {
     try {
       const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+      this.shortcutOverrides.clear();
+      for (const actionId of Array.from(this.actionShortcuts.keys())) {
+        this.removeShortcutBindingForAction(actionId);
+      }
+      this.registry.forEach((action) => {
+        if (action.defaultShortcut) {
+          this.bindShortcut(action.defaultShortcut, action.id);
+        }
+      });
       for (const [actionId, combo] of Object.entries(parsed)) {
         if (typeof combo === 'string') {
           this.registerShortcut(combo, actionId);
@@ -249,4 +280,3 @@ ActionRegistry.register({
     Blood.updateKey(`layout.removeArea.${context.areaId}`, Date.now());
   },
 });
-

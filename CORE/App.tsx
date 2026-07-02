@@ -103,6 +103,32 @@ export function App() {
       root.style.setProperty('--terminal-font-size', `${terminalFontSize}px`);
     };
 
+    const applyLiveConfig = async (kind: 'config' | 'shortcuts' | 'themes', label?: string) => {
+      if (kind === 'shortcuts') {
+        const shortcuts = await window.electronAPI.getShortcuts();
+        ActionRegistry.loadShortcuts(shortcuts);
+        Blood.updateKey(BC.events.shortcutsChanged, Date.now());
+        Blood.updateKey(BC.system.devHotUpdateStatus, {
+          kind: 'shortcuts',
+          label: label || 'shortcuts.json',
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
+      const config = await window.electronAPI.getConfig();
+      Blood.updateKey(BC.system.config, config);
+      applyConfigVars(config);
+      const themeId = config?.theme || 'default-light';
+      await applyTheme(themeId);
+      Blood.updateKey(BC.events.themeChanged, themeId);
+      Blood.updateKey(BC.system.devHotUpdateStatus, {
+        kind,
+        label: label || (kind === 'themes' ? themeId : 'galois.config.json'),
+        timestamp: Date.now(),
+      });
+    };
+
     const loadConfig = async () => {
       try {
         const config = await window.electronAPI.getConfig();
@@ -122,6 +148,55 @@ export function App() {
     };
     loadConfig();
 
+    const unsubscribeConfigFiles = window.electronAPI.onConfigFileChanged?.(async (payload) => {
+      try {
+        await applyLiveConfig(payload.kind, payload.kind === 'shortcuts' ? 'shortcuts.json' : undefined);
+      } catch (err) {
+        console.warn('[App] Failed to apply live config change:', err);
+      }
+    });
+
+    let disposed = false;
+    let pollInFlight = false;
+    let configSignature = '';
+    let shortcutsSignature = '';
+    let themeCssSignature = '';
+
+    const pollConfigFiles = async () => {
+      if (disposed || pollInFlight) return;
+      pollInFlight = true;
+      try {
+        const config = await window.electronAPI.getConfig();
+        const nextConfigSignature = JSON.stringify(config || {});
+        const themeId = config?.theme || 'default-light';
+        const themeCss = await window.electronAPI.getThemeCss?.(themeId);
+        const nextThemeCssSignature = `${themeId}:${themeCss || ''}`;
+        const shortcuts = await window.electronAPI.getShortcuts();
+        const nextShortcutsSignature = JSON.stringify(shortcuts || {});
+
+        if (configSignature && nextConfigSignature !== configSignature) {
+          await applyLiveConfig('config', 'galois.config.json');
+        } else if (themeCssSignature && nextThemeCssSignature !== themeCssSignature) {
+          await applyLiveConfig('themes', themeId);
+        }
+
+        if (shortcutsSignature && nextShortcutsSignature !== shortcutsSignature) {
+          await applyLiveConfig('shortcuts', 'shortcuts.json');
+        }
+
+        configSignature = nextConfigSignature;
+        themeCssSignature = nextThemeCssSignature;
+        shortcutsSignature = nextShortcutsSignature;
+      } catch (err) {
+        console.warn('[App] Failed to poll live config change:', err);
+      } finally {
+        pollInFlight = false;
+      }
+    };
+
+    pollConfigFiles();
+    const pollTimer = window.setInterval(pollConfigFiles, 2500);
+
     // Listen for config and theme changes via Blood state sync
     const unsubscribe = Blood.subscribe((changedKeys) => {
       if (changedKeys.has('events.themeChanged')) {
@@ -133,7 +208,12 @@ export function App() {
         applyConfigVars(config);
       }
     });
-    return unsubscribe;
+    return () => {
+      disposed = true;
+      window.clearInterval(pollTimer);
+      unsubscribe();
+      unsubscribeConfigFiles?.();
+    };
   }, []);
 
   interface ScriptErrorToast {

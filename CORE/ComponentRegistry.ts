@@ -72,6 +72,10 @@ class ComponentRegistryClass {
   private registry = new Map<string, AreaComponent>();
 
   public register(comp: AreaComponent) {
+    if (this.registry.has(comp.typeId)) {
+      this.unregister(comp.typeId);
+    }
+
     this.registry.set(comp.typeId, comp);
 
     const toolbarActions: string[] = [];
@@ -99,7 +103,17 @@ class ComponentRegistryClass {
 
     if (toolbarActions.length > 0) {
       Blood.updateKey(BC.system.toolbarInjection(comp.typeId), toolbarActions);
+    } else {
+      Blood.updateKey(BC.system.toolbarInjection(comp.typeId), []);
     }
+    Blood.update({
+      [BC.events.registryChanged]: Date.now(),
+      [BC.system.devHotUpdateStatus]: {
+        kind: 'registry',
+        label: comp.typeId,
+        timestamp: Date.now(),
+      },
+    });
 
     // Dev: log plugin registration with manifest
     console.log(
@@ -114,6 +128,21 @@ class ComponentRegistryClass {
 
   public getComponent(typeId: string): AreaComponent | undefined {
     return this.registry.get(typeId);
+  }
+
+  public unregister(typeId: string) {
+    if (!this.registry.has(typeId)) return;
+    ActionRegistry.unregisterBySourceType(typeId);
+    Blood.updateKey(BC.system.toolbarInjection(typeId), []);
+    this.registry.delete(typeId);
+    Blood.update({
+      [BC.events.registryChanged]: Date.now(),
+      [BC.system.devHotUpdateStatus]: {
+        kind: 'registry',
+        label: `${typeId} removed`,
+        timestamp: Date.now(),
+      },
+    });
   }
 
   public getAvailableTypes(): string[] {

@@ -34,7 +34,6 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
   const [editorLineHeight, setEditorLineHeight] = useState<number>(1.6);
   const [editorAutosaveDelay, setEditorAutosaveDelay] = useState<number>(500);
   const [terminalFontSize, setTerminalFontSize] = useState<number>(13);
-  const [terminalAutoStartAgy, setTerminalAutoStartAgy] = useState<boolean>(true);
   const [uiFontSize, setUiFontSize] = useState<number>(12);
   const [panelTitleSize, setPanelTitleSize] = useState<number>(11);
   const [sidebarLabelSize, setSidebarLabelSize] = useState<number>(11);
@@ -76,7 +75,6 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
           }
           if (config.terminal) {
             if (config.terminal.fontSize) setTerminalFontSize(config.terminal.fontSize);
-            if (config.terminal.autoStartAgy !== undefined) setTerminalAutoStartAgy(config.terminal.autoStartAgy);
           }
           if (config.appearance) {
             if (config.appearance.uiFontSize) setUiFontSize(config.appearance.uiFontSize);
@@ -567,23 +565,9 @@ export function SettingsModal({ onClose, initialTab = 'general' }: SettingsModal
                   />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>启动时自动运行外部 agy</label>
-                  <input
-                    type="checkbox"
-                    checked={terminalAutoStartAgy}
-                    onChange={(e) => {
-                      const val = e.target.checked;
-                      setTerminalAutoStartAgy(val);
-                      saveConfig({ terminal: { autoStartAgy: val, autoStartAgyConfigured: true } });
-                    }}
-                    style={{
-                      width: '16px',
-                      height: '16px',
-                      cursor: 'pointer'
-                    }}
-                  />
-                </div>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  AGY 助手通过终端面板的按钮在系统 Terminal 中启动，不再注入内嵌终端，避免刷新或热更新打断助手会话。
+                </p>
               </div>
 
             </div>

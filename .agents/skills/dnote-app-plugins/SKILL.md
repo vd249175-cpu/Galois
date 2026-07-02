@@ -43,6 +43,14 @@ APP organ build covers:
 - Plugin metadata and interpreter declarations in `APP/[plugin-name]/plugin.json`.
 - Renderer UX, hooks, state subscriptions, and Blood channel integration.
 
+Terminology guardrail:
+
+- **Build Mode** means editing the writable source tree for app capabilities.
+- "构建一个主题", "build a page", "design a button", or "add a shortcut" are
+  feature-development requests, not release-packaging requests.
+- Do not run `npm run package:mac` unless the user explicitly asks for DMG,
+  packaging, release, distribution, or app-bundle verification.
+
 Do not use this skill when the user is simply writing notes, adding note tags,
 or inserting current-note content. Use Assist Mode plus `dnote-runtime`,
 `dnote-tags`, or `dnote-command-scripts` instead.
@@ -197,6 +205,44 @@ on `lastAction`.
 dynamic action ids, for example project commands or custom commands whose ids
 are not known at registration time.
 
+Shortcut quality:
+
+- `defaultShortcut` is optional. For demo/test plugins, prefer omitting it
+  unless the user explicitly asks for a keyboard shortcut.
+- If the user asks for a shortcut, avoid common macOS/app/global chords such as
+  `meta+s`, `meta+w`, `meta+q`, `meta+p`, `meta+shift+p`, `meta+shift+k`,
+  `meta+shift+m`, `space`, arrow keys, and bare letters outside dedicated media
+  or timeline views.
+- Check existing action defaults and
+  `~/Documents/Galois/config/shortcuts.json` before choosing a chord.
+- The visible help text must exactly match the actual combo. Do not show
+  Option/Alt in the UI if the action uses Command/Meta.
+- Prefer low-risk, user-overridable chords such as `control+alt+h` for a
+  throwaway test action, and document that users can override it in Settings.
+
+Feature validation:
+
+```bash
+npx tsc --noEmit
+npm run build
+```
+
+`npm run build` is a verification step, not a live-update mechanism. When the
+workbench is already running through `npm run dev`, page/button/theme/shortcut
+changes should appear through Vite/HMR. New `APP/[plugin]/index.ts` entries are
+also scanned and registered in development mode, so do not run `npm run build`
+just to make a page appear.
+
+If the change touches `CORE/main.ts`, `CORE/preload.ts`, Electron IPC, launcher
+startup, native binaries, or package scripts, use the kernel restart path after
+editing:
+
+```bash
+npm run rebuild:reopen
+```
+
+Do not run `npm run package:mac` for page/button/shortcut/theme feature work.
+
 ## 5. Plugin-Owned Environment
 
 Plugins own their plugin-level runtime needs.
@@ -248,9 +294,15 @@ runScript(
 
 ## 6. Command-Line Assistant Workflow
 
-In source developer mode, the built-in terminal can start the command-line
-assistant and work directly inside the current source repository. It may create
-and edit plugins under `APP/`, update docs, and run checks.
+The assistant workflow is now native-terminal first. Do not inject `agy` into
+Galois' embedded PTY and do not rely on renderer refresh preserving an in-app
+assistant session. The Terminal organ exposes `terminal.openAgentNative`, which
+opens the user's system Terminal and runs `agy --add-dir ...` with the current
+notebook project and runtime workbench.
+
+In source developer mode, the native AGY terminal can work directly inside the
+current source repository. It may create and edit plugins under `APP/`, update
+docs, and run checks.
 
 In packaged DMG mode, opening the app hands off to the external runtime
 workbench. The assistant should edit:
@@ -286,7 +338,27 @@ Interpreter override lookup reads the owning APP plugin's `plugin.json` in the
 active runtime tree. Packaged app mode checks the external workbench before
 falling back to global defaults.
 
-## 7. File Size and Modularity
+## 7. No-Reload Hot Update Contract
+
+The command-line assistant should normally run in the system Terminal through
+`terminal.openAgentNative`, not inside Galois' embedded terminal. Still, do not
+implement APP development hot update by calling `location.reload()`,
+`webContents.reload()`, or restarting Electron unless the user explicitly asks
+for a restart.
+
+Current no-reload behavior:
+
+- Vite/React HMR updates existing renderer modules in place.
+- `ComponentRegistry.register()` replaces existing components by `typeId`,
+  clears old source actions, and re-injects toolbar actions.
+- `ActionRegistry` preserves user shortcut overrides while source actions are
+  replaced.
+- Shell/sidebar components listen to `events.registryChanged` and re-render
+  without refreshing the window.
+- In development mode, Galois scans `APP/*/index.ts` and dynamically registers
+  new plugin entries so a newly created page can appear without `npm run build`.
+
+## 8. File Size and Modularity
 
 The project rule remains: TS/TSX files should generally stay under 400 lines.
 Several legacy files exceed this today. Do not make them larger when adding

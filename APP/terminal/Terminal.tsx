@@ -5,9 +5,9 @@
  *
  * 生命周期设计：
  * - tabs / activeTabId 存在 Blood 全局状态（跨卸载/挂载持久）
- * - xtermInstances / startedTabIds 是模块级常量（跨 React 生命周期持久）
+ * - xtermInstances 是模块级常量（跨 React 生命周期持久）
  * - 组件卸载后 xterm 容器孤立，重新挂载时 re-attach 到新 wrapper DOM
- * - startedTabIds 防止重挂时重复发送助手初始化命令
+ * - AGY 助手不再注入内嵌 PTY；用户通过按钮打开系统 Terminal 独立运行
  */
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
@@ -41,45 +41,9 @@ interface XTermInstance {
 /** All active xterm + PTY instances. Key = tabId */
 const xtermInstances = new Map<string, XTermInstance>();
 
-/** Tab IDs that have already had their assistant initialization commands sent */
-const startedTabIds = new Set<string>();
-
-/** Last time we attempted to auto-launch AGY for a tab */
-const agyLaunchAttempts = new Map<string, number>();
-
-/** Tabs that have emitted Antigravity/AGY output */
-const antigravityDetectedTabIds = new Set<string>();
-
 /** Blood keys for terminal state — use BC constants from BloodChannels */
 const BLOOD_TABS       = BC.system.terminalTabs;
 const BLOOD_ACTIVE_TAB = BC.system.terminalActiveTabId;
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
-
-function normalizeAgentDir(dirPath: string): string {
-  return dirPath.endsWith('/') ? dirPath : `${dirPath}/`;
-}
-
-function getAgentWorkspaceDirs(notesProject: string): string[] {
-  const runtimeWorkspace = Blood.getValue<{ readableDirs?: string[] } | null>(BC.system.agentWorkspace, null);
-  const sourcePluginPath = normalizeAgentDir(Blood.getValue<string>(BC.system.sourcePluginPath, ''));
-  return Array.from(new Set([
-    notesProject,
-    ...(runtimeWorkspace?.readableDirs || []),
-  ].filter(Boolean)))
-    .filter((dirPath) => normalizeAgentDir(dirPath) !== sourcePluginPath)
-    .map(normalizeAgentDir);
-}
-
-function getAutoStartAgy(config: any): boolean {
-  return config?.terminal?.autoStartAgy !== false;
-}
-
-function getAgyLaunchThrottleMs(): number {
-  return 2500;
-}
 
 // ─── Plugin manifest ──────────────────────────────────────────────────────────
 
@@ -99,7 +63,7 @@ export const TerminalComponent = {
   actions: terminalActions,
   bloodChannels: [BC.system.projectPath, BC.system.agentWorkspace, BC.system.config],
   manifest: {
-    description: '原生 PTY 终端（xterm.js + node-pty），可选接入外部 agy 并同步笔记项目',
+    description: '原生 PTY 终端（xterm.js + node-pty），并提供系统 Terminal AGY 启动入口',
     reads: [BC.system.projectPath, BC.system.agentWorkspace, BC.system.config],
     writes: [
       BC.system.terminalTabs,         // Tab 列表持久化到 Blood
@@ -120,9 +84,6 @@ function TerminalView({
 }) {
   const projectPath = useBloodChannel([BC.system.projectPath], () =>
     Blood.getValue<string>(BC.system.projectPath, '')
-  );
-  const focusedAreaId = useBloodChannel([BC.system.focusedAreaId], () =>
-    Blood.getValue<string | null>(BC.system.focusedAreaId, null)
   );
   const terminalFontSize = useBloodChannel([BC.system.config], () => {
     const config = Blood.getValue<any>(BC.system.config, {});
@@ -154,30 +115,23 @@ function TerminalView({
     setActiveTabId(id);
   }, []);
 
-  const tryLaunchAgy = useCallback((tabId: string, notesProject: string, reason: 'spawn' | 'focus') => {
-    const config = Blood.getValue<any>(BC.system.config, {});
-    if (!getAutoStartAgy(config)) return;
-    if (antigravityDetectedTabIds.has(tabId)) return;
+  const openSystemTerminal = useCallback(() => {
+    const dir = projectPath || appDirRef.current;
+    if (!dir) return;
+    window.electronAPI.openTerminal(dir).catch((err: any) => {
+      const inst = xtermInstances.get(activeTabIdRef.current);
+      inst?.term.write(`\r\n\x1b[31m[错误] 打开系统终端失败: ${err.message}\x1b[0m\r\n`);
+    });
+  }, [projectPath]);
 
-    const lastAttempt = agyLaunchAttempts.get(tabId) || 0;
-    if (reason === 'focus' && lastAttempt && Date.now() - lastAttempt < getAgyLaunchThrottleMs()) {
-      return;
-    }
-
-    const agentDirs = getAgentWorkspaceDirs(notesProject);
-    agyLaunchAttempts.set(tabId, Date.now());
-    startedTabIds.add(tabId);
-
-    setTimeout(() => {
-      if (antigravityDetectedTabIds.has(tabId)) return;
-      if (agentDirs.length > 0) {
-        const addDirArgs = agentDirs.map((dir) => `--add-dir ${shellQuote(dir)}`).join(' ');
-        window.electronAPI.writeTerminal(tabId, `agy ${addDirArgs}\r`);
-      } else {
-        window.electronAPI.writeTerminal(tabId, 'agy\r');
-      }
-    }, reason === 'spawn' ? 600 : 180);
-  }, []);
+  const openAgentTerminal = useCallback(() => {
+    const dir = projectPath || appDirRef.current;
+    if (!dir) return;
+    window.electronAPI.openAgentTerminal(dir).catch((err: any) => {
+      const inst = xtermInstances.get(activeTabIdRef.current);
+      inst?.term.write(`\r\n\x1b[31m[错误] 打开 AGY 终端失败: ${err.message}\x1b[0m\r\n`);
+    });
+  }, [projectPath]);
 
   // ─── Create a brand-new xterm + PTY tab ──────────────────────────────────
 
@@ -201,7 +155,7 @@ function TerminalView({
 
     // ── Create xterm instance ──
     const term = new XTerm({
-      fontFamily: '"JetBrains Mono","Cascadia Code",Menlo,monospace',
+      fontFamily: '"JetBrains Mono","Cascadia Code",Menlo,"SF Mono","PingFang SC","Hiragino Sans GB","Noto Sans Mono CJK SC","Microsoft YaHei UI",monospace',
       fontSize: terminalFontSize,
       lineHeight: 1.4,
       theme: {
@@ -228,9 +182,6 @@ function TerminalView({
 
     // ── PTY output → xterm ──
     const unsubOutput = window.electronAPI.onTerminalOutput(tabId, (data: string) => {
-      if (data && data.toLowerCase().includes('antigravity')) {
-        antigravityDetectedTabIds.add(tabId);
-      }
       term.write(data);
     });
     const unsubExit = window.electronAPI.onTerminalExit(tabId, () => {
@@ -248,9 +199,6 @@ function TerminalView({
     const dir = notesProject || appDirRef.current;
     window.electronAPI
       .spawnTerminal(tabId, dir, term.cols || 80, term.rows || 24)
-      .then(() => {
-        tryLaunchAgy(tabId, notesProject, 'spawn');
-      })
       .catch((err: any) => {
         term.write(`\r\n\x1b[31m[错误] PTY 启动失败: ${err.message}\x1b[0m\r\n`);
       });
@@ -263,7 +211,7 @@ function TerminalView({
       applyTabs(newTabs);
       applyActiveTabId(tabId);
     }
-  }, [applyTabs, applyActiveTabId, tryLaunchAgy, terminalFontSize]);
+  }, [applyTabs, applyActiveTabId, terminalFontSize]);
 
   useEffect(() => {
     for (const inst of xtermInstances.values()) {
@@ -377,19 +325,6 @@ function TerminalView({
     spawnTab(tabId, shortName, projectPath);
   }, [projectPath, appDir, areaId, spawnTab, applyActiveTabId]);
 
-  // ─── When user focuses the terminal area, give AGY a second chance ───────
-  useEffect(() => {
-    if (focusedAreaId !== areaId) return;
-    if (!activeTabId) return;
-    const activeTab = tabs.find((tab) => tab.id === activeTabId) || tabs[0];
-    if (!activeTab) return;
-
-    // If the first attempt happened before the shell was ready, allow a retry on focus.
-    if (!antigravityDetectedTabIds.has(activeTab.id)) {
-      tryLaunchAgy(activeTab.id, activeTab.projectPath, 'focus');
-    }
-  }, [focusedAreaId, areaId, activeTabId, tabs, tryLaunchAgy]);
-
   // ─── Toolbar actions ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -400,8 +335,12 @@ function TerminalView({
         inst.term.clear();
         window.electronAPI.writeTerminal(activeTabId, 'clear\r');
       }
+    } else if (lastAction.id === 'terminal.openNative') {
+      openSystemTerminal();
+    } else if (lastAction.id === 'terminal.openAgentNative') {
+      openAgentTerminal();
     }
-  }, [lastAction, activeTabId]);
+  }, [lastAction, activeTabId, openSystemTerminal, openAgentTerminal]);
 
   // ─── Close tab ────────────────────────────────────────────────────────────
 
@@ -411,9 +350,6 @@ function TerminalView({
     if (currentTabs.length === 1) return;
 
     window.electronAPI.killTerminal(tabId);
-    startedTabIds.delete(tabId);
-    agyLaunchAttempts.delete(tabId);
-    antigravityDetectedTabIds.delete(tabId);
 
     const inst = xtermInstances.get(tabId);
     if (inst) {
@@ -469,6 +405,14 @@ function TerminalView({
           title="新建终端"
         >
           +
+        </button>
+        <button
+          className="terminal-tab-add"
+          onClick={openAgentTerminal}
+          title="在系统终端打开 AGY"
+          style={{ width: 'auto', padding: '0 8px' }}
+        >
+          AGY
         </button>
       </div>
 

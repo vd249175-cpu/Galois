@@ -60,6 +60,10 @@ Install `agy` manually if the terminal assistant workflow is desired:
 curl -fsSL https://antigravity.google/cli/install.sh | bash
 ```
 
+Galois does not auto-start `agy` inside the embedded PTY. Users start the
+assistant from the Terminal panel's `AGY` button, which opens the system Terminal
+with the current project and runtime workbench passed as `--add-dir` entries.
+
 The app exposes these checks through `app:getEnvironmentStatus` and mirrors the
 result into `system.environmentStatus`.
 

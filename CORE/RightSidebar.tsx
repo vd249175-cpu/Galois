@@ -13,6 +13,9 @@ export function RightSidebar({ onToggleSettings }: RightSidebarProps) {
   const [displayMode, setDisplayMode] = useState<'icon' | 'text'>(() => {
     return (localStorage.getItem('dnote_sidebar_mode') as 'icon' | 'text') || 'icon';
   });
+  useBloodChannel([BC.events.registryChanged, BC.events.shortcutsChanged], () =>
+    `${Blood.getValue<number>(BC.events.registryChanged, 0)}:${Blood.getValue<number>(BC.events.shortcutsChanged, 0)}`
+  );
 
   const focusedAreaId = useBloodChannel(['system.focusedAreaId'], () =>
     Blood.getValue<string | null>('system.focusedAreaId', null)

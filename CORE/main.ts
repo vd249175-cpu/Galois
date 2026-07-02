@@ -22,6 +22,113 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow: BrowserWindow | null = null;
 const secondaryWindows = new Map<string, BrowserWindow>();
+const userConfigWatchers: fs.FSWatcher[] = [];
+const userConfigChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function createLauncherStatusWindow(): BrowserWindow | null {
+  try {
+    const win = new BrowserWindow({
+      width: 440,
+      height: 260,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      title: 'Galois 正在启动',
+      backgroundColor: '#f7f3ea',
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(circle at 20% 15%, #fff7d8 0, transparent 34%),
+                  linear-gradient(135deg, #f7f3ea 0%, #edf3ee 100%);
+      color: #26312f;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif;
+    }
+    .wrap {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      text-align: center;
+      box-sizing: border-box;
+      padding: 28px;
+    }
+    .mark {
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      background: #26312f;
+      color: #f7f3ea;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      box-shadow: 0 18px 38px rgba(38, 49, 47, 0.18);
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.02em;
+    }
+    p {
+      margin: 0;
+      max-width: 330px;
+      color: rgba(38, 49, 47, 0.68);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    .bar {
+      width: 220px;
+      height: 4px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(38, 49, 47, 0.12);
+    }
+    .bar::after {
+      content: "";
+      display: block;
+      width: 72px;
+      height: 100%;
+      border-radius: inherit;
+      background: #e4523f;
+      animation: slide 1.15s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { transform: translateX(-80px); }
+      100% { transform: translateX(230px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mark">G</div>
+    <h1>Galois 正在启动</h1>
+    <p>正在准备可写工作台并启动编辑环境。首次启动或依赖修复时会稍久，但 App 已经收到点击。</p>
+    <div class="bar"></div>
+    <p>如果长时间没有出现主窗口，可查看 ~/Documents/Galois/logs/external-workbench.log。</p>
+  </div>
+</body>
+</html>`;
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    return win;
+  } catch (err) {
+    console.warn('[launcher] Failed to create status window:', err);
+    return null;
+  }
+}
 
 function getGaloisHomePath(): string {
   return path.join(app.getPath('documents'), 'Galois');
@@ -112,6 +219,57 @@ function readUserThemes() {
     });
 }
 
+function broadcastUserConfigChange(kind: 'config' | 'shortcuts' | 'themes', filePath?: string) {
+  const payload = { kind, path: filePath || '', timestamp: Date.now() };
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('app:configFileChanged', payload);
+    }
+  }
+}
+
+function scheduleUserConfigChange(kind: 'config' | 'shortcuts' | 'themes', filePath?: string) {
+  const key = `${kind}:${filePath || ''}`;
+  const existing = userConfigChangeTimers.get(key);
+  if (existing) clearTimeout(existing);
+  userConfigChangeTimers.set(key, setTimeout(() => {
+    userConfigChangeTimers.delete(key);
+    broadcastUserConfigChange(kind, filePath);
+  }, 120));
+}
+
+function setupUserConfigWatchers() {
+  userConfigWatchers.splice(0).forEach((watcher) => watcher.close());
+  const configDir = path.dirname(getGaloisConfigPath());
+  const themesDir = getGaloisThemesPath();
+  fs.mkdirSync(configDir, { recursive: true });
+  ensureUserThemeFiles();
+
+  try {
+    userConfigWatchers.push(fs.watch(configDir, (_eventType, fileName) => {
+      const name = String(fileName || '');
+      if (name === 'galois.config.json') {
+        scheduleUserConfigChange('config', getGaloisConfigPath());
+      } else if (name === 'shortcuts.json') {
+        scheduleUserConfigChange('shortcuts', getGaloisShortcutsPath());
+      }
+    }));
+  } catch (err: any) {
+    console.warn('[config-watch] Failed to watch config dir:', err?.message || err);
+  }
+
+  try {
+    userConfigWatchers.push(fs.watch(themesDir, (_eventType, fileName) => {
+      const name = String(fileName || '');
+      if (!name || name.endsWith('.css')) {
+        scheduleUserConfigChange('themes', path.join(themesDir, name));
+      }
+    }));
+  } catch (err: any) {
+    console.warn('[config-watch] Failed to watch themes dir:', err?.message || err);
+  }
+}
+
 function createMainWindow() {
   const statePath = getGaloisWindowStatePath();
   let bounds: any = { width: 1200, height: 800 };
@@ -166,10 +324,16 @@ function createMainWindow() {
 }
 
 app.whenReady().then(async () => {
+  const launcherStatusWindow = shouldLaunchExternalWorkbench()
+    ? createLauncherStatusWindow()
+    : null;
   await initUserData();
   if (shouldLaunchExternalWorkbench()) {
     launchExternalWorkbench();
-    app.quit();
+    setTimeout(() => {
+      launcherStatusWindow?.close();
+      app.quit();
+    }, 30_000);
     return;
   }
 
@@ -251,12 +415,17 @@ app.whenReady().then(async () => {
   });
 
   createMainWindow();
+  setupUserConfigWatchers();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  userConfigWatchers.splice(0).forEach((watcher) => watcher.close());
 });
 
 app.on('window-all-closed', () => {
@@ -441,6 +610,7 @@ ipcMain.handle('fs:archiveMediaData', async (_, {
 function getSecureEnv() {
   const userEnv = { ...process.env };
   const homeDir = os.homedir();
+  const utf8Locale = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8';
   const commonPaths = [
     '/usr/local/bin',
     '/opt/homebrew/bin',
@@ -458,6 +628,12 @@ function getSecureEnv() {
   ])).filter(Boolean);
   
   userEnv.PATH = allPaths.join(':');
+  userEnv.LANG = userEnv.LANG && /utf-?8/i.test(userEnv.LANG) ? userEnv.LANG : utf8Locale;
+  userEnv.LC_ALL = userEnv.LC_ALL && /utf-?8/i.test(userEnv.LC_ALL) ? userEnv.LC_ALL : utf8Locale;
+  userEnv.LC_CTYPE = userEnv.LC_CTYPE && /utf-?8/i.test(userEnv.LC_CTYPE) ? userEnv.LC_CTYPE : utf8Locale;
+  userEnv.PYTHONIOENCODING = userEnv.PYTHONIOENCODING || 'utf-8';
+  userEnv.TERM = userEnv.TERM || 'xterm-256color';
+  userEnv.TERM_PROGRAM = userEnv.TERM_PROGRAM || 'Galois';
   return userEnv;
 }
 
@@ -1086,6 +1262,30 @@ ipcMain.handle('app:getAppPath', () => app.getAppPath());
 
 ipcMain.handle('app:getRuntimeInfo', () => getRuntimeInfo());
 
+ipcMain.handle('app:listAppPluginEntries', () => {
+  try {
+    const appDir = path.join(app.getAppPath(), 'APP');
+    if (!fs.existsSync(appDir)) return [];
+    return fs.readdirSync(appDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => {
+        const indexPath = path.join(appDir, entry.name, 'index.ts');
+        if (!fs.existsSync(indexPath)) return null;
+        const stat = fs.statSync(indexPath);
+        return {
+          folder: entry.name,
+          indexPath,
+          modulePath: `/APP/${entry.name}/index.ts`,
+          mtimeMs: stat.mtimeMs,
+        };
+      })
+      .filter(Boolean);
+  } catch (err: any) {
+    console.warn('[app:listAppPluginEntries] Failed:', err?.message || err);
+    return [];
+  }
+});
+
 ipcMain.handle('app:ensureExtensionsDir', () => {
   const extensionPath = getUserExtensionsPath();
   fs.mkdirSync(extensionPath, { recursive: true });
@@ -1301,8 +1501,8 @@ function getDefaultAppConfig() {
     terminal: {
       shell: "",
       fontSize: 13,
-      autoStartAgy: true,
-      autoStartAgyConfigured: false
+      autoStartAgy: false,
+      autoStartAgyConfigured: true
     },
     appearance: {
       uiFontSize: 12,
@@ -1334,11 +1534,10 @@ function normalizeAppConfig(config: any) {
     ...(config?.terminal || {}),
   };
 
-  // Older Galois builds persisted the old default false. Migrate that value once
-  // unless the user has explicitly toggled the preference in a newer build.
-  if (terminal.autoStartAgy === false && terminal.autoStartAgyConfigured !== true) {
-    terminal.autoStartAgy = true;
-  }
+  // AGY now launches through an explicit native-terminal button. Keep this
+  // persisted value false so older configs cannot re-enable PTY injection.
+  terminal.autoStartAgy = false;
+  terminal.autoStartAgyConfigured = true;
 
   return {
     ...defaults,
@@ -1621,6 +1820,12 @@ function writeClassicWorkspaceScripts(sourceRoot: string, workspaceRoot: string)
 const runScript = `#!/bin/bash
 set -e
 cd ${quoteShellArg(workspaceRoot)}
+PID_FILE=${quoteShellArg(path.join(launcherDir, 'galois-workbench.pid'))}
+echo $$ > "$PID_FILE"
+cleanup() {
+  rm -f "$PID_FILE"
+}
+trap cleanup EXIT
 echo "Starting external Galois workbench:"
 echo "  ${workspaceRoot}"
 echo "This process uses the external CORE/, APP/, docs/, and .agents/ tree."
@@ -1655,11 +1860,49 @@ fi
 if npm run | grep -q "fix:native"; then
   npm run fix:native
 fi
-exec npm run dev
+npm run dev
 `;
   const runScriptPath = path.join(launcherDir, 'run-galois-workbench.sh');
   fs.writeFileSync(runScriptPath, runScript, 'utf-8');
   fs.chmodSync(runScriptPath, 0o755);
+
+  const restartScript = `#!/bin/bash
+set -e
+LAUNCHER_DIR=${quoteShellArg(launcherDir)}
+WORKSPACE_ROOT=${quoteShellArg(workspaceRoot)}
+PID_FILE="$LAUNCHER_DIR/galois-workbench.pid"
+LOG_DIR=${quoteShellArg(path.join(getGaloisHomePath(), 'logs'))}
+mkdir -p "$LOG_DIR"
+if [ -f "$PID_FILE" ]; then
+  OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" >/dev/null 2>&1; then
+    echo "Stopping existing Galois workbench process group: $OLD_PID"
+    kill -TERM "-$OLD_PID" >/dev/null 2>&1 || kill -TERM "$OLD_PID" >/dev/null 2>&1 || true
+    sleep 1
+  fi
+  rm -f "$PID_FILE"
+fi
+cd "$WORKSPACE_ROOT"
+echo "Starting Galois workbench with HMR..."
+nohup "$LAUNCHER_DIR/run-galois-workbench.sh" >> "$LOG_DIR/external-workbench.log" 2>&1 &
+echo "Galois workbench restart requested."
+`;
+  const restartScriptPath = path.join(launcherDir, 'restart-galois-workbench.sh');
+  fs.writeFileSync(restartScriptPath, restartScript, 'utf-8');
+  fs.chmodSync(restartScriptPath, 0o755);
+
+  const rebuildScript = `#!/bin/bash
+set -e
+LAUNCHER_DIR=${quoteShellArg(launcherDir)}
+WORKSPACE_ROOT=${quoteShellArg(workspaceRoot)}
+cd "$WORKSPACE_ROOT"
+echo "Rebuilding Electron CORE/preload, then reopening Galois..."
+npm run build:electron
+"$LAUNCHER_DIR/restart-galois-workbench.sh"
+`;
+  const rebuildScriptPath = path.join(launcherDir, 'rebuild-and-reopen-galois-workbench.sh');
+  fs.writeFileSync(rebuildScriptPath, rebuildScript, 'utf-8');
+  fs.chmodSync(rebuildScriptPath, 0o755);
 
   const restoreScript = `#!/bin/bash
 set -e

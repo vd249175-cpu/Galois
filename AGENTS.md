@@ -67,7 +67,7 @@ Blood key 只能使用 `system.*`、`layout.*`、`actions.*`、`events.*`。动�
 
 - 修改当前源码仓库中的 `APP/`、`CORE/`、`docs/`、`.agents/skills/`、`AGENTS.md`、打包脚本和模板。
 - 页面开发、按钮开发、快捷键开发、主题开发、设置开发、CORE/平台开发都修改当前源码仓库。
-- 需要按源码项目规则运行 `npx tsc --noEmit`、`npm run build`、`npm run package:mac` 等验证。
+- 功能开发默认只运行 `npx tsc --noEmit` 和 `npm run build`。不要因为“源码开发模式”或“构建模式”自动运行 `npm run package:mac`。
 
 构建模式：
 
@@ -75,6 +75,7 @@ Blood key 只能使用 `system.*`、`layout.*`、`actions.*`、`events.*`。动�
 - 可以改外部副本中的 `APP/`、`CORE/`、`docs/`、`.agents/skills/`、`AGENTS.md`、主题、配置 schema 和模板。
 - 外部副本必须优先使用 Git 作为安全网；经典代码恢复只作为最后兜底。
 - 不要把构建模式的改动写入具体笔记项目，也不要修改已安装 `.app` bundle。
+- 构建模式的“构建”表示开发/构造功能，不等于打包发布。开发页面、按钮、快捷键、主题时只做类型检查和普通构建验证，除非用户明确要求 DMG/打包/发布。
 
 协助模式：
 
@@ -92,7 +93,26 @@ Blood key 只能使用 `system.*`、`layout.*`、`actions.*`、`events.*`。动�
 
 笔记项目层由项目自己管理 `command/commands.json`、`script/`、`.dnote/config.json`、`pyproject.toml`、`uv.lock`、PEP 723 和 `.venv/`。
 
-## 发布与验证
+## 开发、发布与验证
+
+日常功能开发、极简测试、页面/按钮/快捷键/主题开发：
+
+```bash
+npx tsc --noEmit
+npm run build
+```
+
+如果当前 App 已通过 `npm run dev` 或 packaged launcher 启动，页面、按钮、主题和快捷键开发优先依赖 Vite/HMR，不要为了“让页面出现”运行 `npm run build`。新增 `APP/[plugin]/index.ts` 会在开发态被自动扫描并注册。
+
+涉及 `CORE/main.ts`、`CORE/preload.ts`、Electron IPC、启动器、打包脚本或原生依赖时，属于内核/平台改动。此类改动需要重新编译 Electron 主进程并重启外部 workbench：
+
+```bash
+npm run rebuild:reopen
+```
+
+禁止把“构建一个主题”“构建模式”“build a page/button/shortcut/theme”理解为需要生成 DMG。
+
+只有当用户明确要求“打包”“DMG”“发布”“分发”“package:mac”时，才进入发布验证。
 
 当前发布目标是 unsigned 内部/本地 DMG：
 

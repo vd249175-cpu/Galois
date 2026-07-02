@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { Blood, useBloodChannel } from './Blood';
 import { ComponentRegistry } from './ComponentRegistry';
+import { BC } from './BloodChannels';
 
 export function LeftActivityBar() {
   const focusedAreaId = useBloodChannel(['system.focusedAreaId'], () =>
@@ -24,6 +25,9 @@ export function LeftActivityBar() {
   const [isTextMode, setIsTextMode] = useState(() => {
     return localStorage.getItem('dnote_left_bar_text_mode') === 'true';
   });
+  useBloodChannel([BC.events.registryChanged], () =>
+    Blood.getValue<number>(BC.events.registryChanged, 0)
+  );
 
   const handleToggleMode = () => {
     const nextVal = !isTextMode;

@@ -63,6 +63,12 @@ export interface ElectronAPI {
       writable?: boolean;
     }>;
   }>;
+  listAppPluginEntries: () => Promise<Array<{
+    folder: string;
+    indexPath: string;
+    modulePath: string;
+    mtimeMs: number;
+  }>>;
   getClassicCodeWorkspace: () => Promise<{
     sourcePath: string;
     workspacePath: string;
@@ -200,6 +206,7 @@ export interface ElectronAPI {
   setLayout: (layout: any) => Promise<boolean>;
   getProjectState: (projectPath: string) => Promise<any>;
   setProjectState: (projectPath: string, state: any) => Promise<boolean>;
+  onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => () => void;
 }
 
 declare global {

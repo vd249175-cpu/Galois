@@ -17,6 +17,14 @@ description: "Use in Galois Build Mode for global user configuration: themes, fo
 
 在协助模式下，只有当用户明确要求调整自己的全局配置时，才修改 `~/Documents/Galois/config/`；不要因为写笔记而修改 APP/CORE。
 
+术语边界：
+
+- “构建模式”表示修改可写源码树或外部 workbench，不表示发布打包。
+- “构建一个主题”“新增主题”“设计主题”表示创建/注册主题 CSS 和配置入口，
+  不要因此运行 `npm run package:mac`。
+- 只有用户明确要求 DMG、打包、发布、分发或 app bundle 验证时，才运行
+  `npm run package:mac`。
+
 适用任务：
 
 - 新增或修改 Settings 中的全局配置项。
@@ -72,8 +80,8 @@ description: "Use in Galois Build Mode for global user configuration: themes, fo
   "terminal": {
     "shell": "",
     "fontSize": 13,
-    "autoStartAgy": true,
-    "autoStartAgyConfigured": false
+    "autoStartAgy": false,
+    "autoStartAgyConfigured": true
   },
   "appearance": {
     "uiFontSize": 12,
@@ -131,6 +139,15 @@ getThemeCss(themeId: string): Promise<string>
 - 修饰键：`meta`（⌘/Win）、`control`、`alt`、`shift`
 - 使用 `+` 连接，无空格
 - 最后一段为实际按键（如 `s`、`backspace`、`enter`）
+
+快捷键质量规则：
+- 默认快捷键不是必填；测试插件可以没有默认快捷键。
+- 避免常见系统/应用快捷键：`meta+s`、`meta+w`、`meta+q`、`meta+p`、
+  `meta+shift+p`、`meta+shift+k`、`meta+shift+m`、`space`、方向键以及
+  普通单字母。
+- 修改默认快捷键前必须检查已注册 action 默认值和
+  `~/Documents/Galois/config/shortcuts.json`。
+- UI 文案必须和真实 combo 一致，例如 `meta+shift+k` 不能写成 `⌥+⇧+K`。
 
 ### 2.3 面板工作区布局 (`layout.json`)
 
@@ -279,3 +296,23 @@ await window.electronAPI.setProjectState(projectPath, state);
   "terminal.clear": "control+l"
 }
 ```
+
+## 6. No-Reload 配置热更新
+
+Galois 内置 AGY/终端助手运行在软件窗口里，配置热更新不得刷新 renderer。
+
+当前实现：
+
+- 主进程 watch `~/Documents/Galois/config/galois.config.json`、
+  `~/Documents/Galois/config/shortcuts.json` 和
+  `~/Documents/Galois/config/themes/*.css`。
+- preload 通过 `onConfigFileChanged(callback)` 广播
+  `{ kind, path, timestamp }`。
+- renderer 收到 `themes` 或 `config` 后重新读取配置并执行 `applyTheme`，
+  同时更新 `system.config`。
+- renderer 收到 `shortcuts` 后重新读取快捷键并调用
+  `ActionRegistry.loadShortcuts`，同时广播 `events.shortcutsChanged`。
+- renderer 还会轻量轮询配置、快捷键和当前主题 CSS 签名，作为当前已打开
+  App 无法立刻获得新版主进程 watcher 时的 no-reload 兜底。
+- 标题栏显示最近一次 `system.devHotUpdateStatus`，用于确认是原地热更新而
+  不是窗口刷新。

@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:getAppPath'),
   getRuntimeInfo: () =>
     ipcRenderer.invoke('app:getRuntimeInfo'),
+  listAppPluginEntries: () =>
+    ipcRenderer.invoke('app:listAppPluginEntries'),
   getClassicCodeWorkspace: () =>
     ipcRenderer.invoke('app:getClassicCodeWorkspace'),
   restoreClassicCodeWorkspace: () =>
@@ -169,4 +171,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:getProjectState', projectPath),
   setProjectState: (projectPath: string, state: any) =>
     ipcRenderer.invoke('app:setProjectState', projectPath, state),
+  onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => {
+    const listener = (_event: any, payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => callback(payload);
+    ipcRenderer.on('app:configFileChanged', listener);
+    return () => { ipcRenderer.removeListener('app:configFileChanged', listener); };
+  },
 });

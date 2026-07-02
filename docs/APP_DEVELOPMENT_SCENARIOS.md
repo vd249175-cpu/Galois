@@ -42,6 +42,12 @@ workspace or the user explicitly wants a clean seed.
 Use this document after the agent has selected **Source Development Mode** or
 **Build Mode**.
 
+Important wording rule: **Build Mode** means "modify or construct app
+capabilities in the writable source tree." It does not mean release packaging.
+User phrases such as "构建一个主题", "build a page", "design a button", or
+"add a shortcut" mean feature implementation unless the user explicitly asks
+for "DMG", "package", "打包", "发布", or "分发".
+
 Mode target rule:
 
 - **Source Development Mode**: the working directory is not under
@@ -75,7 +81,7 @@ use the same categories; only the target tree differs:
   bridges, terminal spawning, configuration, windows, layout, Blood sync, or
   read-only bundle boundaries. Work in `CORE/` only when the behavior is
   genuinely cross-plugin.
-- **Release/environment build**: build, package, DMG, external workbench,
+- **Release/environment build**: package, DMG, external workbench,
   Node/uv/AGY checks, native binaries, and macOS app-bundle constraints.
 
 Decision rule:
@@ -87,8 +93,25 @@ Decision rule:
 - Notebook automation, templates, dynamic tags, or lifecycle hooks: Assist Mode
   with notebook project skills.
 - Generic shell/file/config/window/runtime bridge: CORE/platform build.
-- DMG, `.app`, dependency install, or external workbench: release/environment
-  build.
+- DMG, `.app`, dependency install, external workbench bootstrap, or native
+  binary repair: release/environment build.
+
+Validation rule:
+
+- Page/button/shortcut/theme feature work: run `npx tsc --noEmit` and
+  `npm run build` only as verification when needed.
+- Do not use `npm run build` to make a page appear in the running app. The
+  running workbench should stay on `npm run dev`; Vite/HMR and Galois' dev APP
+  entry scanner make new or changed APP pages usable without a build.
+- Existing renderer page/button/theme changes should appear through HMR. New
+  `APP/[plugin]/index.ts` entries are scanned and registered in development
+  mode.
+- CORE/main/preload, IPC, launcher, native binary, or package script changes are
+  kernel/platform changes. Use `npm run rebuild:reopen` after those changes so
+  Electron is rebuilt and the external workbench is reopened.
+- Do **not** run `npm run package:mac` for feature tests or Build Mode tasks.
+- Run `npm run package:mac` only when the user explicitly asks for DMG,
+  packaging, release, distribution, or app-bundle verification.
 
 ## 1. Develop A Standalone Page
 
@@ -136,7 +159,7 @@ Action shape:
 export const myAction = {
   id: 'pluginName.actionName',
   label: 'Action Label',
-  defaultShortcut: 'meta+shift+y',
+  defaultShortcut: 'control+alt+h',
   isToolbar: true,
   icon: <svg width="14" height="14" viewBox="0 0 16 16" />
 };
@@ -163,6 +186,19 @@ Preferred path:
 - Make sure the action id is stable: `[pluginName].[actionName]`.
 - Let users override it in Settings, persisted under
   `~/Documents/Galois/config/shortcuts.json`.
+
+Shortcut quality rules:
+
+- Prefer no default shortcut for demos unless the user explicitly asks for one.
+- If a default is requested, avoid common macOS/app chords such as `meta+s`,
+  `meta+w`, `meta+q`, `meta+p`, `meta+shift+p`, `meta+shift+k`,
+  `meta+shift+m`, `space`, arrow keys, and single-letter shortcuts unless the
+  target view is a dedicated media/timeline surface.
+- Check existing `ActionRegistry` defaults and
+  `~/Documents/Galois/config/shortcuts.json` before choosing a chord.
+- The UI hint must exactly match `defaultShortcut`; do not display Option when
+  the binding uses Command/Meta.
+- If the shortcut is experimental, mention it is user-overridable in Settings.
 
 For notebook project commands:
 

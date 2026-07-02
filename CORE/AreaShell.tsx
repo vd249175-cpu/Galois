@@ -360,6 +360,9 @@ export function AreaShell({ areaId, componentType, isPopped = false }: AreaShell
   };
 
   const currentComponent = ComponentRegistry.getComponent(componentType);
+  useBloodChannel([BC.events.registryChanged], () =>
+    Blood.getValue<number>(BC.events.registryChanged, 0)
+  );
   const activeOverlay = getActiveDragOverlay();
 
   return (

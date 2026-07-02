@@ -76,13 +76,15 @@ editable files inside hidden application support folders.
 
 ## Built-In Command-Line Assistant
 
-Galois includes a terminal-oriented assistant workflow. The terminal plugin uses
-`node-pty` to run a real shell and can optionally start the external `agy`
-command-line assistant in the current workspace.
+Galois includes an external-terminal assistant workflow. The terminal plugin
+uses `node-pty` for ordinary embedded shell tabs, but `agy` is launched only by
+an explicit native-terminal action so assistant sessions are not tied to
+renderer refresh, HMR, layout remounts, or embedded PTY lifecycle.
 
 `agy/Antigravity` is not bundled with Galois. Users install and update it through
 their own toolchain. Galois only detects whether the command exists and, when the
-user explicitly enables terminal auto-start, sends the command into the PTY.
+user clicks the AGY terminal button, opens the system Terminal with a generated
+`agy --add-dir ...` command.
 
 In source/developer mode, the assistant is expected to be able to:
 
@@ -101,6 +103,21 @@ In packaged mode, opening the app launches the external workbench through
 code should be treated as immutable seed material, not as the active development
 workspace.
 
+The packaged launcher shows a small startup status window immediately after the
+user clicks the macOS app. This avoids the confusing blank interval while the
+external workbench, Vite dev server, and Electron process are being prepared.
+
+Runtime development split:
+
+- APP renderer pages, toolbar buttons, themes, and shortcut changes should use
+  the running `npm run dev` workbench and Vite/HMR. Do not run `npm run build`
+  just to make a page appear.
+- New `APP/[plugin]/index.ts` entries are discovered by the development APP
+  entry scanner and registered without a production build.
+- CORE/main/preload, Electron IPC, launcher startup, package scripts, or native
+  binary changes require rebuilding Electron and reopening the workbench with
+  `npm run rebuild:reopen`.
+
 At startup the app publishes runtime facts into Blood:
 
 - `system.runtimeMode`
@@ -111,9 +128,9 @@ At startup the app publishes runtime facts into Blood:
 - `system.projectEnvironmentRepair` (written by FirstRunSetup during environment
   repair, not at startup; read by settings and onboarding components)
 
-The terminal assistant uses `system.agentWorkspace` to add the selected notebook
-project plus the external runtime workbench in packaged mode. Do not add
-separate plugin or agent-document directories by default.
+The native AGY launcher uses `system.agentWorkspace` to add the selected
+notebook project plus the external runtime workbench in packaged mode. Do not
+add separate plugin or agent-document directories by default.
 
 Assistant tasks must be routed by layer:
 

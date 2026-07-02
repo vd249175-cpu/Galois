@@ -69,6 +69,9 @@ export const BC = {
     /** 当前项目声明驱动环境修复结果。Writer: FirstRun/settings → Reader: settings/onboarding */
     projectEnvironmentRepair: 'system.projectEnvironmentRepair' as const,
 
+    /** 最近一次开发热更新状态。Writer: registry/config watcher → Reader: TitleBar */
+    devHotUpdateStatus: 'system.devHotUpdateStatus' as const,
+
     /** 每个 area 的组件类型映射。Writer: AreaShell(mount) → Reader: RightSidebar, ActionRegistry */
     areaComponentTypes: (areaId: string) => `system.areaComponentTypes.${areaId}` as const,
 
@@ -157,6 +160,12 @@ export const BC = {
 
     /** 项目自定义命令执行完成。Writer: 任意器官(execCommand) → Reader: 触发方器官 */
     commandExecuted: (commandId: string) => `events.commandExecuted.${commandId}` as const,
+
+    /** APP 组件/动作注册表变化（timestamp）。Writer: ComponentRegistry → Reader: shell/sidebar */
+    registryChanged: 'events.registryChanged' as const,
+
+    /** 快捷键配置变化（timestamp）。Writer: App/config watcher → Reader: settings/sidebar */
+    shortcutsChanged: 'events.shortcutsChanged' as const,
   },
 } as const;
 
