@@ -391,6 +391,22 @@ body {
   line-height: 1.45;
 }
 
+.cm-dnote-h4 {
+  font-size: 1.04em;
+  line-height: 1.42;
+}
+
+.cm-dnote-h5 {
+  font-size: 0.98em;
+  line-height: 1.4;
+}
+
+.cm-dnote-h6 {
+  color: var(--text-muted);
+  font-size: 0.92em;
+  line-height: 1.38;
+}
+
 .cm-dnote-task-line {
   color: var(--text-main);
 }

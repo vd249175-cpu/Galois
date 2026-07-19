@@ -19,7 +19,8 @@
     "build": "npm run build:icon && npm run build:vite && npm run build:electron",
     "start": "NODE_ENV=production electron .",
     "package": "npm run clean:release && npm run clean:template && npm run build && npm run prepare:launcher && electron-builder",
-    "package:mac": "npm run clean:release && npm run clean:template && npm run build && npm run prepare:launcher && electron-builder --mac"
+    "package:mac": "npm run clean:release && npm run clean:template && npm run build && npm run prepare:launcher && electron-builder --mac",
+    "release:reinstall:mac": "node scripts/package-reinstall-mac.js"
   },
   "keywords": [],
   "author": "",

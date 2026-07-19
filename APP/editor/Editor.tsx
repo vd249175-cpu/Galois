@@ -17,6 +17,7 @@ import { PromptModal } from './PromptModal';
 import { SlashMenu } from './SlashMenu';
 import { useEditorHistory } from './hooks/useEditorHistory';
 import { useRuntimeSync } from './hooks/useRuntimeSync';
+import { useExternalFileSync } from './hooks/useExternalFileSync';
 import type { EditorTextHandle } from './LiveMarkdownEditor';
 import { applyMarkdownFormatting, handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands, rememberSlashCommand } from './slashCommandSearch';
@@ -137,6 +138,8 @@ function EditorView({
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
   const lastSavedContentRef = useRef<string>('');
+  const pendingInternalContentRef = useRef<string | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isComposingRef = useRef<boolean>(false);
   const triggeredImmediateRefs = useRef<Set<string>>(new Set());
   const restoredCursorForFileRef = useRef<string>('');
@@ -173,6 +176,7 @@ function EditorView({
     const fullContent = normalized.text;
     if (fullContent === lastSavedContentRef.current) return;
     try {
+      pendingInternalContentRef.current = fullContent;
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
       if (normalized.changed) {
@@ -199,6 +203,10 @@ function EditorView({
       console.error('[Editor] Save failed:', err);
       setStatusMessage(`保存失败: ${err.message}`);
       updateBloodKey(BC.events.scriptError('editor'), { message: err.message, ts: Date.now() });
+    } finally {
+      if (pendingInternalContentRef.current === fullContent) {
+        pendingInternalContentRef.current = null;
+      }
     }
   };
 
@@ -1318,6 +1326,22 @@ function EditorView({
     loadMarkdownFile();
   }, [openedFile, fileSavedEvent]);
 
+  useExternalFileSync({
+    currentFile,
+    contentRef,
+    lastSavedContentRef,
+    pendingInternalContentRef,
+    autoSaveTimerRef,
+    normalizeMarkdown: mergeInlineTagsIntoFrontmatter,
+    applyExternalContent: (nextContent, nextTags) => {
+      setTags(nextTags);
+      setContent(nextContent);
+      markHistoryContent(nextContent);
+    },
+    setStatusMessage,
+    updateBloodKey,
+  });
+
   useEffect(() => {
     const savedCursor = state[BC.system.editorCursor(areaId)];
     if (!currentFile || !content) return;
@@ -1415,8 +1439,16 @@ function EditorView({
   // ── Auto-save (debounced) ──────────────────────────────────────────────
   useEffect(() => {
     if (!currentFile || isReadingMode || content === '' || content === lastSavedContentRef.current || isComposingRef.current) return;
-    const timer = setTimeout(() => { saveNodeFile(content); }, 600);
-    return () => clearTimeout(timer);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      saveNodeFile(content);
+    }, 600);
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
   }, [content, currentFile, isReadingMode]);
 
   // ── Tag update helper ──────────────────────────────────────────────────

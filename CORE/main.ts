@@ -24,6 +24,28 @@ let mainWindow: BrowserWindow | null = null;
 const secondaryWindows = new Map<string, BrowserWindow>();
 const userConfigWatchers: fs.FSWatcher[] = [];
 const userConfigChangeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+interface FileWatchEntry {
+  subscribers: Map<number, { webContents: Electron.WebContents; count: number }>;
+}
+const fileWatchEntries = new Map<string, FileWatchEntry>();
+const fileWatchSenderCleanup = new Set<number>();
+let lastAgentTerminalLaunchAt = 0;
+
+function stopWatchingFileIfUnused(filePath: string) {
+  const entry = fileWatchEntries.get(filePath);
+  if (entry && entry.subscribers.size === 0) {
+    fs.unwatchFile(filePath);
+    fileWatchEntries.delete(filePath);
+  }
+}
+
+function releaseFileWatchesForSender(senderId: number) {
+  for (const [filePath, entry] of fileWatchEntries) {
+    entry.subscribers.delete(senderId);
+    stopWatchingFileIfUnused(filePath);
+  }
+  fileWatchSenderCleanup.delete(senderId);
+}
 
 function createLauncherStatusWindow(): BrowserWindow | null {
   try {
@@ -426,6 +448,8 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => {
   userConfigWatchers.splice(0).forEach((watcher) => watcher.close());
+  for (const filePath of fileWatchEntries.keys()) fs.unwatchFile(filePath);
+  fileWatchEntries.clear();
 });
 
 app.on('window-all-closed', () => {
@@ -452,6 +476,63 @@ ipcMain.handle('fs:writeFile', async (_, filePath: string, content: string) => {
     console.error('[fs:writeFile] Error writing file:', filePath, err);
     throw new Error(`Failed to write file: ${err.message}`);
   }
+});
+
+ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
+  const watchedPath = path.resolve(filePath);
+  let entry = fileWatchEntries.get(watchedPath);
+  if (!entry) {
+    entry = { subscribers: new Map() };
+    fileWatchEntries.set(watchedPath, entry);
+    fs.watchFile(watchedPath, { persistent: false, interval: 300 }, (current, previous) => {
+      if (
+        current.mtimeMs === previous.mtimeMs
+        && current.size === previous.size
+        && current.nlink === previous.nlink
+      ) return;
+      const payload = {
+        path: watchedPath,
+        exists: current.nlink > 0,
+        mtimeMs: current.mtimeMs,
+        size: current.size,
+      };
+      const currentEntry = fileWatchEntries.get(watchedPath);
+      for (const [senderId, subscriber] of currentEntry?.subscribers || []) {
+        if (subscriber.webContents.isDestroyed()) {
+          currentEntry?.subscribers.delete(senderId);
+        } else {
+          subscriber.webContents.send('fs:fileChanged', payload);
+        }
+      }
+      stopWatchingFileIfUnused(watchedPath);
+    });
+  }
+
+  const senderId = event.sender.id;
+  const existing = entry.subscribers.get(senderId);
+  entry.subscribers.set(senderId, {
+    webContents: event.sender,
+    count: (existing?.count || 0) + 1,
+  });
+  if (!fileWatchSenderCleanup.has(senderId)) {
+    fileWatchSenderCleanup.add(senderId);
+    event.sender.once('destroyed', () => releaseFileWatchesForSender(senderId));
+  }
+  return watchedPath;
+});
+
+ipcMain.handle('fs:unwatchFile', async (event, filePath: string) => {
+  const watchedPath = path.resolve(filePath);
+  const entry = fileWatchEntries.get(watchedPath);
+  const existing = entry?.subscribers.get(event.sender.id);
+  if (!entry || !existing) return false;
+  if (existing.count > 1) {
+    entry.subscribers.set(event.sender.id, { ...existing, count: existing.count - 1 });
+  } else {
+    entry.subscribers.delete(event.sender.id);
+  }
+  stopWatchingFileIfUnused(watchedPath);
+  return true;
 });
 
 ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
@@ -968,6 +1049,9 @@ ipcMain.handle('shell:openTerminal', async (_, dirPath: string) => {
 
 ipcMain.handle('shell:openAgentTerminal', async (_, dirPath: string) => {
   try {
+    const now = Date.now();
+    if (now - lastAgentTerminalLaunchAt < 800) return true;
+    lastAgentTerminalLaunchAt = now;
     const runtimeInfo = getRuntimeInfo();
     const extraDirs = runtimeInfo.agentWorkspace.readableDirs
       .filter((workspaceDir: string) => workspaceDir && workspaceDir !== dirPath);
@@ -978,8 +1062,12 @@ ipcMain.handle('shell:openAgentTerminal', async (_, dirPath: string) => {
       const agentCommand = `agy ${agyArgs}`.trim();
       const shellCommand = `cd ${quoteShellArg(dirPath)} && clear && ${agentCommand}`;
       const applescript = `tell application "Terminal"
+        if (count of windows) = 0 then
+          do script ${quoteAppleScriptString(shellCommand)}
+        else
+          do script ${quoteAppleScriptString(shellCommand)} in front window
+        end if
         activate
-        do script ${quoteAppleScriptString(shellCommand)}
       end tell`;
       exec(`osascript -e ${quoteShellArg(applescript)}`);
     } else if (process.platform === 'win32') {

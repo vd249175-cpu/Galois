@@ -140,6 +140,9 @@ interface ParsedBlock {
   tableHeaders?: string[];
   tableAlignments?: string[];
   tableRows?: string[][];
+  listIndent?: number;
+  listMarker?: string;
+  listContentStart?: number;
 }
 
 interface MarkdownPreviewProps {
@@ -692,18 +695,20 @@ export function MarkdownPreview({
       // 3. Single-line blocks
       let type = 'p';
       const isHorizontalRule = (l: string) => /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
+      const headingMatch = line.match(/^(#{1,6})\s+/);
+      const taskMatch = line.match(/^(\s*)[-*+]\s+\[( |x|X)\]\s+/);
+      const unorderedListMatch = line.match(/^(\s*)[-*+]\s+/);
+      const orderedListMatch = line.match(/^(\s*)(\d+)[.)]\s+/);
       if (isHorizontalRule(line)) {
         type = 'hr';
-      } else if (line.startsWith('# ')) {
-        type = 'h1';
-      } else if (line.startsWith('## ')) {
-        type = 'h2';
-      } else if (line.startsWith('### ')) {
-        type = 'h3';
-      } else if (line.startsWith('- [ ] ') || line.startsWith('- [x] ')) {
+      } else if (headingMatch) {
+        type = `h${headingMatch[1].length}`;
+      } else if (taskMatch) {
         type = 'todo';
-      } else if (line.startsWith('- ')) {
+      } else if (unorderedListMatch) {
         type = 'li';
+      } else if (orderedListMatch) {
+        type = 'oli';
       } else if (line.startsWith('> ')) {
         type = 'blockquote';
       } else if (line.trim() === '') {
@@ -721,7 +726,10 @@ export function MarkdownPreview({
         type,
         startLine,
         endLine: startLine,
-        rawText
+        rawText,
+        listIndent: (taskMatch?.[1] || unorderedListMatch?.[1] || orderedListMatch?.[1] || '').length,
+        listMarker: orderedListMatch?.[2],
+        listContentStart: taskMatch?.[0].length || unorderedListMatch?.[0].length || orderedListMatch?.[0].length,
       });
 
       i++;
@@ -1292,19 +1300,41 @@ export function MarkdownPreview({
       return wrapBlock(blockEl, block);
     }
 
+    if (block.type === 'h4' || block.type === 'h5' || block.type === 'h6') {
+      const level = Number(block.type.substring(1));
+      const headingStyles: Record<number, React.CSSProperties> = {
+        4: { fontSize: '1.04em', fontWeight: '650', margin: '12px 0 5px 0' },
+        5: { fontSize: '0.98em', fontWeight: '650', margin: '10px 0 4px 0' },
+        6: { fontSize: '0.92em', fontWeight: '650', margin: '9px 0 4px 0', color: 'var(--text-muted)' },
+      };
+      const blockEl = isEditing
+        ? renderBlockEditor(block.startLine, contentVal)
+        : React.createElement(
+            `h${level}`,
+            {
+              key: idx,
+              onClick: (e: React.MouseEvent) => beginEditingLineFromClick(e, block.startLine),
+              style: { ...headingStyles[level], cursor: 'text' },
+            },
+            renderInline(contentVal.substring(level + 1), block.startLine)
+          );
+      return wrapBlock(blockEl, block);
+    }
+
     if (block.type === 'todo') {
-      const isChecked = contentVal.startsWith('- [x] ');
+      const taskMatch = contentVal.match(/^(\s*)[-*+]\s+\[( |x|X)\]\s+/);
+      const isChecked = taskMatch?.[2].toLowerCase() === 'x';
       const blockEl = isEditing ? (
         renderBlockEditor(block.startLine, contentVal)
       ) : (
         <div
           key={idx}
           onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', cursor: 'text', opacity: isChecked ? 0.55 : 1 }}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', marginLeft: `${(block.listIndent || 0) * 18}px`, cursor: 'text', opacity: isChecked ? 0.55 : 1 }}
         >
           <input type="checkbox" disabled checked={isChecked} />
           <span style={{ textDecoration: isChecked ? 'line-through' : 'none' }}>
-            {renderInline(contentVal.substring(6), block.startLine)}
+            {renderInline(contentVal.substring(block.listContentStart || 6), block.startLine)}
           </span>
         </div>
       );
@@ -1318,10 +1348,28 @@ export function MarkdownPreview({
         <li
           key={idx}
           onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
-          style={{ marginLeft: '16px', margin: '4px 0', fontSize: 'inherit', cursor: 'text' }}
+          style={{ margin: '4px 0', marginLeft: `${16 + (block.listIndent || 0) * 18}px`, fontSize: 'inherit', cursor: 'text' }}
         >
-          {renderInline(contentVal.substring(2), block.startLine)}
+          {renderInline(contentVal.substring(block.listContentStart || 2), block.startLine)}
         </li>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
+    if (block.type === 'oli') {
+      const blockEl = isEditing ? (
+        renderBlockEditor(block.startLine, contentVal)
+      ) : (
+        <div
+          key={idx}
+          onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
+          style={{ display: 'flex', alignItems: 'baseline', gap: '7px', margin: '4px 0', marginLeft: `${(block.listIndent || 0) * 18}px`, cursor: 'text' }}
+        >
+          <span style={{ minWidth: '20px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 650 }}>
+            {block.listMarker || '1'}.
+          </span>
+          <span>{renderInline(contentVal.substring(block.listContentStart || 3), block.startLine)}</span>
+        </div>
       );
       return wrapBlock(blockEl, block);
     }
@@ -1585,17 +1633,24 @@ export function MarkdownPreview({
       );
     });
 
-    // 4. Bold
+    // 4. Combined bold + italic. Parse this before the individual markers so
+    // custom Galois inline nodes remain untouched while CommonMark emphasis
+    // such as ***dolly track*** keeps both styles.
+    parts = splitByRegex(parts, /\*\*\*([^*]+)\*\*\*/g, (match, idx) => (
+      <strong key={`bold_italic_${match[1]}_${idx}`}><em>{match[1]}</em></strong>
+    ));
+
+    // 5. Bold
     parts = splitByRegex(parts, /\*\*([^*]+)\*\*/g, (match, idx) => (
       <strong key={`bold_${match[1]}_${idx}`}>{match[1]}</strong>
     ));
 
-    // 5. Italic
+    // 6. Italic
     parts = splitByRegex(parts, /\*([^*]+)\*/g, (match, idx) => (
       <em key={`italic_${match[1]}_${idx}`}>{match[1]}</em>
     ));
 
-    // 6. Code
+    // 7. Code
     parts = splitByRegex(parts, /`([^`]+)`/g, (match, idx) => (
       <code
         key={`code_${match[1]}_${idx}`}

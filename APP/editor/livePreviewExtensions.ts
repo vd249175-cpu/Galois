@@ -298,7 +298,7 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
       const lineIsActive = selectionTouches(view, line.from, line.to);
 
       if (!lineIsActive) {
-        const headingMatch = lineText.match(/^(#{1,3})\s+/);
+        const headingMatch = lineText.match(/^(#{1,6})\s+/);
         if (headingMatch) {
           const level = headingMatch[1].length;
           pending.push({
@@ -369,6 +369,15 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
       const start = from + (match.index || 0) + prefixLength;
       const end = start + match[0].length - prefixLength;
       addReplace(pending, hiddenRanges, view, start, end, new MarkdownLinkWidget(match[2], match[3], options.onWikiLink));
+    }
+
+    for (const match of text.matchAll(/\*\*\*([^*\n]+)\*\*\*/g)) {
+      const start = from + (match.index || 0);
+      const end = start + match[0].length;
+      addHiddenSyntax(pending, hiddenRanges, view, start, start + 3, start, end);
+      addHiddenSyntax(pending, hiddenRanges, view, end - 3, end, start, end);
+      addMark(pending, hiddenRanges, view, start + 3, end - 3, start, end, 'cm-dnote-bold');
+      addMark(pending, hiddenRanges, view, start + 3, end - 3, start, end, 'cm-dnote-italic');
     }
 
     for (const match of text.matchAll(/\*\*([^*\n]+)\*\*/g)) {

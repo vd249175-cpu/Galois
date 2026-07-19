@@ -5,6 +5,9 @@ export interface ElectronAPI {
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>;
   listDir: (dirPath: string) => Promise<Array<{ name: string; path: string; isDir: boolean; size: number }>>;
   pathExists: (targetPath: string) => Promise<boolean>;
+  watchFile: (filePath: string) => Promise<string>;
+  unwatchFile: (filePath: string) => Promise<boolean>;
+  onFileChanged: (callback: (payload: { path: string; exists: boolean; mtimeMs: number; size: number }) => void) => () => void;
   openDirectory: () => Promise<string | null>;
   archiveMedia: (srcPath: string, projectPath: string) => Promise<string>;
   archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) => Promise<string>;

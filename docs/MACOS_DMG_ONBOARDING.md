@@ -149,6 +149,21 @@ Before producing a release DMG:
 Developer ID signing, hardened runtime, entitlements, notarization, and staple
 are not required for the current internal distribution plan.
 
+## Local Clean Reinstall
+
+For an internal clean-install verification, use the repository workflow:
+
+```bash
+npm run release:reinstall:mac
+```
+
+It packages both macOS architectures, stops the external workbench, removes
+only `~/Documents/Galois/`, replaces `/Applications/Galois.app`, and launches
+the new app. It intentionally preserves notebook projects under
+`~/Documents/Galois Projects/`. Detailed packaging output is written to
+`.build/package-reinstall.log`; the console prints only phase progress and a
+failure tail when needed.
+
 ## Developer Mode
 
 `run.sh` remains the source developer bootstrap. It may install or check tools

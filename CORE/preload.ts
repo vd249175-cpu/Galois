@@ -14,6 +14,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:listDir', dirPath),
   pathExists: (targetPath: string) =>
     ipcRenderer.invoke('fs:pathExists', targetPath),
+  watchFile: (filePath: string) =>
+    ipcRenderer.invoke('fs:watchFile', filePath),
+  unwatchFile: (filePath: string) =>
+    ipcRenderer.invoke('fs:unwatchFile', filePath),
+  onFileChanged: (callback: (payload: { path: string; exists: boolean; mtimeMs: number; size: number }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { path: string; exists: boolean; mtimeMs: number; size: number }) => callback(payload);
+    ipcRenderer.on('fs:fileChanged', listener);
+    return () => ipcRenderer.removeListener('fs:fileChanged', listener);
+  },
   openDirectory: () =>
     ipcRenderer.invoke('dialog:openDirectory'),
   archiveMedia: (srcPath: string, projectPath: string) =>
