@@ -6,6 +6,7 @@ import { SlashMenu } from './SlashMenu';
 import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } from './tableEditing';
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
+import { parseMarkdownEmphasis } from './markdownEmphasis';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -1640,24 +1641,25 @@ export function MarkdownPreview({
       );
     });
 
-    // 4. Combined bold + italic. Parse this before the individual markers so
-    // custom Galois inline nodes remain untouched while CommonMark emphasis
-    // such as ***dolly track*** keeps both styles.
-    parts = splitByRegex(parts, /\*\*\*([^*]+)\*\*\*/g, (match, idx) => (
-      <strong key={`bold_italic_${match[1]}_${idx}`}><em>{match[1]}</em></strong>
-    ));
+    // 4. Emphasis is parsed in one pass. Sequential bold/italic regexes leave
+    // spare stars for adjacent patterns such as *first* ***middle*** *last*.
+    const emphasizedParts: React.ReactNode[] = [];
+    parts.forEach((part, partIndex) => {
+      if (typeof part !== 'string') {
+        emphasizedParts.push(part);
+        return;
+      }
+      parseMarkdownEmphasis(part).forEach((segment, segmentIndex) => {
+        const key = `emphasis_${partIndex}_${segmentIndex}_${segment.start}`;
+        if (segment.style === 'boldItalic') emphasizedParts.push(<strong key={key}><em>{segment.text}</em></strong>);
+        else if (segment.style === 'bold') emphasizedParts.push(<strong key={key}>{segment.text}</strong>);
+        else if (segment.style === 'italic') emphasizedParts.push(<em key={key}>{segment.text}</em>);
+        else emphasizedParts.push(segment.text);
+      });
+    });
+    parts = emphasizedParts;
 
-    // 5. Bold
-    parts = splitByRegex(parts, /\*\*([^*]+)\*\*/g, (match, idx) => (
-      <strong key={`bold_${match[1]}_${idx}`}>{match[1]}</strong>
-    ));
-
-    // 6. Italic
-    parts = splitByRegex(parts, /\*([^*]+)\*/g, (match, idx) => (
-      <em key={`italic_${match[1]}_${idx}`}>{match[1]}</em>
-    ));
-
-    // 7. Code
+    // 5. Code
     parts = splitByRegex(parts, /`([^`]+)`/g, (match, idx) => (
       <code
         key={`code_${match[1]}_${idx}`}

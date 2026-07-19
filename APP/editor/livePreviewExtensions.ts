@@ -1,5 +1,6 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { addLivePreviewBlockDecorations } from './livePreviewBlockDecorations';
+import { parseMarkdownEmphasis } from './markdownEmphasis';
 
 interface LivePreviewOptions {
   projectPath: string;
@@ -328,6 +329,22 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
         }
       }
 
+      for (const segment of parseMarkdownEmphasis(lineText)) {
+        if (!segment.style) continue;
+        const start = line.from + segment.start;
+        const end = line.from + segment.end;
+        const contentStart = line.from + segment.contentStart;
+        const contentEnd = line.from + segment.contentEnd;
+        addHiddenSyntax(pending, hiddenRanges, view, start, contentStart, start, end);
+        addHiddenSyntax(pending, hiddenRanges, view, contentEnd, end, start, end);
+        if (segment.style === 'bold' || segment.style === 'boldItalic') {
+          addMark(pending, hiddenRanges, view, contentStart, contentEnd, start, end, 'cm-dnote-bold');
+        }
+        if (segment.style === 'italic' || segment.style === 'boldItalic') {
+          addMark(pending, hiddenRanges, view, contentStart, contentEnd, start, end, 'cm-dnote-italic');
+        }
+      }
+
       if (line.to >= to) break;
       pos = line.to + 1;
     }
@@ -369,32 +386,6 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
       const start = from + (match.index || 0) + prefixLength;
       const end = start + match[0].length - prefixLength;
       addReplace(pending, hiddenRanges, view, start, end, new MarkdownLinkWidget(match[2], match[3], options.onWikiLink));
-    }
-
-    for (const match of text.matchAll(/\*\*\*([^*\n]+)\*\*\*/g)) {
-      const start = from + (match.index || 0);
-      const end = start + match[0].length;
-      addHiddenSyntax(pending, hiddenRanges, view, start, start + 3, start, end);
-      addHiddenSyntax(pending, hiddenRanges, view, end - 3, end, start, end);
-      addMark(pending, hiddenRanges, view, start + 3, end - 3, start, end, 'cm-dnote-bold');
-      addMark(pending, hiddenRanges, view, start + 3, end - 3, start, end, 'cm-dnote-italic');
-    }
-
-    for (const match of text.matchAll(/\*\*([^*\n]+)\*\*/g)) {
-      const start = from + (match.index || 0);
-      const end = start + match[0].length;
-      addHiddenSyntax(pending, hiddenRanges, view, start, start + 2, start, end);
-      addHiddenSyntax(pending, hiddenRanges, view, end - 2, end, start, end);
-      addMark(pending, hiddenRanges, view, start + 2, end - 2, start, end, 'cm-dnote-bold');
-    }
-
-    for (const match of text.matchAll(/(^|[^*])\*([^*\n]+)\*/g)) {
-      const prefixLength = match[1].length;
-      const start = from + (match.index || 0) + prefixLength;
-      const end = start + match[0].length - prefixLength;
-      addHiddenSyntax(pending, hiddenRanges, view, start, start + 1, start, end);
-      addHiddenSyntax(pending, hiddenRanges, view, end - 1, end, start, end);
-      addMark(pending, hiddenRanges, view, start + 1, end - 1, start, end, 'cm-dnote-italic');
     }
 
     for (const match of text.matchAll(/`([^`\n]+)`/g)) {
