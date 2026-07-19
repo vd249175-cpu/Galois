@@ -15,6 +15,7 @@ protocol.registerSchemesAsPrivileged([
       bypassCSP: true,
       secure: true,
       supportFetchAPI: true,
+      corsEnabled: true,
       stream: true
     }
   }
@@ -418,7 +419,9 @@ app.whenReady().then(async () => {
             'Content-Type': contentType,
             'Content-Range': `bytes ${chunkStart}-${chunkEnd}/${totalSize}`,
             'Accept-Ranges': 'bytes',
-            'Content-Length': String(chunkSize)
+            'Content-Length': String(chunkSize),
+            'Access-Control-Allow-Origin': '*',
+            'Cross-Origin-Resource-Policy': 'cross-origin'
           }
         });
       } else {
@@ -429,7 +432,9 @@ app.whenReady().then(async () => {
           headers: {
             'Content-Type': contentType,
             'Content-Length': String(totalSize),
-            'Accept-Ranges': 'bytes'
+            'Accept-Ranges': 'bytes',
+            'Access-Control-Allow-Origin': '*',
+            'Cross-Origin-Resource-Policy': 'cross-origin'
           }
         });
       }

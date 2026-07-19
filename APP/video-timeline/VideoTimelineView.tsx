@@ -552,6 +552,7 @@ function VideoTimelineView({
 
     try {
       const tempVideo = document.createElement('video');
+      tempVideo.crossOrigin = 'anonymous';
       const absolutePath = path.startsWith('/') ? path : `/${path}`;
       const normalizedPath = encodeURI(absolutePath);
       tempVideo.src = `dnote-file://${normalizedPath}`;
@@ -1577,6 +1578,7 @@ function VideoTimelineView({
           >
             <video
               ref={videoRef}
+              crossOrigin="anonymous"
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
               onSeeked={handleSeeked}
