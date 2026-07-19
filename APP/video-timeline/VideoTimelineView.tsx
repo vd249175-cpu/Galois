@@ -8,6 +8,7 @@ import {
   loadAsset,
   buildClipMarkdown,
 } from './VideoAssetManager';
+import { useFrameReference } from './useFrameReference';
 
 export const VideoTimelineComponent = {
   typeId: 'videoTimeline',
@@ -294,6 +295,11 @@ function VideoTimelineView({
   const smoothTimeRef = useRef<number>(0);
   const scrubLoopActiveRef = useRef<boolean>(false);
   const lastSeekTimeRef = useRef<number>(0);
+  const { frameCopyStatus, handleCopyFrameReference, isCopyingFrame } = useFrameReference({
+    videoRef,
+    projectPath: state[BC.system.projectPath] || '',
+    videoPath,
+  });
 
   // Sync references to avoid closure capture issues in global action triggers and scrub events
   const currentTimeRef = useRef(currentTime);
@@ -749,6 +755,9 @@ function VideoTimelineView({
         break;
       case 'videoTimeline.stepBackward':
         handleStepFrame('backward');
+        break;
+      case 'videoTimeline.copyFrameReference':
+        void handleCopyFrameReference();
         break;
       default:
         break;
@@ -1703,6 +1712,25 @@ function VideoTimelineView({
               >
                 ✂️ 切分
               </button>
+
+              <button
+                className="ctrl-btn"
+                onClick={() => void handleCopyFrameReference()}
+                disabled={isCopyingFrame || !videoPath}
+                style={{ border: '1px solid #34c759', background: 'rgba(52, 199, 89, 0.08)', color: '#34c759', marginLeft: 4, padding: '3px 8px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)', fontWeight: 600 }}
+                title="保存当前关键帧并复制 Markdown 图片引用 (Ctrl+Alt+F)"
+              >
+                {isCopyingFrame ? '保存中…' : '📋 帧引用'}
+              </button>
+
+              {frameCopyStatus && (
+                <span
+                  title={frameCopyStatus}
+                  style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: frameCopyStatus.startsWith('复制失败') ? '#ff6961' : '#75d88d', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
+                >
+                  {frameCopyStatus}
+                </span>
+              )}
 
               {/* Merge selected — only visible when 2+ segments are selected */}
               {selectedSegmentIds.size >= 2 && (

@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:archiveVideo', { srcPath, projectPath }),
   getPathForFile: (file: File) =>
     webUtils.getPathForFile(file),
+  writeClipboardText: (text: string) =>
+    ipcRenderer.invoke('clipboard:writeText', text),
 
   // ── Shell / Script execution ──────────────────────────────────────────────
   /** 执行任意 shell 命令（用于生命周期脚本等） */

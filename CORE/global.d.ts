@@ -13,6 +13,7 @@ export interface ElectronAPI {
   archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) => Promise<string>;
   archiveVideo: (srcPath: string, projectPath: string) => Promise<string>;
   getPathForFile: (file: File) => string;
+  writeClipboardText: (text: string) => Promise<boolean>;
 
   execCommand: (command: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
   openTerminal: (dirPath: string) => Promise<boolean>;

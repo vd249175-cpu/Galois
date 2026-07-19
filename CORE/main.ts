@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, protocol, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, protocol, shell, clipboard } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -750,6 +750,11 @@ ipcMain.handle('fs:archiveMediaData', async (_, {
   } catch (err: any) {
     throw new Error(`Failed to archive media data: ${err.message}`);
   }
+});
+
+ipcMain.handle('clipboard:writeText', async (_, text: string) => {
+  clipboard.writeText(String(text ?? ''));
+  return true;
 });
 
 // IPC Exec/Shell API
