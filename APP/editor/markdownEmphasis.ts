@@ -50,7 +50,15 @@ function parseMarkdownEmphasisRange(text: string, rangeStart: number, rangeEnd: 
     const runLength = starRunLength(text, cursor);
     const delimiterLength = runLength >= 3 ? 3 : runLength;
     const closeStart = findClosingRun(text, cursor + runLength, rangeEnd, delimiterLength);
-    if (delimiterLength < 1 || delimiterLength > 3 || closeStart <= cursor + delimiterLength) {
+    const candidateContent = closeStart >= 0
+      ? text.slice(cursor + delimiterLength, closeStart)
+      : '';
+    if (
+      delimiterLength < 1
+      || delimiterLength > 3
+      || closeStart <= cursor + delimiterLength
+      || candidateContent.trim().length === 0
+    ) {
       cursor += runLength;
       continue;
     }

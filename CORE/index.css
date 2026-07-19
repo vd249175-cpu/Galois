@@ -439,6 +439,13 @@ body {
   padding-left: 2px;
 }
 
+.cm-dnote-list-depth-1 { padding-left: 20px; }
+.cm-dnote-list-depth-2 { padding-left: 38px; }
+.cm-dnote-list-depth-3 { padding-left: 56px; }
+.cm-dnote-list-depth-4 { padding-left: 74px; }
+.cm-dnote-list-depth-5 { padding-left: 92px; }
+.cm-dnote-list-depth-6 { padding-left: 110px; }
+
 .cm-dnote-list-marker,
 .cm-dnote-number-marker {
   display: inline-flex;

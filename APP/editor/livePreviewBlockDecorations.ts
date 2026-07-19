@@ -67,14 +67,18 @@ export function addLivePreviewBlockDecorations(
     if (!active) {
       const bullet = lineText.match(/^(\s*)[-*+]\s+/);
       if (bullet && !lineText.match(/^(\s*)- \[( |x|X)\]\s+/)) {
-        pending.push({ from: line.from, to: line.from, decoration: Decoration.line({ class: 'cm-dnote-list-line' }) });
-        addReplace(pending, hiddenRanges, view, line.from + bullet[1].length, line.from + bullet[0].length, new ListMarkerWidget('•', 'cm-dnote-list-marker'));
+        const indentColumns = bullet[1].replace(/\t/g, '  ').length;
+        const depth = Math.min(Math.floor(indentColumns / 2), 6);
+        pending.push({ from: line.from, to: line.from, decoration: Decoration.line({ class: `cm-dnote-list-line cm-dnote-list-depth-${depth}` }) });
+        addReplace(pending, hiddenRanges, view, line.from, line.from + bullet[0].length, new ListMarkerWidget('•', 'cm-dnote-list-marker'));
       }
 
       const ordered = lineText.match(/^(\s*)(\d+)\.\s+/);
       if (ordered) {
-        pending.push({ from: line.from, to: line.from, decoration: Decoration.line({ class: 'cm-dnote-list-line' }) });
-        addReplace(pending, hiddenRanges, view, line.from + ordered[1].length, line.from + ordered[0].length, new ListMarkerWidget(`${ordered[2]}.`, 'cm-dnote-number-marker'));
+        const indentColumns = ordered[1].replace(/\t/g, '  ').length;
+        const depth = Math.min(Math.floor(indentColumns / 2), 6);
+        pending.push({ from: line.from, to: line.from, decoration: Decoration.line({ class: `cm-dnote-list-line cm-dnote-list-depth-${depth}` }) });
+        addReplace(pending, hiddenRanges, view, line.from, line.from + ordered[0].length, new ListMarkerWidget(`${ordered[2]}.`, 'cm-dnote-number-marker'));
       }
 
       const callout = lineText.match(/^>\s*\[!(\w+)\]\s*(.*)$/);
