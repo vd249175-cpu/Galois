@@ -389,6 +389,9 @@ app.whenReady().then(async () => {
       else if (ext === '.mp3') contentType = 'audio/mpeg';
       else if (ext === '.wav') contentType = 'audio/wav';
       else if (ext === '.m4a') contentType = 'audio/mp4';
+      else if (ext === '.aac') contentType = 'audio/aac';
+      else if (ext === '.ogg') contentType = 'audio/ogg';
+      else if (ext === '.flac') contentType = 'audio/flac';
       else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
       else if (ext === '.png') contentType = 'image/png';
       else if (ext === '.gif') contentType = 'image/gif';

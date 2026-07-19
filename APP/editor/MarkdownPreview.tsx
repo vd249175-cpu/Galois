@@ -7,6 +7,7 @@ import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } fro
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
 import { parseMarkdownEmphasis, type MarkdownEmphasisSegment } from './markdownEmphasis';
+import { getMarkdownMediaKind, toDnoteMediaUrl } from './mediaUtils';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -1549,26 +1550,10 @@ export function MarkdownPreview({
       const alt = match[1];
       const url = match[2];
       
-      let finalSrc = url;
-      const isWeb = url.startsWith('http://') || url.startsWith('https://');
-      
-      if (!isWeb) {
-        let cleanPath = url;
-        if (url.startsWith('file://')) {
-          cleanPath = url.replace('file://', '');
-        }
-        const isRelative = !cleanPath.startsWith('/');
-        const absolutePath = isRelative ? `${projectPath}/${cleanPath}` : cleanPath;
-        const normalizedPath = absolutePath.startsWith('/') ? absolutePath : `/${absolutePath}`;
-        finalSrc = `dnote-file://${encodeURI(normalizedPath)}`;
-      }
+      const finalSrc = toDnoteMediaUrl(url, projectPath);
+      const mediaKind = getMarkdownMediaKind(url);
 
-      const cleanUrl = url.split('#')[0].split('?')[0];
-      const ext = cleanUrl.split('.').pop()?.toLowerCase() || '';
-      const isVideo = ['mp4', 'webm', 'ogg'].includes(ext);
-      const isAudio = ['mp3', 'wav', 'aac', 'm4a'].includes(ext);
-
-      if (isVideo) {
+      if (mediaKind === 'video') {
         return (
           <video
             key={`video_${url}_${idx}`}
@@ -1582,7 +1567,7 @@ export function MarkdownPreview({
           />
         );
       }
-      if (isAudio) {
+      if (mediaKind === 'audio') {
         return (
           <audio
             key={`audio_${url}_${idx}`}
@@ -1623,6 +1608,23 @@ export function MarkdownPreview({
       const url = match[2];
       const isMd = url.endsWith('.md');
       const stableKey = `link_${url}_${idx}`;
+      if (getMarkdownMediaKind(url) === 'audio') {
+        return (
+          <span
+            key={stableKey}
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', maxWidth: '100%', verticalAlign: 'middle' }}
+          >
+            <span style={{ color: 'var(--accent-color)', fontWeight: 500 }}>{label}</span>
+            <audio
+              src={toDnoteMediaUrl(url, projectPath)}
+              controls
+              preload="metadata"
+              style={{ width: '240px', maxWidth: 'min(240px, 60vw)', height: '30px' }}
+            />
+          </span>
+        );
+      }
       return (
         <span
           key={stableKey}

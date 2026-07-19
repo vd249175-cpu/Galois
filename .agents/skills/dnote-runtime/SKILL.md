@@ -152,6 +152,28 @@ getPathForFile(file: File): string
 使用 `![media](media/file.ext)`、`![audio](media/file.ext)` 或
 `![video](media/file.ext)`。
 
+媒体写入契约（必须遵守）：
+
+1. 图片使用 `![说明](media/file.png)`。
+2. 音频使用 `![audio](media/file.mp3)`；不要把 `[播放音频](media/file.mp3)`
+   作为新音频的写入格式，后者只是兼容旧笔记的普通链接形式。
+3. 视频使用 `![video](media/file.mp4)`；带时间段的视频剪辑使用
+   `@video[label](file.mp4?t=start,end)`。
+4. 写入 Markdown 后，将相对路径解析到 `{projectPath}`，确认目标文件存在、
+   位于当前笔记项目内且扩展名与标记类型一致。不要只检查 Markdown 文本。
+
+正确音频示例：
+
+```markdown
+![audio](media/audio/example.mp3)
+```
+
+禁止为新音频生成：
+
+```markdown
+[播放音频](media/audio/example.mp3)
+```
+
 如果用户明确要求“新增应用页面、添加右栏按钮、实现应用快捷键、修改主题/设置、修改打包或终端机制”，切换到 Build Mode，并阅读 `AGENTS.md` 的构建模式规则。笔记项目脚本、标签计算、Slash content 命令和生命周期钩子仍属于协助模式。
 
 ---

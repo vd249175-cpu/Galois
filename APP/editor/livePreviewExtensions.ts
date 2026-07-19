@@ -1,19 +1,11 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { addLivePreviewBlockDecorations } from './livePreviewBlockDecorations';
 import { parseMarkdownEmphasis, type MarkdownEmphasisSegment } from './markdownEmphasis';
+import { getMarkdownMediaKind, toDnoteMediaUrl } from './mediaUtils';
 
 interface LivePreviewOptions {
   projectPath: string;
   onWikiLink: (target: string) => void;
-}
-
-function toDnoteFileUrl(url: string, projectPath: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('dnote-file://')) {
-    return url;
-  }
-  const cleanPath = url.startsWith('file://') ? url.replace('file://', '') : url;
-  const absolutePath = cleanPath.startsWith('/') ? cleanPath : `${projectPath}/${cleanPath}`;
-  return `dnote-file://${encodeURI(absolutePath.startsWith('/') ? absolutePath : `/${absolutePath}`)}`;
 }
 
 function selectionTouches(view: EditorView, from: number, to: number): boolean {
@@ -111,7 +103,7 @@ class MediaWidget extends WidgetType {
 
     if (this.kind === 'image') {
       const img = document.createElement('img');
-      img.src = toDnoteFileUrl(this.url, this.projectPath);
+      img.src = toDnoteMediaUrl(this.url, this.projectPath);
       img.alt = this.label;
       img.loading = 'lazy';
       wrapper.appendChild(img);
@@ -119,7 +111,26 @@ class MediaWidget extends WidgetType {
       return wrapper;
     }
 
-    const icon = this.kind === 'video' ? '▶' : this.kind === 'audio' ? '♪' : '□';
+    if (this.kind === 'audio') {
+      const label = document.createElement('span');
+      label.textContent = `♪ ${this.label || '播放音频'}`;
+      const audio = document.createElement('audio');
+      audio.src = toDnoteMediaUrl(this.url, this.projectPath);
+      audio.controls = true;
+      audio.preload = 'metadata';
+      audio.style.width = '240px';
+      audio.style.maxWidth = '60vw';
+      audio.style.height = '30px';
+      wrapper.style.display = 'inline-flex';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.gap = '7px';
+      wrapper.appendChild(label);
+      wrapper.appendChild(audio);
+      wrapper.appendChild(removeButton);
+      return wrapper;
+    }
+
+    const icon = this.kind === 'video' ? '▶' : '□';
     const label = document.createElement('span');
     label.textContent = `${icon} ${this.label || this.url}`;
     wrapper.appendChild(label);
@@ -371,15 +382,7 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
 
     for (const match of text.matchAll(/!\[([^\]]*)\]\(([^)]+)\)/g)) {
       const start = from + (match.index || 0);
-      const cleanUrl = match[2].split('#')[0].split('?')[0];
-      const ext = cleanUrl.split('.').pop()?.toLowerCase() || '';
-      const kind = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)
-        ? 'image'
-        : ['mp4', 'webm', 'ogg'].includes(ext)
-          ? 'video'
-          : ['mp3', 'wav', 'aac', 'm4a'].includes(ext)
-            ? 'audio'
-            : 'file';
+      const kind = getMarkdownMediaKind(match[2]);
       addReplace(pending, hiddenRanges, view, start, start + match[0].length, new MediaWidget(kind, match[1], match[2], options.projectPath, start, start + match[0].length));
     }
 
@@ -387,7 +390,10 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
       const prefixLength = match[1].length;
       const start = from + (match.index || 0) + prefixLength;
       const end = start + match[0].length - prefixLength;
-      addReplace(pending, hiddenRanges, view, start, end, new MarkdownLinkWidget(match[2], match[3], options.onWikiLink));
+      const widget = getMarkdownMediaKind(match[3]) === 'audio'
+        ? new MediaWidget('audio', match[2], match[3], options.projectPath, start, end)
+        : new MarkdownLinkWidget(match[2], match[3], options.onWikiLink);
+      addReplace(pending, hiddenRanges, view, start, end, widget);
     }
 
     for (const match of text.matchAll(/`([^`\n]+)`/g)) {
