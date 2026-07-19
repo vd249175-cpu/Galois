@@ -298,25 +298,35 @@ export function App() {
         }
       } catch (_) {}
 
-      // 2. Restore a valid user project, falling back to the Documents starter project.
-      const saved = localStorage.getItem('dnote_last_project');
-      const pointsAtPackagedTemplate = Boolean(
-        saved &&
-        runtimeInfoSnapshot?.isPackaged &&
-        saved.includes('/Contents/Resources/template-project')
+      // 2. Restore a valid user project from durable app state. localStorage is
+      // retained as a one-time compatibility source for existing installations.
+      let persistedProject: string | null = null;
+      try {
+        persistedProject = await window.electronAPI.getLastProjectPath();
+      } catch (_) {}
+      const legacyProject = localStorage.getItem('dnote_last_project');
+      const candidates = [persistedProject, legacyProject].filter(
+        (candidate, index, values): candidate is string => Boolean(candidate) && values.indexOf(candidate) === index
       );
-      const savedExists = saved && !pointsAtPackagedTemplate
-        ? await window.electronAPI.pathExists(saved)
-        : false;
+      let restoredProject = '';
+      for (const candidate of candidates) {
+        const pointsAtPackagedTemplate = Boolean(
+          runtimeInfoSnapshot?.isPackaged &&
+          candidate.includes('/Contents/Resources/template-project')
+        );
+        if (!pointsAtPackagedTemplate && await window.electronAPI.pathExists(candidate)) {
+          restoredProject = candidate;
+          break;
+        }
+      }
 
-      if (saved && savedExists) {
-        Blood.updateKey(BC.system.projectPath, saved);
+      if (restoredProject) {
+        Blood.updateKey(BC.system.projectPath, restoredProject);
       } else {
         try {
           const devDefault = await window.electronAPI.getDevDefaultProject();
           if (devDefault) {
             Blood.updateKey(BC.system.projectPath, devDefault);
-            localStorage.setItem('dnote_last_project', devDefault);
           }
         } catch (_) {}
       }
@@ -404,6 +414,10 @@ export function App() {
     const unsubscribeProjectRestore = Blood.subscribe((changedKeys) => {
       if (!changedKeys.has(BC.system.projectPath)) return;
       const nextProjectPath = Blood.getValue<string>(BC.system.projectPath, '');
+      if (nextProjectPath) {
+        localStorage.setItem('dnote_last_project', nextProjectPath);
+        void window.electronAPI.setLastProjectPath(nextProjectPath);
+      }
       if (restoreTimer) clearTimeout(restoreTimer);
       restoreTimer = setTimeout(() => restoreProjectState(nextProjectPath), 150);
     });

@@ -71,6 +71,11 @@ editable files inside hidden application support folders.
   `{projectPath}/.dnote_cache/editor-history.json` keeps per-file history across
   document switches, Live/Reading mode switches, and App restarts until the user
   removes the project cache.
+- The last selected notebook is stored in
+  `~/Documents/Galois/config/project-state.json` under
+  `__galoisApp.lastProjectPath`. Renderer `localStorage` is only a legacy
+  migration source, so changing renderer origins or rebuilding the UI does not
+  reset the selected notebook to the starter project.
 - The installed `.app` bundle and `Contents/Resources/APP/` are treated as
   read-only application assets.
 

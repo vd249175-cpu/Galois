@@ -42,6 +42,54 @@ function SettingsView({
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [, setUpdateTrigger] = useState(0);
 
+  // Theme states
+  const [themes, setThemes] = useState<any[]>([]);
+  const [currentTheme, setCurrentTheme] = useState('default-light');
+  const [config, setConfig] = useState<any>(null);
+
+  useEffect(() => {
+    const loadThemesAndConfig = async () => {
+      try {
+        if (window.electronAPI) {
+          const themeList = await window.electronAPI.listThemes();
+          setThemes(themeList || []);
+
+          const userConfig = await window.electronAPI.getConfig();
+          setConfig(userConfig);
+          if (userConfig?.theme) {
+            setCurrentTheme(userConfig.theme);
+          }
+        }
+      } catch (err) {
+        console.error('[Appearance] Failed to load themes and user config:', err);
+      }
+    };
+    void loadThemesAndConfig();
+  }, []);
+
+  const handleSelectTheme = async (themeId: string) => {
+    setCurrentTheme(themeId);
+    if (!config) return;
+    const nextConfig = { ...config, theme: themeId };
+    setConfig(nextConfig);
+    try {
+      if (window.electronAPI) {
+        await window.electronAPI.setConfig(nextConfig);
+        console.log('[Appearance] Theme changed and saved:', themeId);
+      }
+    } catch (err) {
+      console.error('[Appearance] Failed to save theme config:', err);
+    }
+  };
+
+  const THEME_COLOR_MAP: Record<string, { primary: string; gradient: string }> = {
+    'default-light': { primary: '#6750a4', gradient: 'linear-gradient(135deg, #f5f2fa 0%, #e8e0f5 100%)' },
+    'default-dark': { primary: '#bb86fc', gradient: 'linear-gradient(135deg, #121212 0%, #1e1e1e 100%)' },
+    lavender: { primary: '#9c27b0', gradient: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)' },
+    yuebai: { primary: '#00bcd4', gradient: 'linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%)' },
+    'black-gold': { primary: '#ffb300', gradient: 'linear-gradient(135deg, #1a1a1a 0%, #333333 100%)' },
+  };
+
   // Global keydown recording handler when editing an action's keybinding
   useEffect(() => {
     if (!editingActionId) return;
@@ -242,11 +290,40 @@ function SettingsView({
           )}
 
           {activeCategory === 'appearance' && (
-            <div style={{ padding: '16px' }}>
-              <h2>外观设置</h2>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '12px' }}>
-                主题：温暖米色 (已启用)
-              </p>
+            <div className="settings-appearance-panel">
+              <div className="settings-header" style={{ padding: '0 0 14px 0', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>外观与编辑器主题</h2>
+                  <span className="settings-subtitle">个性化您的代码编辑空间，在多套精致的色彩搭配之间无缝热切换。</span>
+                </div>
+              </div>
+
+              <div className="theme-grid-container">
+                {themes.map((t) => {
+                  const isSelected = t.id === currentTheme;
+                  const themeColors = THEME_COLOR_MAP[t.id] || {
+                    primary: '#607d8b',
+                    gradient: 'linear-gradient(135deg, #cfd8dc 0%, #90a4ae 100%)',
+                  };
+
+                  return (
+                    <div
+                      key={t.id}
+                      className={`theme-palette-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => handleSelectTheme(t.id)}
+                    >
+                      <div className="theme-card-preview" style={{ background: themeColors.gradient }}>
+                        <div className="theme-card-dot" style={{ backgroundColor: themeColors.primary }} />
+                      </div>
+                      <div className="theme-card-info">
+                        <span className="theme-card-name">{t.name}</span>
+                        <span className="theme-card-id">{t.id}</span>
+                      </div>
+                      {isSelected && <span className="theme-card-badge">已启用</span>}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -8,6 +8,7 @@ export interface ElectronAPI {
   openDirectory: () => Promise<string | null>;
   archiveMedia: (srcPath: string, projectPath: string) => Promise<string>;
   archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) => Promise<string>;
+  archiveVideo: (srcPath: string, projectPath: string) => Promise<string>;
   getPathForFile: (file: File) => string;
 
   execCommand: (command: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
@@ -206,6 +207,8 @@ export interface ElectronAPI {
   setLayout: (layout: any) => Promise<boolean>;
   getProjectState: (projectPath: string) => Promise<any>;
   setProjectState: (projectPath: string, state: any) => Promise<boolean>;
+  getLastProjectPath: () => Promise<string | null>;
+  setLastProjectPath: (projectPath: string) => Promise<boolean>;
   onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => () => void;
 }
 

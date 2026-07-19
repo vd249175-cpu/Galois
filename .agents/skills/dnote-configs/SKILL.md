@@ -218,11 +218,16 @@ getThemeCss(themeId: string): Promise<string>
 ```typescript
 getProjectState(projectPath: string): Promise<any>
 setProjectState(projectPath: string, state: any): Promise<boolean>
+getLastProjectPath(): Promise<string | null>
+setLastProjectPath(projectPath: string): Promise<boolean>
 ```
 
 该文件是全局配置状态的一部分，路径为：
 
 - **路径**：`~/Documents/Galois/config/project-state.json`
+
+最近打开的项目路径存放在该文件的 `__galoisApp.lastProjectPath`。启动时优先读取
+此持久化值；旧版本的 `localStorage('dnote_last_project')` 仅作为迁移兼容来源。
 
 ---
 
@@ -271,7 +276,8 @@ await window.electronAPI.setProjectState(projectPath, state);
       （主题应用在 App 挂载时的独立 useEffect 中，监听 events.themeChanged 和 system.config）
 
 2. 项目路径恢复：
-   - 读取 localStorage('dnote_last_project')
+   - 读取 electronAPI.getLastProjectPath()
+   - 旧版本兼容读取 localStorage('dnote_last_project')
    - 调用 electronAPI.pathExists() 验证路径有效性
    - 若无效则 electronAPI.getDevDefaultProject()（开发/首次启动 fallback）
       → Blood: system.projectPath

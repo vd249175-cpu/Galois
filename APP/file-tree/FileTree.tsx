@@ -375,11 +375,11 @@ function FileTreeView({
         return;
       }
 
-      const defaultContent = `---\ntags:\n  - ${name.trim()}\n---\n# ${name.trim()}\n\n`;
+      const defaultContent = `---\ntags:\n---\n# ${name.trim()}\n\n`;
       try {
         await (window as any).electronAPI.writeFile(fullPath, defaultContent);
         updateBloodKey(BC.events.fileSaved(fullPath), Date.now());
-        handleFileClick({ name: cleanName, path: fullPath, isDir: false, size: 0, tags: [name.trim()] });
+        handleFileClick({ name: cleanName, path: fullPath, isDir: false, size: 0, tags: [] });
       } catch (err: any) {
         alert(`Failed to create note file: ${err.message}`);
       }

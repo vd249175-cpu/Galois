@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:archiveMedia', { srcPath, projectPath }),
   archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) =>
     ipcRenderer.invoke('fs:archiveMediaData', { fileName, mimeType, data, projectPath }),
+  archiveVideo: (srcPath: string, projectPath: string) =>
+    ipcRenderer.invoke('fs:archiveVideo', { srcPath, projectPath }),
   getPathForFile: (file: File) =>
     webUtils.getPathForFile(file),
 
@@ -171,6 +173,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:getProjectState', projectPath),
   setProjectState: (projectPath: string, state: any) =>
     ipcRenderer.invoke('app:setProjectState', projectPath, state),
+  getLastProjectPath: () =>
+    ipcRenderer.invoke('app:getLastProjectPath'),
+  setLastProjectPath: (projectPath: string) =>
+    ipcRenderer.invoke('app:setLastProjectPath', projectPath),
   onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => {
     const listener = (_event: any, payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => callback(payload);
     ipcRenderer.on('app:configFileChanged', listener);

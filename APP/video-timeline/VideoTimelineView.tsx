@@ -238,8 +238,20 @@ function VideoTimelineView({
         for (const file of assetFiles) {
           try {
             const raw = await (window as any).electronAPI.readFile(file.path);
-            const parsed = JSON.parse(raw) as VideoAsset;
+            let parsed = JSON.parse(raw) as VideoAsset;
             if (parsed.version === 1 && parsed.videoPath) {
+              const projectVideoPath = await (window as any).electronAPI.archiveVideo(
+                parsed.videoPath,
+                projectPath
+              );
+              if (projectVideoPath !== parsed.videoPath) {
+                parsed = {
+                  ...parsed,
+                  videoPath: projectVideoPath,
+                  videoName: projectVideoPath.split('/').pop() || parsed.videoName,
+                };
+                await (window as any).electronAPI.writeFile(file.path, JSON.stringify(parsed, null, 2));
+              }
               assets.push(parsed);
             }
           } catch (e) {
@@ -296,6 +308,27 @@ function VideoTimelineView({
       console.log('[VideoTimeline] Component unmounted');
     };
   }, []);
+
+  // localStorage from older versions may still restore an external absolute
+  // path. Resolve it to (or copy it into) the notebook before loading media.
+  useEffect(() => {
+    const projectPath = state[BC.system.projectPath] || '';
+    if (!projectPath || !videoPath) return;
+    const projectVideoDir = `${projectPath}/.dnote_assets/videos`;
+    if (videoPath === projectVideoDir || videoPath.startsWith(`${projectVideoDir}/`)) return;
+
+    let active = true;
+    (window as any).electronAPI.archiveVideo(videoPath, projectPath)
+      .then((projectVideoPath: string) => {
+        if (active && projectVideoPath && projectVideoPath !== videoPath) {
+          setVideoPath(projectVideoPath);
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn('[VideoTimeline] Could not migrate legacy external video path:', err);
+      });
+    return () => { active = false; };
+  }, [state[BC.system.projectPath], videoPath]);
 
   // Load video source via direct DOM property to avoid React reconciliation reload loop
   useEffect(() => {
@@ -1086,27 +1119,11 @@ function VideoTimelineView({
     e.preventDefault();
   };
 
-  // Archive a video file to .dnote_assets/videos/ and return the asset path.
-  // Uses `cp -n` (no-clobber) so existing files are never overwritten.
+  // Archive a video file to .dnote_assets/videos/ and return the project path.
   const archiveVideoFile = async (srcPath: string): Promise<string> => {
     const projectPath = state[BC.system.projectPath] || '';
-    if (!projectPath) return srcPath; // No project open — use original path
-
-    const fileName = srcPath.split('/').pop() || 'video.mp4';
-    const assetDir = `${projectPath}/.dnote_assets/videos`;
-    const destPath = `${assetDir}/${fileName}`;
-
-    try {
-      // Create dir + copy file without overwriting an existing copy
-      await (window as any).electronAPI.execCommand(
-        `mkdir -p "${assetDir}" && cp -n "${srcPath}" "${destPath}"`,
-        projectPath
-      );
-      return destPath;
-    } catch (err) {
-      console.warn('[VideoTimeline] Could not copy video to assets dir, using original path:', err);
-      return srcPath;
-    }
+    if (!projectPath) throw new Error('请先打开笔记项目，再导入视频');
+    return (window as any).electronAPI.archiveVideo(srcPath, projectPath);
   };
 
   const handleDrop = async (e: React.DragEvent) => {
@@ -1480,7 +1497,7 @@ function VideoTimelineView({
           {/* Saved Video Projects list */}
           {savedAssets.length > 0 && (
             <div style={{ marginTop: 24, textAlign: 'left', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-              <div style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', fontWeight: 600, color: 'rgba(255,255,255,0.6)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', fontWeight: 600, color: 'var(--text-main)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: 0.7 }}>
                   <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -1492,8 +1509,8 @@ function VideoTimelineView({
                     key={asset.videoPath}
                     onClick={() => setVideoPath(asset.videoPath)}
                     style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.06)',
+                      background: 'var(--bg-file-card, var(--bg-input))',
+                      border: '1px solid var(--border-file-card, var(--border-color))',
                       borderRadius: 6,
                       padding: '10px 14px',
                       cursor: 'pointer',
@@ -1503,19 +1520,19 @@ function VideoTimelineView({
                       transition: 'background 0.2s, border-color 0.2s',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+                      e.currentTarget.style.background = 'var(--bg-file-card-hover, var(--bg-area-btn-hover))';
+                      e.currentTarget.style.borderColor = 'var(--border-area-btn-hover, var(--border-color))';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                      e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                      e.currentTarget.style.background = 'var(--bg-file-card, var(--bg-input))';
+                      e.currentTarget.style.borderColor = 'var(--border-file-card, var(--border-color))';
                     }}
                   >
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, overflow: 'hidden', marginRight: 16 }}>
-                      <span style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', color: 'rgba(255,255,255,0.95)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) + 2px)', color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {asset.videoName}
                       </span>
-                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
+                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
                         {asset.videoPath}
                       </span>
                     </div>
@@ -1523,7 +1540,7 @@ function VideoTimelineView({
                       <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: '#ff3b30', background: 'rgba(255,59,48,0.1)', padding: '2px 8px', borderRadius: 10, fontWeight: 500 }}>
                         {asset.segments.length} 个剪辑点
                       </span>
-                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: 'var(--video-timeline-font-size, 11px)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                         {new Date(asset.updatedAt).toLocaleDateString()}
                       </span>
                     </div>

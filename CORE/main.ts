@@ -544,6 +544,69 @@ ipcMain.handle('fs:archiveMedia', async (_, { srcPath, projectPath }: { srcPath:
   }
 });
 
+// Video timeline imports belong to the notebook project. This also repairs
+// legacy asset records: if their external source disappeared but the earlier
+// project-local copy still exists, return that copy instead.
+ipcMain.handle('fs:archiveVideo', async (_, { srcPath, projectPath }: { srcPath: string; projectPath: string }) => {
+  try {
+    if (!srcPath || !projectPath) {
+      throw new Error('Missing video source or project path');
+    }
+
+    const sourcePath = path.resolve(srcPath);
+    const destDir = path.resolve(projectPath, '.dnote_assets', 'videos');
+    assertWritableTarget(destDir, 'archiveVideo');
+    fs.mkdirSync(destDir, { recursive: true });
+
+    if (isInsidePath(destDir, sourcePath)) {
+      if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
+        throw new Error(`Project video does not exist: ${sourcePath}`);
+      }
+      return sourcePath;
+    }
+
+    const baseName = path.basename(sourcePath);
+    const existingProjectCopy = path.join(destDir, baseName);
+    const sourceExists = fs.existsSync(sourcePath) && fs.statSync(sourcePath).isFile();
+
+    // Legacy timelines often have an external path in JSON even though this
+    // exact-name copy was already archived during the original import.
+    if (!sourceExists && fs.existsSync(existingProjectCopy)) {
+      return existingProjectCopy;
+    }
+    if (!sourceExists) {
+      throw new Error(`Video source does not exist and no project copy was found: ${sourcePath}`);
+    }
+
+    let destPath = existingProjectCopy;
+    if (fs.existsSync(destPath)) {
+      const sourceStat = fs.statSync(sourcePath);
+      const destStat = fs.statSync(destPath);
+      if (sourceStat.size === destStat.size) {
+        return destPath;
+      }
+      const ext = path.extname(baseName);
+      const stem = path.basename(baseName, ext);
+      let suffix = Date.now();
+      do {
+        destPath = path.join(destDir, `${stem}_${suffix}${ext}`);
+        suffix += 1;
+      } while (fs.existsSync(destPath));
+    }
+
+    const tempPath = `${destPath}.importing-${process.pid}-${Date.now()}`;
+    try {
+      fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
+      fs.renameSync(tempPath, destPath);
+    } finally {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    }
+    return destPath;
+  } catch (err: any) {
+    throw new Error(`Failed to archive timeline video: ${err.message}`);
+  }
+});
+
 function getMediaExtension(fileName: string, mimeType?: string): string {
   const existing = path.extname(fileName || '').replace('.', '').toLowerCase();
   if (existing) return existing;
@@ -1697,6 +1760,46 @@ ipcMain.handle('app:setProjectState', (_, projectPath: string, state: any) => {
     return true;
   } catch (err: any) {
     console.error('Failed to set project state:', err);
+    return false;
+  }
+});
+
+const PROJECT_STATE_APP_KEY = '__galoisApp';
+
+ipcMain.handle('app:getLastProjectPath', () => {
+  const statePath = getGaloisProjectStatePath();
+  if (!fs.existsSync(statePath)) return null;
+  try {
+    const allStates = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+    const lastProjectPath = allStates?.[PROJECT_STATE_APP_KEY]?.lastProjectPath;
+    return typeof lastProjectPath === 'string' && lastProjectPath ? lastProjectPath : null;
+  } catch (_) {
+    return null;
+  }
+});
+
+ipcMain.handle('app:setLastProjectPath', (_, projectPath: string) => {
+  if (!projectPath) return false;
+  try {
+    const statePath = getGaloisProjectStatePath();
+    ensureParentDir(statePath);
+    let allStates: Record<string, any> = {};
+    if (fs.existsSync(statePath)) {
+      try {
+        allStates = JSON.parse(fs.readFileSync(statePath, 'utf-8')) || {};
+      } catch (_) {
+        allStates = {};
+      }
+    }
+    allStates[PROJECT_STATE_APP_KEY] = {
+      ...(allStates[PROJECT_STATE_APP_KEY] || {}),
+      lastProjectPath: projectPath,
+      timestamp: Date.now(),
+    };
+    fs.writeFileSync(statePath, JSON.stringify(allStates, null, 2), 'utf-8');
+    return true;
+  } catch (err: any) {
+    console.error('Failed to set last project path:', err);
     return false;
   }
 });

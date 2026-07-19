@@ -5,7 +5,7 @@
 
   --bg-main: var(--clr-yue-bai);
   --bg-panel: rgba(255, 255, 255, 0.45);
-  --bg-header: rgba(142, 163, 199, 0.22);
+  --bg-header: var(--clr-yue-bai);
   --bg-input: rgba(255, 255, 255, 0.5);
   --bg-terminal: rgba(236, 237, 243, 0.4);
   --border-color: rgba(142, 163, 199, 0.15);

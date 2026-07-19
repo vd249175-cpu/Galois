@@ -1292,7 +1292,7 @@ function EditorView({
         const errMsg = err.message || '';
         if (errMsg.includes('ENOENT') || errMsg.includes('no such file')) {
           const noteName = openedFile.split(/[/\\]/).pop()?.replace('.md', '') || '';
-          let draftTags = [noteName];
+          let draftTags: string[] = [];
           let draftTitle = noteName;
           if (noteName.startsWith('#')) {
             const parsed = noteName.split('#').map((t: string) => t.trim()).filter(Boolean);
@@ -1301,7 +1301,8 @@ function EditorView({
               draftTitle = noteName;
             }
           }
-          const template = `---\ntags:\n${draftTags.map(t => `  - ${t}`).join('\n')}\n---\n# ${draftTitle}\n\n`;
+          const serializedTags = draftTags.map(t => `  - ${t}\n`).join('');
+          const template = `---\ntags:\n${serializedTags}---\n# ${draftTitle}\n\n`;
           if (template === contentRef.current) return;
           lastSavedContentRef.current = template;
           setTags(draftTags);
