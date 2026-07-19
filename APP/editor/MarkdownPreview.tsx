@@ -398,6 +398,13 @@ export function MarkdownPreview({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      const nativeEvent = e.nativeEvent as KeyboardEvent;
+      if (nativeEvent.isComposing || nativeEvent.keyCode === 229) {
+        // Enter confirms the active IME candidate. Let the input method handle
+        // it without also creating a new Markdown block in Reading mode.
+        return;
+      }
+
       if (previewSlashMenu.show) {
         const cmds = filteredPreviewCommands;
         if (e.key === 'ArrowDown') {
