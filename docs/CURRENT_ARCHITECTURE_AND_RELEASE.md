@@ -146,6 +146,14 @@ Assistant tasks must be routed by layer:
   current source repository in source/developer mode, or to the external
   workbench's `APP/[plugin]/` directory in packaged mode.
 
+Assist Mode initialization is deliberately bounded. After reading the selected
+project's `.dnote_runtime.json`, an assistant should run the repository's
+`dnote-project-overview` skill once to obtain a capped map of Markdown paths,
+project commands, script/config structure, dependencies, and media counts. The
+map excludes note bodies, caches, dependency trees, and unbounded recursive
+listings. Reuse it during the task and refresh it only after a project switch or
+a material structure change.
+
 ## Naming Protocol
 
 Use these names consistently so humans, plugins, and the assistant do not cross

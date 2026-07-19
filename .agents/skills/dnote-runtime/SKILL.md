@@ -127,10 +127,11 @@ const editorCursor = useBloodChannel(
 当用户要写笔记、改写文字、整理标签、插入媒体、解释当前段落、或基于当前位置生成内容时，进入 **Assist Mode**：
 
 1. **首先读取** `.dnote_runtime.json` 以了解用户当前正在编辑的文档和光标位置。
-2. 若 `cursor.selectedText` 非空，将其视为用户的**直接操作目标**或上下文引用。
-3. 对比 `timestamp` 确保数据是最新的（超过 30 秒未更新说明用户可能已切换工作区）。
-4. 通过 `activeFile` 的路径读取笔记内容，结合 `cursor.line` 定位用户关注的段落。
-5. 默认只处理当前笔记项目和当前文件；不要因为协助写笔记而修改 `APP/` 或 `CORE/`。
+2. 首次进入该项目时，使用 `dnote-project-overview` 生成一次有界项目地图，确认已有 Markdown、脚本、命令和配置布局；不要递归读取整个项目。
+3. 若 `cursor.selectedText` 非空，将其视为用户的**直接操作目标**或上下文引用。
+4. 对比 `timestamp` 确保数据是最新的（超过 30 秒未更新说明用户可能已切换工作区）。
+5. 通过 `activeFile` 的路径读取笔记内容，结合 `cursor.line` 定位用户关注的段落。
+6. 默认只处理当前笔记项目和当前文件；不要因为协助写笔记而修改 `APP/` 或 `CORE/`。
 
 Assist Mode 常见输出目标：
 

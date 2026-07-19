@@ -31,6 +31,7 @@ Galois 只有三种工作模式。不要要求用户声明“我是开发者”�
 ## Skill 路由
 
 - `dnote-runtime`：当前笔记项目、`.dnote_runtime.json`、active file、光标、选区、协助模式入口。
+- `dnote-project-overview`：协助模式初始化时生成有界项目地图；了解已有 Markdown、命令、脚本、配置与媒体概况，禁止用无上限递归目录代替。
 - `dnote-tags`：Frontmatter tags、正文 `#标签`、`re:`、`run:`、文件图标、标签解析。
 - `dnote-command-scripts`：`command/commands.json`、Slash content 命令、项目脚本、反应式表达式、生命周期钩子、项目依赖。
 - `dnote-search`：文件树搜索、标签布尔查询、正则标签过滤、图与搜索联动的查询语义。
@@ -81,6 +82,8 @@ Blood key 只能使用 `system.*`、`layout.*`、`actions.*`、`events.*`。动�
 
 - 默认工作对象是当前笔记项目。
 - 必须先读取 `{projectPath}/.dnote_runtime.json`，再判断当前文件、光标和选区。
+- 每个任务首次进入某个笔记项目时，必须随后使用 `dnote-project-overview` 生成一次有界项目地图；同一任务内复用该摘要，仅在切换项目或目录结构发生实质变化后刷新。
+- 项目概况只能列出受限数量的路径、命令元数据和媒体统计，不得为“了解项目”读取全部 Markdown 正文、展开无限目录树或注入缓存/依赖目录。
 - 可以修改当前笔记项目中的 Markdown、`command/commands.json`、`script/`、`.dnote/`、`pyproject.toml`、`uv.lock`、`media/`。
 - 可以帮助用户编写和管理笔记项目脚本、动态标签、Slash content 命令、生命周期钩子和项目依赖。
 - 不要修改 `APP/`、`CORE/`、`docs/`、`.agents/skills/`、`AGENTS.md`、`package.json`。
