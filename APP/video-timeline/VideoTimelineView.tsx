@@ -1363,12 +1363,14 @@ function VideoTimelineView({
           box-shadow: 0 0 20px rgba(112, 0, 255, 0.15);
         }
         .ctrl-btn {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: var(--text-main, #d4d4d4);
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          color: rgba(255, 255, 255, 0.9);
           border-radius: 6px;
           padding: 6px 12px;
           font-size: calc(var(--video-timeline-font-size, 11px) + 1px);
+          font-weight: 600;
+          line-height: 1.2;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
@@ -1377,16 +1379,35 @@ function VideoTimelineView({
           transition: all 0.2s;
         }
         .ctrl-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.16);
+          border-color: rgba(255, 255, 255, 0.34);
+          color: #fff;
         }
         .ctrl-btn:active {
           transform: translateY(1px);
         }
         .ctrl-btn.active {
-          background: var(--accent-color, #7000ff);
+          background: #2f80c9;
           color: #fff;
-          border-color: transparent;
+          border-color: #75baff;
+        }
+        .ctrl-btn:disabled {
+          color: rgba(255, 255, 255, 0.42);
+          background: rgba(255, 255, 255, 0.035);
+          border-color: rgba(255, 255, 255, 0.09);
+          cursor: not-allowed;
+        }
+        .frame-reference-btn {
+          margin-left: 4px;
+          padding: 3px 8px;
+          border-color: #3f7fae;
+          background: rgba(48, 116, 166, 0.18);
+          color: #b9dcf5;
+        }
+        .frame-reference-btn:hover:not(:disabled) {
+          border-color: #68a9d8;
+          background: rgba(58, 133, 187, 0.28);
+          color: #e4f4ff;
         }
         .segment-block {
           position: absolute;
@@ -1716,19 +1737,19 @@ function VideoTimelineView({
               </button>
 
               <button
-                className="ctrl-btn"
+                className="ctrl-btn frame-reference-btn"
                 onClick={() => void handleCopyFrameReference()}
                 disabled={isCopyingFrame || !videoPath}
-                style={{ border: '1px solid #34c759', background: 'rgba(52, 199, 89, 0.08)', color: '#34c759', marginLeft: 4, padding: '3px 8px', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)', fontWeight: 600 }}
+                style={{ fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
                 title="保存当前关键帧并复制 Markdown 图片引用 (Ctrl+Alt+F)"
               >
-                {isCopyingFrame ? '保存中…' : '📋 帧引用'}
+                {isCopyingFrame ? '保存中…' : '▣ 帧引用'}
               </button>
 
               {frameCopyStatus && (
                 <span
                   title={frameCopyStatus}
-                  style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: frameCopyStatus.startsWith('复制失败') ? '#ff6961' : '#75d88d', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)' }}
+                  style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: frameCopyStatus.startsWith('复制失败') ? '#ff817a' : '#9dcced', fontSize: 'calc(var(--video-timeline-font-size, 11px) - 1px)', fontWeight: 600 }}
                 >
                   {frameCopyStatus}
                 </span>
