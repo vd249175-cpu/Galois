@@ -7,6 +7,7 @@ export interface MarkdownEmphasisSegment {
   contentEnd: number;
   text: string;
   style?: MarkdownEmphasisStyle;
+  children?: MarkdownEmphasisSegment[];
 }
 
 function starRunLength(text: string, start: number): number {
@@ -15,9 +16,9 @@ function starRunLength(text: string, start: number): number {
   return end - start;
 }
 
-function findClosingRun(text: string, start: number, delimiterLength: number): number {
+function findClosingRun(text: string, start: number, end: number, delimiterLength: number): number {
   let cursor = start;
-  while (cursor < text.length) {
+  while (cursor < end) {
     if (text[cursor] === '\n') return -1;
     if (text[cursor] !== '*') {
       cursor++;
@@ -35,12 +36,12 @@ function findClosingRun(text: string, start: number, delimiterLength: number): n
  * pass. Exact star-run matching prevents the spare star in ***...*** from
  * stealing the closing marker of adjacent *...* spans.
  */
-export function parseMarkdownEmphasis(text: string): MarkdownEmphasisSegment[] {
+function parseMarkdownEmphasisRange(text: string, rangeStart: number, rangeEnd: number): MarkdownEmphasisSegment[] {
   const segments: MarkdownEmphasisSegment[] = [];
-  let plainStart = 0;
-  let cursor = 0;
+  let plainStart = rangeStart;
+  let cursor = rangeStart;
 
-  while (cursor < text.length) {
+  while (cursor < rangeEnd) {
     if (text[cursor] !== '*') {
       cursor++;
       continue;
@@ -48,7 +49,7 @@ export function parseMarkdownEmphasis(text: string): MarkdownEmphasisSegment[] {
 
     const runLength = starRunLength(text, cursor);
     const delimiterLength = runLength >= 3 ? 3 : runLength;
-    const closeStart = findClosingRun(text, cursor + runLength, delimiterLength);
+    const closeStart = findClosingRun(text, cursor + runLength, rangeEnd, delimiterLength);
     if (delimiterLength < 1 || delimiterLength > 3 || closeStart <= cursor + delimiterLength) {
       cursor += runLength;
       continue;
@@ -73,19 +74,24 @@ export function parseMarkdownEmphasis(text: string): MarkdownEmphasisSegment[] {
       contentEnd,
       text: text.slice(contentStart, contentEnd),
       style: delimiterLength === 3 ? 'boldItalic' : delimiterLength === 2 ? 'bold' : 'italic',
+      children: parseMarkdownEmphasisRange(text, contentStart, contentEnd),
     });
     cursor = closeStart + delimiterLength;
     plainStart = cursor;
   }
 
-  if (plainStart < text.length) {
+  if (plainStart < rangeEnd) {
     segments.push({
       start: plainStart,
-      end: text.length,
+      end: rangeEnd,
       contentStart: plainStart,
-      contentEnd: text.length,
-      text: text.slice(plainStart),
+      contentEnd: rangeEnd,
+      text: text.slice(plainStart, rangeEnd),
     });
   }
   return segments;
+}
+
+export function parseMarkdownEmphasis(text: string): MarkdownEmphasisSegment[] {
+  return parseMarkdownEmphasisRange(text, 0, text.length);
 }

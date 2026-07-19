@@ -6,7 +6,7 @@ import { SlashMenu } from './SlashMenu';
 import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } from './tableEditing';
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
-import { parseMarkdownEmphasis } from './markdownEmphasis';
+import { parseMarkdownEmphasis, type MarkdownEmphasisSegment } from './markdownEmphasis';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -1643,19 +1643,26 @@ export function MarkdownPreview({
 
     // 4. Emphasis is parsed in one pass. Sequential bold/italic regexes leave
     // spare stars for adjacent patterns such as *first* ***middle*** *last*.
+    const renderEmphasisSegments = (segments: MarkdownEmphasisSegment[], keyPrefix: string): React.ReactNode[] => (
+      segments.map((segment, segmentIndex) => {
+        const key = `${keyPrefix}_${segmentIndex}_${segment.start}`;
+        const children = segment.children?.length
+          ? renderEmphasisSegments(segment.children, key)
+          : segment.text;
+        if (segment.style === 'boldItalic') return <strong key={key}><em>{children}</em></strong>;
+        if (segment.style === 'bold') return <strong key={key}>{children}</strong>;
+        if (segment.style === 'italic') return <em key={key}>{children}</em>;
+        return segment.text;
+      })
+    );
+
     const emphasizedParts: React.ReactNode[] = [];
     parts.forEach((part, partIndex) => {
       if (typeof part !== 'string') {
         emphasizedParts.push(part);
         return;
       }
-      parseMarkdownEmphasis(part).forEach((segment, segmentIndex) => {
-        const key = `emphasis_${partIndex}_${segmentIndex}_${segment.start}`;
-        if (segment.style === 'boldItalic') emphasizedParts.push(<strong key={key}><em>{segment.text}</em></strong>);
-        else if (segment.style === 'bold') emphasizedParts.push(<strong key={key}>{segment.text}</strong>);
-        else if (segment.style === 'italic') emphasizedParts.push(<em key={key}>{segment.text}</em>);
-        else emphasizedParts.push(segment.text);
-      });
+      emphasizedParts.push(...renderEmphasisSegments(parseMarkdownEmphasis(part), `emphasis_${partIndex}`));
     });
     parts = emphasizedParts;
 

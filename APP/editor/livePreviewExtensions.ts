@@ -1,6 +1,6 @@
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from '@codemirror/view';
 import { addLivePreviewBlockDecorations } from './livePreviewBlockDecorations';
-import { parseMarkdownEmphasis } from './markdownEmphasis';
+import { parseMarkdownEmphasis, type MarkdownEmphasisSegment } from './markdownEmphasis';
 
 interface LivePreviewOptions {
   projectPath: string;
@@ -329,8 +329,8 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
         }
       }
 
-      for (const segment of parseMarkdownEmphasis(lineText)) {
-        if (!segment.style) continue;
+      const addEmphasisDecorations = (segments: MarkdownEmphasisSegment[]) => segments.forEach((segment) => {
+        if (!segment.style) return;
         const start = line.from + segment.start;
         const end = line.from + segment.end;
         const contentStart = line.from + segment.contentStart;
@@ -343,7 +343,9 @@ function buildDecorations(view: EditorView, options: LivePreviewOptions): Decora
         if (segment.style === 'italic' || segment.style === 'boldItalic') {
           addMark(pending, hiddenRanges, view, contentStart, contentEnd, start, end, 'cm-dnote-italic');
         }
-      }
+        if (segment.children?.length) addEmphasisDecorations(segment.children);
+      });
+      addEmphasisDecorations(parseMarkdownEmphasis(lineText));
 
       if (line.to >= to) break;
       pos = line.to + 1;
