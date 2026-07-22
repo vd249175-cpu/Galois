@@ -7,7 +7,9 @@ import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } fro
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
 import { parseMarkdownEmphasis, type MarkdownEmphasisSegment } from './markdownEmphasis';
-import { getMarkdownMediaKind, toDnoteMediaUrl } from './mediaUtils';
+import { getMarkdownMediaKind, resolveMarkdownMediaPath, toDnoteMediaUrl } from './mediaUtils';
+import { UniversalVideoPlayer } from './UniversalVideoPlayer';
+import { MathRenderer } from './MathRenderer';
 
 // Global state to track dynamic loading of Mermaid CDN library
 let mermaidLoading = false;
@@ -139,6 +141,7 @@ interface ParsedBlock {
   rawText: string;
   codeLang?: string;
   codeText?: string;
+  mathText?: string;
   tableHeaders?: string[];
   tableAlignments?: string[];
   tableRows?: string[][];
@@ -165,6 +168,7 @@ interface MarkdownPreviewProps {
   slashCommands?: any[];
   getShortcutDisplay?: (id: string) => string;
   onExecuteSlashCommand?: (cmd: any, start: number, end: number, sourceContent?: string) => void;
+  embedded?: boolean;
 }
 
 export function MarkdownPreview({
@@ -185,6 +189,7 @@ export function MarkdownPreview({
   slashCommands = [],
   getShortcutDisplay = () => '',
   onExecuteSlashCommand,
+  embedded = false,
 }: MarkdownPreviewProps) {
   const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
   const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
@@ -227,6 +232,19 @@ export function MarkdownPreview({
   const updateMarkdownLines = (startLineIdx: number, endLineIdx: number, newLines: string[]) => {
     const allLines = content.split('\n');
     allLines.splice(startLineIdx, endLineIdx - startLineIdx + 1, ...newLines);
+    onContentChange(allLines.join('\n'));
+  };
+
+  const toggleTaskCheckbox = (lineIdx: number, currentlyChecked: boolean) => {
+    const allLines = content.split('\n');
+    const line = allLines[lineIdx];
+    if (line === undefined) return;
+    const nextLine = line.replace(
+      /^(\s*(?:>\s*)*[-*+]\s+\[)( |x|X)(\])/,
+      `$1${currentlyChecked ? ' ' : 'x'}$3`
+    );
+    if (nextLine === line) return;
+    allLines[lineIdx] = nextLine;
     onContentChange(allLines.join('\n'));
   };
 
@@ -644,7 +662,53 @@ export function MarkdownPreview({
         continue;
       }
 
-      // 2. Table
+      // 2. Display math. Keep the original source lines so clicking the
+      // rendered formula still enters the normal Markdown editor path.
+      const displayMathDelimiter = line.trim().startsWith('$$')
+        ? { open: '$$', close: '$$' }
+        : line.trim().startsWith('\\[')
+          ? { open: '\\[', close: '\\]' }
+          : null;
+      if (displayMathDelimiter) {
+        const mathLines: string[] = [];
+        const openingRemainder = line.trim().slice(displayMathDelimiter.open.length);
+        let j = i;
+
+        if (openingRemainder.endsWith(displayMathDelimiter.close)) {
+          mathLines.push(openingRemainder.slice(0, -displayMathDelimiter.close.length));
+        } else {
+          if (openingRemainder) mathLines.push(openingRemainder);
+          j = i + 1;
+          while (j < lines.length) {
+            const candidate = lines[j];
+            const trimmedCandidate = candidate.trim();
+            if (trimmedCandidate.endsWith(displayMathDelimiter.close)) {
+              mathLines.push(candidate.slice(0, candidate.lastIndexOf(displayMathDelimiter.close)));
+              break;
+            }
+            mathLines.push(candidate);
+            j++;
+          }
+        }
+
+        const endLine = frontmatterLinesOffset + Math.min(j, lines.length - 1);
+        const rawText = allLines.slice(startLine, endLine + 1).join('\n');
+        const baseKey = `math:${rawText}`;
+        const idx = occurrenceMap[baseKey] || 0;
+        occurrenceMap[baseKey] = idx + 1;
+        blocks.push({
+          key: `${baseKey}_${idx}`,
+          type: 'math',
+          startLine,
+          endLine,
+          rawText,
+          mathText: mathLines.join('\n'),
+        });
+        i = j + 1;
+        continue;
+      }
+
+      // 3. Table
       const isTableRow = (l: string) => l.trim().startsWith('|') && l.trim().endsWith('|');
       const isSeparatorRow = (l: string) => l.trim().startsWith('|') && /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/.test(l.trim());
       
@@ -706,6 +770,7 @@ export function MarkdownPreview({
       const isHorizontalRule = (l: string) => /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(l);
       const headingMatch = line.match(/^(#{1,6})\s+/);
       const taskMatch = line.match(/^(\s*)[-*+]\s+\[( |x|X)\]\s+/);
+      const quotedTaskMatch = line.match(/^(\s*(?:>\s*)+)[-*+]\s+\[( |x|X)\]\s+/);
       const unorderedListMatch = line.match(/^(\s*)[-*+]\s+/);
       const orderedListMatch = line.match(/^(\s*)(\d+)[.)]\s+/);
       if (isHorizontalRule(line)) {
@@ -714,6 +779,8 @@ export function MarkdownPreview({
         type = `h${headingMatch[1].length}`;
       } else if (taskMatch) {
         type = 'todo';
+      } else if (quotedTaskMatch) {
+        type = 'quoteTodo';
       } else if (unorderedListMatch) {
         type = 'li';
       } else if (orderedListMatch) {
@@ -736,9 +803,9 @@ export function MarkdownPreview({
         startLine,
         endLine: startLine,
         rawText,
-        listIndent: (taskMatch?.[1] || unorderedListMatch?.[1] || orderedListMatch?.[1] || '').length,
+        listIndent: (taskMatch?.[1] || quotedTaskMatch?.[1] || unorderedListMatch?.[1] || orderedListMatch?.[1] || '').length,
         listMarker: orderedListMatch?.[2],
-        listContentStart: taskMatch?.[0].length || unorderedListMatch?.[0].length || orderedListMatch?.[0].length,
+        listContentStart: taskMatch?.[0].length || quotedTaskMatch?.[0].length || unorderedListMatch?.[0].length || orderedListMatch?.[0].length,
       });
 
       i++;
@@ -996,6 +1063,41 @@ export function MarkdownPreview({
       return wrapBlock(blockEl, block);
     }
 
+    if (block.type === 'math') {
+      const blockEl = isEditing ? (
+        <textarea
+          defaultValue={block.rawText}
+          onBlur={(event) => {
+            updateMarkdownLines(block.startLine, block.endLine, event.currentTarget.value.split('\n'));
+            setEditingLineIdx(null);
+          }}
+          style={{
+            width: '100%',
+            minHeight: '96px',
+            boxSizing: 'border-box',
+            resize: 'vertical',
+            border: '1.2px dashed var(--accent-color, #7000ff)',
+            borderRadius: 6,
+            padding: '10px 12px',
+            background: 'rgba(255,255,255,0.04)',
+            color: 'var(--text-main)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            outline: 'none',
+          }}
+          ref={(element) => element?.focus()}
+        />
+      ) : (
+        <div
+          onClick={(event) => beginEditingLineFromClick(event, block.startLine)}
+          style={{ cursor: 'text', overflowX: 'auto', padding: '8px 4px' }}
+        >
+          <MathRenderer expression={block.mathText || ''} displayMode />
+        </div>
+      );
+      return wrapBlock(blockEl, block);
+    }
+
     if (block.type === 'table') {
       const headerCells = block.tableHeaders || [];
       const alignments = block.tableAlignments || [];
@@ -1109,10 +1211,19 @@ export function MarkdownPreview({
                       key={`th_${colIdx}`}
                       data-dnote-table-key={block.key}
                       data-dnote-cell-order={cellOrder}
-                      contentEditable
+                      contentEditable={isCellActive}
                       suppressContentEditableWarning
-                      onFocus={() => setActiveCell({ lineIdx: block.startLine, colIdx })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const target = e.target as HTMLElement;
+                        if (target.closest('a, audio, video, button, input, select')) return;
+                        if (!isCellActive) {
+                          setActiveCell({ lineIdx: block.startLine, colIdx });
+                          focusTableCell(block.key, cellOrder);
+                        }
+                      }}
                       onBlur={(e) => {
+                        if (!isCellActive) return;
                         const newCellVal = e.currentTarget.textContent || '';
                         handleTableCellEdit(block.startLine, colIdx, newCellVal);
                         setActiveCell(null);
@@ -1120,7 +1231,6 @@ export function MarkdownPreview({
                       onKeyDown={(e) => {
                         handleTableCellKeyDown(e, block.key, cellOrder, maxCellOrder);
                       }}
-                      onClick={(e) => e.stopPropagation()}
                       style={{
                         padding: '8px 12px',
                         fontWeight: '600',
@@ -1183,10 +1293,19 @@ export function MarkdownPreview({
                         key={`td_${rowIdx}_${colIdx}`}
                         data-dnote-table-key={block.key}
                         data-dnote-cell-order={cellOrder}
-                        contentEditable
+                        contentEditable={isCellActive}
                         suppressContentEditableWarning
-                        onFocus={() => setActiveCell({ lineIdx: cellLineIndex, colIdx })}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const target = e.target as HTMLElement;
+                          if (target.closest('a, audio, video, button, input, select')) return;
+                          if (!isCellActive) {
+                            setActiveCell({ lineIdx: cellLineIndex, colIdx });
+                            focusTableCell(block.key, cellOrder);
+                          }
+                        }}
                         onBlur={(e) => {
+                          if (!isCellActive) return;
                           const newCellVal = e.currentTarget.textContent || '';
                           handleTableCellEdit(cellLineIndex, colIdx, newCellVal);
                           setActiveCell(null);
@@ -1194,7 +1313,6 @@ export function MarkdownPreview({
                         onKeyDown={(e) => {
                           handleTableCellKeyDown(e, block.key, cellOrder, maxCellOrder);
                         }}
-                        onClick={(e) => e.stopPropagation()}
                         style={{
                           padding: '8px 12px',
                           textAlign: (alignments[colIdx] || 'left') as any,
@@ -1203,7 +1321,18 @@ export function MarkdownPreview({
                           backgroundColor: isCellActive ? 'rgba(255,255,255,0.05)' : 'transparent',
                         }}
                       >
-                        {isCellActive ? cellVal : renderInline(cellVal, cellLineIndex)}
+                        {isCellActive ? cellVal : renderInline(
+                          cellVal,
+                          cellLineIndex,
+                          (matchIndex, currentlyChecked) => {
+                            let currentIndex = 0;
+                            const nextCellVal = cellVal.replace(/\[( |x|X)\](?!\()/g, (marker) => {
+                              if (currentIndex++ !== matchIndex) return marker;
+                              return currentlyChecked ? '[ ]' : '[x]';
+                            });
+                            handleTableCellEdit(cellLineIndex, colIdx, nextCellVal);
+                          }
+                        )}
                       </td>
                     );
                   })}
@@ -1330,8 +1459,9 @@ export function MarkdownPreview({
       return wrapBlock(blockEl, block);
     }
 
-    if (block.type === 'todo') {
-      const taskMatch = contentVal.match(/^(\s*)[-*+]\s+\[( |x|X)\]\s+/);
+    if (block.type === 'todo' || block.type === 'quoteTodo') {
+      const isQuotedTask = block.type === 'quoteTodo';
+      const taskMatch = contentVal.match(/^(\s*(?:>\s*)*)[-*+]\s+\[( |x|X)\]\s+/);
       const isChecked = taskMatch?.[2].toLowerCase() === 'x';
       const blockEl = isEditing ? (
         renderBlockEditor(block.startLine, contentVal)
@@ -1339,9 +1469,30 @@ export function MarkdownPreview({
         <div
           key={idx}
           onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '6px 0', marginLeft: `${(block.listIndent || 0) * 18}px`, cursor: 'text', opacity: isChecked ? 0.55 : 1 }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            margin: '6px 0',
+            marginLeft: isQuotedTask ? 0 : `${(block.listIndent || 0) * 18}px`,
+            padding: isQuotedTask ? '6px 12px' : undefined,
+            borderLeft: isQuotedTask ? '3px solid var(--accent-color)' : undefined,
+            borderRadius: isQuotedTask ? '0 4px 4px 0' : undefined,
+            backgroundColor: isQuotedTask ? 'rgba(0,0,0,0.01)' : undefined,
+            cursor: 'text',
+            opacity: isChecked ? 0.55 : 1,
+          }}
         >
-          <input type="checkbox" disabled checked={isChecked} />
+          <input
+            type="checkbox"
+            checked={isChecked}
+            aria-label={isChecked ? '标记为未完成' : '标记为完成'}
+            title={isChecked ? '标记为未完成' : '标记为完成'}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => toggleTaskCheckbox(block.startLine, isChecked)}
+            style={{ cursor: 'pointer' }}
+          />
           <span style={{ textDecoration: isChecked ? 'line-through' : 'none' }}>
             {renderInline(contentVal.substring(block.listContentStart || 6), block.startLine)}
           </span>
@@ -1435,8 +1586,17 @@ export function MarkdownPreview({
 
     // Default paragraph (p)
     const isMediaParagraph = shouldTreatBlockAsMedia(block.rawText);
+    const isReactiveMarkdownBlock = /^\s*\{\{[\s\S]+\}\}\s*$/.test(contentVal);
     const blockEl = isEditing ? (
       renderBlockEditor(block.startLine, contentVal)
+    ) : isReactiveMarkdownBlock ? (
+      <div
+        key={idx}
+        onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
+        style={{ margin: '6px 0', lineHeight: 'inherit', fontSize: 'inherit', width: '100%' }}
+      >
+        {renderInline(contentVal, block.startLine)}
+      </div>
     ) : (
       <p
         key={idx}
@@ -1455,8 +1615,50 @@ export function MarkdownPreview({
     return wrapBlock(blockEl, block);
   };
 
-  const renderInline = (text: string, lineIndex: number) => {
+  const renderInline = (
+    text: string,
+    lineIndex: number,
+    onToggleInlineTask?: (matchIndex: number, currentlyChecked: boolean) => void
+  ) => {
     let parts: React.ReactNode[] = [text];
+
+    // Protect inline code before parsing any other Markdown syntax, including
+    // dollar-delimited math contained in code samples.
+    parts = splitByRegex(parts, /`([^`]+)`/g, (match, idx) => (
+      <code
+        key={`code_${match[1]}_${idx}`}
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: '11px',
+          backgroundColor: 'rgba(0, 0, 0, 0.04)',
+          padding: '2px 5px',
+          borderRadius: '4px',
+          color: 'var(--text-main)',
+        }}
+      >
+        {match[1]}
+      </code>
+    ));
+
+    // -2. Task markers inside table cells. Block task items use the dedicated
+    // todo renderer above; inline markers need a cell-aware write-back callback.
+    parts = splitByRegex(parts, /\[( |x|X)\](?!\()/g, (match, idx) => {
+      const isChecked = match[1].toLowerCase() === 'x';
+      return (
+        <input
+          key={`inline_task_${lineIndex}_${idx}`}
+          type="checkbox"
+          checked={isChecked}
+          disabled={!onToggleInlineTask}
+          aria-label={isChecked ? '标记为未完成' : '标记为完成'}
+          title={isChecked ? '标记为未完成' : '标记为完成'}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onChange={() => onToggleInlineTask?.(idx, isChecked)}
+          style={{ cursor: onToggleInlineTask ? 'pointer' : 'default', verticalAlign: 'middle' }}
+        />
+      );
+    });
 
     // -1. @video clip embeds — @video[label](filename?t=start,end) (supports legacy #t= format as well)
     parts = splitByRegex(parts, /@video\[([^\]]*)\]\((.+?)[#?]t=([\d.]+),([\d.]+)\)/g, (match, idx) => {
@@ -1490,6 +1692,10 @@ export function MarkdownPreview({
           updateBloodKey={updateBloodKey}
           currentFile={currentFile}
           lineIndex={lineIndex}
+          onRequestEdit={() => beginEditingLine(lineIndex)}
+          handleLinkClick={handleLinkClick}
+          slashCommands={slashCommands}
+          getShortcutDisplay={getShortcutDisplay}
         />
       );
     });
@@ -1555,15 +1761,11 @@ export function MarkdownPreview({
 
       if (mediaKind === 'video') {
         return (
-          <video
+          <UniversalVideoPlayer
             key={`video_${url}_${idx}`}
             src={finalSrc}
-            controls
-            draggable={false}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onDragStart={(e) => e.preventDefault()}
-            style={{ maxWidth: '100%', borderRadius: '6px', border: '1px solid var(--border-color)', margin: '8px 0', display: 'block' }}
+            filePath={resolveMarkdownMediaPath(url, projectPath)}
+            title={alt || url.split('/').pop()}
           />
         );
       }
@@ -1643,7 +1845,16 @@ export function MarkdownPreview({
       );
     });
 
-    // 4. Emphasis is parsed in one pass. Sequential bold/italic regexes leave
+    // 4. Inline math. $$ is handled by the block parser; escaped dollars and
+    // whitespace-only expressions remain literal text.
+    parts = splitByRegex(parts, /(?<!\\)(?<!\$)\$([^\s$](?:[^$\n]*?[^\s$])?)\$(?!\$)/g, (match, idx) => (
+      <MathRenderer key={`math_dollar_${lineIndex}_${idx}`} expression={match[1]} />
+    ));
+    parts = splitByRegex(parts, /\\\((.+?)\\\)/g, (match, idx) => (
+      <MathRenderer key={`math_paren_${lineIndex}_${idx}`} expression={match[1]} />
+    ));
+
+    // 5. Emphasis is parsed in one pass. Sequential bold/italic regexes leave
     // spare stars for adjacent patterns such as *first* ***middle*** *last*.
     const renderEmphasisSegments = (segments: MarkdownEmphasisSegment[], keyPrefix: string): React.ReactNode[] => (
       segments.map((segment, segmentIndex) => {
@@ -1667,23 +1878,6 @@ export function MarkdownPreview({
       emphasizedParts.push(...renderEmphasisSegments(parseMarkdownEmphasis(part), `emphasis_${partIndex}`));
     });
     parts = emphasizedParts;
-
-    // 5. Code
-    parts = splitByRegex(parts, /`([^`]+)`/g, (match, idx) => (
-      <code
-        key={`code_${match[1]}_${idx}`}
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: '11px',
-          backgroundColor: 'rgba(0, 0, 0, 0.04)',
-          padding: '2px 5px',
-          borderRadius: '4px',
-          color: 'var(--text-main)',
-        }}
-      >
-        {match[1]}
-      </code>
-    ));
 
     return parts;
   };
@@ -1767,9 +1961,9 @@ export function MarkdownPreview({
         }
       }}
       style={{
-        flexGrow: 1,
-        overflowY: 'auto',
-        padding: '20px 40px',
+        flexGrow: embedded ? 0 : 1,
+        overflowY: embedded ? 'visible' : 'auto',
+        padding: embedded ? '8px 4px 4px' : '20px 40px',
         backgroundColor: 'transparent',
         color: 'var(--text-main)',
         fontSize: 'var(--editor-font-size, 14px)',
@@ -1779,8 +1973,10 @@ export function MarkdownPreview({
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
-        height: 0,
-        minHeight: 0,
+        height: embedded ? 'auto' : 0,
+        minHeight: embedded ? 'min-content' : 0,
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <style dangerouslySetInnerHTML={{ __html: `
@@ -1795,6 +1991,21 @@ export function MarkdownPreview({
           font-size: var(--editor-font-size, 14px);
           line-height: var(--editor-line-height, 1.6);
           font-family: var(--editor-font-family, var(--font-sans));
+        }
+        .galois-math-inline {
+          display: inline-block;
+          max-width: 100%;
+          vertical-align: middle;
+        }
+        .galois-math-display {
+          display: block;
+          width: 100%;
+          overflow-x: auto;
+          overflow-y: hidden;
+          text-align: center;
+        }
+        .galois-math-display > .katex-display {
+          margin: 0.45em 0;
         }
         .preview-block-wrapper:active {
           cursor: grabbing;

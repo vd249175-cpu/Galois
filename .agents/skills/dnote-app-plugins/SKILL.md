@@ -214,7 +214,9 @@ Shortcut quality:
   `meta+shift+m`, `space`, arrow keys, and bare letters outside dedicated media
   or timeline views.
 - Check existing action defaults and
-  `~/Documents/Galois/config/shortcuts.json` before choosing a chord.
+  the active project's `.dnote_runtime.json.shortcutRegistry` before choosing a
+  chord. Fall back to source defaults plus
+  `~/Documents/Galois/config/shortcuts.json` only when no runtime snapshot exists.
 - The visible help text must exactly match the actual combo. Do not show
   Option/Alt in the UI if the action uses Command/Meta.
 - Prefer low-risk, user-overridable chords such as `control+alt+h` for a
@@ -304,6 +306,27 @@ In source developer mode, the native AGY terminal can work directly inside the
 current source repository. It may create and edit plugins under `APP/`, update
 docs, and run checks.
 
+When the user explicitly wants a validated source checkout to replace the
+packaged runtime workbench, run this from the separate source checkout:
+
+```bash
+npm run sync:workbench
+```
+
+For changes to `CORE/main.ts`, `CORE/preload.ts`, Electron IPC, or when an
+immediate external-workbench restart is requested, use:
+
+```bash
+npm run sync:workbench -- --reopen
+```
+
+The sync command refuses to overwrite a dirty target Git worktree and refuses
+to run when source and target resolve to the same directory. It replaces only
+managed Galois source items and preserves target-only `APP/[plugin]/`
+directories as user-owned plugins. After replacement it creates a Git rollback
+checkpoint for the managed changes. Do not use it from Build Mode inside the
+external workbench itself.
+
 In packaged DMG mode, opening the app hands off to the external runtime
 workbench. The assistant should edit:
 
@@ -350,7 +373,8 @@ Current no-reload behavior:
 
 - Vite/React HMR updates existing renderer modules in place.
 - `ComponentRegistry.register()` replaces existing components by `typeId`,
-  clears old source actions, and re-injects toolbar actions.
+  clears old component-owned source actions, and re-injects toolbar actions.
+  Dynamic project/custom actions are ownership-marked and survive HMR replacement.
 - `ActionRegistry` preserves user shortcut overrides while source actions are
   replaced.
 - Shell/sidebar components listen to `events.registryChanged` and re-render

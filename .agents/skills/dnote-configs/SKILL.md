@@ -145,8 +145,9 @@ getThemeCss(themeId: string): Promise<string>
 - 避免常见系统/应用快捷键：`meta+s`、`meta+w`、`meta+q`、`meta+p`、
   `meta+shift+p`、`meta+shift+k`、`meta+shift+m`、`space`、方向键以及
   普通单字母。
-- 修改默认快捷键前必须检查已注册 action 默认值和
-  `~/Documents/Galois/config/shortcuts.json`。
+- 修改默认快捷键前必须优先检查当前项目
+  `.dnote_runtime.json.shortcutRegistry` 的完整运行时注册表；快照不可用时再联合检查
+  已注册 action 默认值和 `~/Documents/Galois/config/shortcuts.json`。
 - UI 文案必须和真实 combo 一致，例如 `meta+shift+k` 不能写成 `⌥+⇧+K`。
 
 ### 2.3 面板工作区布局 (`layout.json`)

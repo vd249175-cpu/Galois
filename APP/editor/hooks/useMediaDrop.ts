@@ -57,7 +57,7 @@ export function useMediaDrop({
   const isSupportedMediaFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     return (
-      ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'mp4', 'webm'].includes(ext) ||
+      ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'mp4', 'webm', 'mov', 'm4v'].includes(ext) ||
       file.type.startsWith('image/') ||
       file.type.startsWith('audio/') ||
       file.type.startsWith('video/')

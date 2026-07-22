@@ -15,6 +15,7 @@
     "dev:electron": "npm run build:electron && NODE_ENV=development electron .",
     "dev": "npm run fix:native && concurrently -k \"npm run dev:vite\" \"sleep 1.5 && npm run dev:electron\"",
     "restart:workbench": "node scripts/restart-workbench.js",
+    "sync:workbench": "node scripts/sync-external-workbench.js",
     "rebuild:reopen": "npm run build:electron && node scripts/restart-workbench.js",
     "build": "npm run build:icon && npm run build:vite && npm run build:electron",
     "start": "NODE_ENV=production electron .",
@@ -26,7 +27,9 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "dependencies": {},
+  "dependencies": {
+    "katex": "^0.18.1"
+  },
   "devDependencies": {
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.0",

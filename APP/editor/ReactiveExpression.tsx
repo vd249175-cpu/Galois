@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { parseExpression, getNestedValue } from './editorUtils';
+import { parseExpression, getNestedValue, setNestedValue } from './editorUtils';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
+import { ReactiveMarkdownValue } from './ReactiveMarkdownValue';
 
 interface ReactiveExpressionProps {
   rawExpression: string;
@@ -10,6 +11,10 @@ interface ReactiveExpressionProps {
   updateBloodKey: (key: string, value: any) => void;
   currentFile: string;
   lineIndex: number;
+  onRequestEdit?: () => void;
+  handleLinkClick?: (targetNodeText: string) => void;
+  slashCommands?: any[];
+  getShortcutDisplay?: (id: string) => string;
 }
 
 export function ReactiveExpression({
@@ -20,6 +25,10 @@ export function ReactiveExpression({
   updateBloodKey,
   currentFile,
   lineIndex,
+  onRequestEdit,
+  handleLinkClick = () => {},
+  slashCommands = [],
+  getShortcutDisplay = () => '',
 }: ReactiveExpressionProps) {
   const parsed = parseExpression(rawExpression);
   if (!parsed) {
@@ -33,6 +42,7 @@ export function ReactiveExpression({
   const { jsonPath, keyPath, run, interval, isolate } = parsed;
 
   const isMountedRef = useRef(true);
+  const manualMarkdownOverrideRef = useRef(false);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -40,10 +50,8 @@ export function ReactiveExpression({
     };
   }, []);
 
-  // 1. Generate unique execution scope ID on mount
   const [uniqueId] = useState(() => 'exec_' + Math.random().toString(36).substring(2, 9));
 
-  // 2. Resolve final JSON relative path and thread_id
   let resolvedRelativeJsonPath = jsonPath;
   let threadId = 'project';
 
@@ -74,7 +82,6 @@ export function ReactiveExpression({
 
   const absoluteOutputPath = `${projectPath}/script/${resolvedRelativeJsonPath}`;
 
-  // 3. Read JSON data from injected state prop instead of using useBloodChannel
   const jsonData = state[`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`] || null;
 
   const [status, setStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
@@ -112,8 +119,10 @@ export function ReactiveExpression({
   };
 
   // 5. Script execution runner
-  const runScript = async () => {
+  const runScript = async (force = false) => {
     if (!projectPath || !run) return;
+    if (manualMarkdownOverrideRef.current && !force) return;
+    if (force) manualMarkdownOverrideRef.current = false;
     if (isMountedRef.current) {
       setStatus('running');
       setErrorMsg(null);
@@ -193,32 +202,58 @@ export function ReactiveExpression({
 
   const displayValue = getNestedValue(jsonData, keyPath);
   const formattedValue = displayValue !== undefined ? String(displayValue) : '(no data)';
+  const isMarkdown = typeof displayValue === 'string'
+    && displayValue.includes('\n')
+    && /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|```|~~~|\|.+\|)/m.test(displayValue);
+
+  const saveGeneratedMarkdown = async (nextMarkdown: string) => {
+    if (!jsonData || typeof jsonData !== 'object') return;
+    manualMarkdownOverrideRef.current = true;
+    const nextData = setNestedValue(jsonData, keyPath, nextMarkdown);
+    updateBloodKey(`${BC_PREFIX.scriptJson}${resolvedRelativeJsonPath}`, nextData);
+    try {
+      await (window as any).electronAPI.writeFile(
+        absoluteOutputPath,
+        JSON.stringify(nextData, null, 2)
+      );
+      setStatus('success');
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMsg(err.message || 'Failed to save generated Markdown');
+    }
+  };
 
   const isRunning = status === 'running';
   const isError = status === 'error';
+  const RootElement = isMarkdown ? 'div' : 'span';
+  const ValueElement = isMarkdown ? 'div' : 'span';
 
   return (
-    <span
+    <RootElement
       className="reactive-pill-container"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
-      onClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
       style={{
         position: 'relative',
-        display: 'inline-flex',
+        display: isMarkdown ? 'block' : 'inline-flex',
         alignItems: 'center',
         gap: '4px',
         backgroundColor: isError ? 'rgba(255, 59, 48, 0.08)' : 'var(--highlight-color)',
         color: isError ? 'var(--error-color)' : 'var(--accent-color)',
         border: `1.2px solid ${isError ? 'var(--error-color)' : 'var(--accent-color)'}`,
-        padding: '1px 8px',
-        borderRadius: '12px',
-        fontSize: '11px',
-        fontWeight: 600,
+        padding: isMarkdown ? '10px 14px' : '1px 8px',
+        borderRadius: isMarkdown ? '8px' : '12px',
+        fontSize: isMarkdown ? 'inherit' : '11px',
+        fontWeight: isMarkdown ? 400 : 600,
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4)',
-        cursor: 'default',
         verticalAlign: 'middle',
-        margin: '0 2px',
+        margin: isMarkdown ? '8px 0' : '0 2px',
+        width: isMarkdown ? '100%' : undefined,
+        boxSizing: 'border-box',
+        cursor: isMarkdown ? 'text' : 'default',
       }}
     >
       {/* Keyframe loader injection */}
@@ -232,16 +267,48 @@ export function ReactiveExpression({
         }
       `}</style>
       
-      <span className="reactive-pill-value">{formattedValue}</span>
+      <ValueElement className="reactive-pill-value" style={{ display: isMarkdown ? 'block' : undefined, width: isMarkdown ? '100%' : undefined }}>
+        {isMarkdown ? (
+          <ReactiveMarkdownValue
+            markdown={formattedValue}
+            onChange={(nextContent) => { void saveGeneratedMarkdown(nextContent); }}
+            areaId={areaId}
+            projectPath={projectPath}
+            state={state}
+            updateBloodKey={updateBloodKey}
+            handleLinkClick={handleLinkClick}
+            currentFile={currentFile}
+            valueId={`${uniqueId}:${resolvedRelativeJsonPath}:${keyPath}`}
+            slashCommands={slashCommands}
+            getShortcutDisplay={getShortcutDisplay}
+          />
+        ) : formattedValue}
+      </ValueElement>
+
+      {isMarkdown && onRequestEdit && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestEdit();
+          }}
+          title="编辑反应式表达式"
+          style={{ position: 'absolute', top: '6px', right: run ? '28px' : '6px', border: 'none', background: 'transparent', color: 'var(--accent-color)', cursor: 'pointer' }}
+        >
+          ✎
+        </button>
+      )}
 
       {run && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            runScript();
+            runScript(true);
           }}
           disabled={isRunning}
           style={{
+            position: isMarkdown ? 'absolute' : undefined,
+            top: isMarkdown ? '7px' : undefined,
+            right: isMarkdown ? '7px' : undefined,
             background: 'none',
             border: 'none',
             color: isError ? 'var(--error-color)' : 'var(--accent-color)',
@@ -329,6 +396,6 @@ export function ReactiveExpression({
           )}
         </span>
       )}
-    </span>
+    </RootElement>
   );
 }

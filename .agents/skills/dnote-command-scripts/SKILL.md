@@ -120,6 +120,15 @@ menu and insert text or reactive expressions at the cursor. The same slash
 command execution path is used by Live Preview and Reading mode block editors,
 so new insertion commands should be written once and tested in both modes.
 
+The editor reloads `{projectPath}/command/commands.json` after an app save event,
+on window focus, and through a lightweight one-second APP-level check so files
+written by an external agent become available without restarting Galois. A
+partially written or temporarily invalid JSON document keeps the last valid
+command set until the next successful read. After adding a command, confirm it
+appears in `.dnote_runtime.json.shortcutRegistry` and, for `content` commands, in
+the already-open `/` menu; do not insert a literal `/` into the note as a test
+artifact.
+
 ## 3. Scope Rules
 
 `scope` controls where a shortcut can run:
@@ -133,6 +142,12 @@ graphView            => graph view panels only
 
 If `scope` is omitted, script commands default to global and content commands
 default to editor.
+
+Before assigning `shortcut`, read `.dnote_runtime.json.shortcutRegistry.actions`.
+It is the authoritative runtime list of registered APP actions and dynamic
+project commands, including unbound actions and user overrides. A global action
+conflicts with every scope; actions in the same `sourceType` conflict with one
+another. Do not infer availability from `commands.json` alone.
 
 ## 4. Environment Variables
 

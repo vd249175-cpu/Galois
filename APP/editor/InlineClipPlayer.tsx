@@ -10,6 +10,7 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { formatTimestamp } from '../utils';
+import { MpvFallbackButton } from './MpvFallbackButton';
 
 interface InlineClipPlayerProps {
   label: string;
@@ -46,6 +47,7 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
     return `dnote-file://${encodeURI(absolutePath)}`;
   };
   const videoSrc = getAbsoluteVideoSrc();
+  const absoluteVideoPath = projectPath ? `${projectPath}/.dnote_assets/videos/${fileName}` : '';
 
   const clampTime = (t: number) => Math.max(start, Math.min(end, t));
 
@@ -270,6 +272,9 @@ export function InlineClipPlayer({ label: _label, fileName, start, end, projectP
             <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: 'monospace', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: 4 }}>
               {fileName}
             </span>
+            {absoluteVideoPath && (
+              <MpvFallbackButton filePath={absoluteVideoPath} title={_label || fileName} start={start} end={end} />
+            )}
           </div>
         )}
 

@@ -14,6 +14,12 @@ export interface ElectronAPI {
   archiveVideo: (srcPath: string, projectPath: string) => Promise<string>;
   getPathForFile: (file: File) => string;
   writeClipboardText: (text: string) => Promise<boolean>;
+  playMediaWithMpv: (request: {
+    filePath: string;
+    title?: string;
+    start?: number;
+    end?: number;
+  }) => Promise<{ started: true; pid: number | null; executable: string; version: string }>;
 
   execCommand: (command: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
   openTerminal: (dirPath: string) => Promise<boolean>;

@@ -89,6 +89,7 @@ class ComponentRegistryClass {
           icon: act.icon,
           defaultShortcut: act.defaultShortcut,
           sourceType: comp.typeId,
+          sourceOwner: 'component',
           run: (context) => {
             // 动作信号必须使用 timestamp（同一按钮连续点击可区分）
             Blood.updateKey(`actions.${act.id}.${context.areaId}`, Date.now());

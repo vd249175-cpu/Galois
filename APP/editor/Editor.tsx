@@ -18,6 +18,7 @@ import { SlashMenu } from './SlashMenu';
 import { useEditorHistory } from './hooks/useEditorHistory';
 import { useRuntimeSync } from './hooks/useRuntimeSync';
 import { useExternalFileSync } from './hooks/useExternalFileSync';
+import { useProjectCommands } from './hooks/useProjectCommands';
 import type { EditorTextHandle } from './LiveMarkdownEditor';
 import { applyMarkdownFormatting, handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands, rememberSlashCommand } from './slashCommandSearch';
@@ -233,31 +234,7 @@ function EditorView({
   const configPath = projectPath ? `${projectPath}/command/commands.json` : '';
   const commandsSavedEvent = state[BC.events.fileSaved(configPath)] || 0;
 
-  const [projectCommands, setProjectCommands] = useState<Array<{ id: string; label: string; desc?: string; content?: string; defaultShortcut?: string; shortcut?: string; script?: string; scope?: string | boolean }>>([]);
-
-  useEffect(() => {
-    if (!projectPath) {
-      setProjectCommands([]);
-      return;
-    }
-    const loadProjectCommands = async () => {
-      const configPath = `${projectPath}/command/commands.json`;
-      try {
-        const content = await (window as any).electronAPI.readFile(configPath);
-        if (content) {
-          const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) {
-            setProjectCommands(parsed);
-          } else if (parsed && Array.isArray(parsed.commands)) {
-            setProjectCommands(parsed.commands);
-          }
-        }
-      } catch (e) {
-        setProjectCommands([]);
-      }
-    };
-    loadProjectCommands();
-  }, [projectPath, commandsSavedEvent]);
+  const projectCommands = useProjectCommands(projectPath, commandsSavedEvent);
 
   // ── Keyboard Shortcuts & Prompt Modal States ─────────────────────────────
   const [editorShortcuts, setEditorShortcuts] = useState<Record<string, string>>(() => {
@@ -345,6 +322,8 @@ function EditorView({
         id: cmd.id,
         label: cmd.label,
         sourceType: 'editor',
+        sourceOwner: 'dynamic',
+        defaultShortcut: cmd.defaultShortcut,
         run: (context) => {
           Blood.updateKey(`actions.${cmd.id}.${context.areaId}`, Date.now());
         }
@@ -419,6 +398,8 @@ function EditorView({
         label: cmd.label,
         isGlobal: targetIsGlobal,
         sourceType: targetSourceType,
+        sourceOwner: 'dynamic',
+        defaultShortcut: cmd.defaultShortcut || cmd.shortcut,
         run: (_context) => {
           // Always route project command execution signals to the active Editor areaId
           const activeEditorId = Blood.getValue<string | null>('system.lastFocusedEditorId', null) || 'editor-root';

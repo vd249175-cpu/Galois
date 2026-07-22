@@ -31,6 +31,7 @@ interface FileWatchEntry {
 const fileWatchEntries = new Map<string, FileWatchEntry>();
 const fileWatchSenderCleanup = new Set<number>();
 let lastAgentTerminalLaunchAt = 0;
+const mpvProcesses = new Set<ReturnType<typeof spawn>>();
 
 function stopWatchingFileIfUnused(filePath: string) {
   const entry = fileWatchEntries.get(filePath);
@@ -386,6 +387,8 @@ app.whenReady().then(async () => {
       let contentType = 'application/octet-stream';
       if (ext === '.mp4') contentType = 'video/mp4';
       else if (ext === '.webm') contentType = 'video/webm';
+      else if (ext === '.mov') contentType = 'video/quicktime';
+      else if (ext === '.m4v') contentType = 'video/x-m4v';
       else if (ext === '.ogg') contentType = 'video/ogg';
       else if (ext === '.mp3') contentType = 'audio/mpeg';
       else if (ext === '.wav') contentType = 'audio/wav';
@@ -458,6 +461,8 @@ app.on('before-quit', () => {
   userConfigWatchers.splice(0).forEach((watcher) => watcher.close());
   for (const filePath of fileWatchEntries.keys()) fs.unwatchFile(filePath);
   fileWatchEntries.clear();
+  for (const child of mpvProcesses) child.kill();
+  mpvProcesses.clear();
 });
 
 app.on('window-all-closed', () => {
@@ -760,6 +765,65 @@ ipcMain.handle('fs:archiveMediaData', async (_, {
 ipcMain.handle('clipboard:writeText', async (_, text: string) => {
   clipboard.writeText(String(text ?? ''));
   return true;
+});
+
+ipcMain.handle('media:playWithMpv', async (_, request: {
+  filePath: string;
+  title?: string;
+  start?: number;
+  end?: number;
+}) => {
+  const filePath = path.resolve(String(request?.filePath || ''));
+  if (!path.isAbsolute(filePath) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    throw new Error(`视频文件不存在：${filePath}`);
+  }
+
+  const mpv = await checkTool('mpv');
+  if (!mpv.available || !mpv.path) {
+    throw new Error('未找到 mpv。请先运行：brew install mpv');
+  }
+
+  const args = [
+    '--no-config',
+    '--force-window=yes',
+    '--keep-open=yes',
+    '--hwdec=auto-safe',
+    `--title=${String(request.title || path.basename(filePath))}`,
+  ];
+  if (Number.isFinite(request.start) && Number(request.start) >= 0) {
+    args.push(`--start=${Number(request.start)}`);
+  }
+  if (Number.isFinite(request.end) && Number(request.end) > Number(request.start ?? 0)) {
+    args.push(`--end=${Number(request.end)}`);
+  }
+  args.push('--', filePath);
+
+  const child = spawn(mpv.path, args, {
+    cwd: path.dirname(filePath),
+    env: getSecureEnv(),
+    stdio: 'ignore',
+  });
+  mpvProcesses.add(child);
+  child.once('exit', () => mpvProcesses.delete(child));
+  child.once('error', () => mpvProcesses.delete(child));
+
+  await new Promise<void>((resolve, reject) => {
+    const onSpawn = () => { cleanup(); resolve(); };
+    const onError = (error: Error) => { cleanup(); reject(error); };
+    const cleanup = () => {
+      child.off('spawn', onSpawn);
+      child.off('error', onError);
+    };
+    child.once('spawn', onSpawn);
+    child.once('error', onError);
+  });
+
+  return {
+    started: true as const,
+    pid: child.pid ?? null,
+    executable: mpv.path,
+    version: mpv.version || '',
+  };
 });
 
 // IPC Exec/Shell API
@@ -1545,13 +1609,14 @@ ipcMain.handle('app:importExtensionArchive', async (_, archivePath: string) => {
 });
 
 ipcMain.handle('app:getEnvironmentStatus', async () => {
-  const [uv, python, python3, agy, node, git] = await Promise.all([
+  const [uv, python, python3, agy, node, git, mpv] = await Promise.all([
     checkTool('uv'),
     checkTool('python'),
     checkTool('python3'),
     checkTool('agy'),
     checkTool('node'),
     checkTool('git'),
+    checkTool('mpv'),
   ]);
   return {
     shell: {
@@ -1564,6 +1629,7 @@ ipcMain.handle('app:getEnvironmentStatus', async () => {
     agy,
     node,
     git,
+    mpv,
   };
 });
 
@@ -2108,7 +2174,15 @@ npm run build:electron
   fs.writeFileSync(rebuildScriptPath, rebuildScript, 'utf-8');
   fs.chmodSync(rebuildScriptPath, 0o755);
 
-  const restoreScript = `#!/bin/bash
+  const sameSourceAndTarget = path.resolve(sourceRoot) === path.resolve(workspaceRoot);
+  const restoreScript = sameSourceAndTarget
+    ? `#!/bin/bash
+set -e
+echo "Restore refused: classic source and external workbench resolve to the same directory."
+echo "Use Git in ${workspaceRoot} or sync from a separate source checkout with npm run sync:workbench."
+exit 1
+`
+    : `#!/bin/bash
 set -e
 SOURCE=${quoteShellArg(sourceRoot)}
 TARGET=${quoteShellArg(workspaceRoot)}

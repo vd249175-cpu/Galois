@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     webUtils.getPathForFile(file),
   writeClipboardText: (text: string) =>
     ipcRenderer.invoke('clipboard:writeText', text),
+  playMediaWithMpv: (request: { filePath: string; title?: string; start?: number; end?: number }) =>
+    ipcRenderer.invoke('media:playWithMpv', request),
 
   // ── Shell / Script execution ──────────────────────────────────────────────
   /** 执行任意 shell 命令（用于生命周期脚本等） */

@@ -65,6 +65,23 @@ editable files inside hidden application support folders.
 - Notebook media belongs to the notebook project. Dragged Markdown media is
   archived under `{projectPath}/media/`; generated video timeline assets live
   under `{projectPath}/.dnote_assets/`.
+- Full Markdown video embeds and timeline clips have distinct path contracts.
+  `![video](media/file.ext)` resolves from the notebook root, while
+  `@video[label](file.ext?t=start,end)` resolves the file name from
+  `{projectPath}/.dnote_assets/videos/`. A `media/...` path is not a timeline
+  asset reference.
+- The inline player first uses Electron/Chromium's native media backend.
+  Recognizing a container extension such as MOV does not guarantee that its
+  codec can be decoded. When native decoding fails, local media exposes an mpv
+  original-format fallback through the typed `media:playWithMpv` bridge. The
+  fallback opens mpv's native playback window, passes timeline start/end values,
+  and never creates a converted copy. `brew install mpv` supplies the current
+  development dependency. A future in-surface backend would still require a
+  native libmpv render context; DOM video elements cannot host libmpv directly.
+- Markdown math is rendered locally with KaTeX. Inline `$...$` and `\(...\)`
+  expressions plus multiline `$$...$$` and `\[...\]` display blocks use the same
+  `MarkdownPreview` path for ordinary notes and reactive/generated Markdown.
+  Fenced and inline code are protected before math parsing.
 - Runtime/cache files such as `.dnote_runtime.json` and `.dnote_cache/` remain
   project-local and should not be packaged into the starter template.
 - Editor undo/redo history is project-local too:
@@ -122,6 +139,11 @@ Runtime development split:
 - CORE/main/preload, Electron IPC, launcher startup, package scripts, or native
   binary changes require rebuilding Electron and reopening the workbench with
   `npm run rebuild:reopen`.
+- A separate source checkout can replace the clean external runtime workbench
+  with `npm run sync:workbench`; add `-- --reopen` when Electron CORE/preload
+  must be rebuilt and the workbench reopened. The command refuses dirty targets
+  and same-path source/target execution, and preserves target-only `APP` plugin
+  directories owned by the user.
 
 At startup the app publishes runtime facts into Blood:
 
@@ -286,6 +308,13 @@ The editor now exposes two user-facing modes:
 - Live Preview: CodeMirror 6 editing with Markdown decorations/widgets.
 - Reading: rendered Markdown with local interactive editing affordances.
 
+Reactive expression values that contain block Markdown are passed through the
+same `MarkdownPreview` component as ordinary Reading mode content. Tables,
+links, media, block editing, drag/drop, and slash commands therefore share the
+normal page logic. Edits are written back to the expression's JSON key and
+pause interval refresh until the user manually reruns the expression; the edit
+control still opens the source expression line.
+
 Source mode remains an internal fallback and should not be presented as a
 primary user workflow.
 
@@ -298,6 +327,12 @@ modes.
 Reading mode table support is interactive: table cells are editable in place,
 and table hover controls can append rows or columns while preserving standard
 Markdown table syntax.
+
+The editor also publishes `shortcutRegistry` in `.dnote_runtime.json`. This is
+the agent-facing runtime inventory of registered actions, scopes, defaults,
+active bindings, overrides, and unbound actions. Agents should consult it before
+assigning shortcuts. `panel.splitVertical` intentionally has no default shortcut
+so project commands may use `meta+shift+d` without triggering panel split.
 
 ## macOS DMG Readiness
 

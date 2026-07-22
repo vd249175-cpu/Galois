@@ -49,6 +49,7 @@ Galois 是 TypeScript / Electron / Vite / React 同仓项目：
 - `~/Documents/Galois/workbench/Galois-vscode-core/`：packaged app 启动时从 App 内经典代码拷出的完整可写运行工作台。
 - `{projectPath}/media/`：笔记项目自己的可见媒体归档目录。
 - `{projectPath}/.dnote_assets/`：笔记项目自己的生成媒体资产目录，如视频时间线元数据和片段。
+- 完整视频 `![video](media/file.ext)` 与时间线片段 `@video[label](file.ext?t=start,end)` 是两套路径契约；后者只引用 `.dnote_assets/videos/` 内的文件名。不要把 `media/...` 路径直接写进 `@video`。
 
 当前架构是 Blood-first。`CORE/services.ts`、`CORE/platform.ts`、`CORE/extensionHost.ts` 等 VS Code 风格基础设施已经存在，但还不是 Blood 的替代品。新开发可以借鉴这些服务边界，但不能把迁移目标写成已完成事实。
 
@@ -62,12 +63,31 @@ Galois 是 TypeScript / Electron / Vite / React 同仓项目：
 
 Blood key 只能使用 `system.*`、`layout.*`、`actions.*`、`events.*`。动作信号必须写 timestamp，不要用 boolean。
 
+## 快捷键注册表
+
+运行中的编辑器会把 `ActionRegistry` 的完整快照写入当前项目的
+`.dnote_runtime.json.shortcutRegistry`。其中每个 action 都包含 `id`、作用域、
+默认快捷键、当前生效快捷键和 `default / overridden / unbound` 状态。
+
+Agent 新增或修改 APP action、项目命令快捷键前，必须先读取这个运行时注册表；
+不得只搜索源码中的 `defaultShortcut`，也不得只查看用户的 `shortcuts.json`。
+全局 action 与所有作用域冲突，同一 `sourceType` 内的 action 互相冲突。若运行时
+快照暂不可用，再联合检查 `CORE/ActionRegistry.ts`、`APP/*/actions/`、当前项目
+`command/commands.json` 和 `~/Documents/Galois/config/shortcuts.json`。
+
 ## 模式边界
 
 源码开发模式：
 
 - 修改当前源码仓库中的 `APP/`、`CORE/`、`docs/`、`.agents/skills/`、`AGENTS.md`、打包脚本和模板。
 - 页面开发、按钮开发、快捷键开发、主题开发、设置开发、CORE/平台开发都修改当前源码仓库。
+- 用户要求把当前源码应用到 `~/Documents/Galois/workbench/Galois-vscode-core/`
+  时，先完成类型检查和普通构建，再在当前源码仓库运行
+  `npm run sync:workbench`。若改动涉及 `CORE/main.ts`、`CORE/preload.ts`、
+  Electron IPC 或需要立即重启外部工作台，运行
+  `npm run sync:workbench -- --reopen`。该命令会在目标 Git 工作树不干净时拒绝覆盖，
+  保留外部 workbench 中源码仓库不存在的 `APP/[plugin]/` 用户插件目录，并在同步后
+  自动创建一个 Git 回滚提交，使下一次同步仍可直接执行。
 - 功能开发默认只运行 `npx tsc --noEmit` 和 `npm run build`。不要因为“源码开发模式”或“构建模式”自动运行 `npm run package:mac`。
 
 构建模式：
@@ -75,6 +95,7 @@ Blood key 只能使用 `system.*`、`layout.*`、`actions.*`、`events.*`。动�
 - 修改 `~/Documents/Galois/workbench/Galois-vscode-core/` 这个完整外部副本。
 - 可以改外部副本中的 `APP/`、`CORE/`、`docs/`、`.agents/skills/`、`AGENTS.md`、主题、配置 schema 和模板。
 - 外部副本必须优先使用 Git 作为安全网；经典代码恢复只作为最后兜底。
+- 已经位于外部 workbench 时直接编辑，不要运行 `sync:workbench`（源和目标相同）。
 - 不要把构建模式的改动写入具体笔记项目，也不要修改已安装 `.app` bundle。
 - 构建模式的“构建”表示开发/构造功能，不等于打包发布。开发页面、按钮、快捷键、主题时只做类型检查和普通构建验证，除非用户明确要求 DMG/打包/发布。
 

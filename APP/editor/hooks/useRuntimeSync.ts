@@ -11,22 +11,13 @@
 import { useEffect } from 'react';
 import { Blood } from '../../../CORE/Blood';
 import { BC, BC_PREFIX } from '../../../CORE/BloodChannels';
+import { ActionRegistry } from '../../../CORE/ActionRegistry';
 
 export function useRuntimeSync(areaId: string) {
   useEffect(() => {
     let writeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const unsubscribe = Blood.subscribe((changedKeys: Set<string>) => {
-      const isRelevant = Array.from(changedKeys).some(
-        (key: string) =>
-          key === BC.system.projectPath ||
-          key === BC.system.lastFocusedEditorId ||
-          key.startsWith(BC_PREFIX.editorCursorAll) ||
-          key.startsWith(BC_PREFIX.openFileAll)
-      );
-
-      if (!isRelevant) return;
-
+    const scheduleWrite = () => {
       if (writeTimeout) clearTimeout(writeTimeout);
       writeTimeout = setTimeout(async () => {
         const projectPath = Blood.getValue<string>(BC.system.projectPath, '');
@@ -62,6 +53,7 @@ export function useRuntimeSync(areaId: string) {
                 selectedText: cursor.selectedText,
               }
             : null,
+          shortcutRegistry: ActionRegistry.getShortcutSnapshot(),
           timestamp: Date.now(),
         };
 
@@ -77,11 +69,25 @@ export function useRuntimeSync(areaId: string) {
           console.warn('[useRuntimeSync] Failed to write .dnote_runtime.json:', err);
         }
       }, 150);
+    };
+
+    const unsubscribe = Blood.subscribe((changedKeys: Set<string>) => {
+      const isRelevant = Array.from(changedKeys).some(
+        (key: string) =>
+          key === BC.system.projectPath ||
+          key === BC.system.lastFocusedEditorId ||
+          key.startsWith(BC_PREFIX.editorCursorAll) ||
+          key.startsWith(BC_PREFIX.openFileAll)
+      );
+      if (isRelevant) scheduleWrite();
     });
+    const unsubscribeShortcuts = ActionRegistry.subscribe(scheduleWrite);
+    scheduleWrite();
 
     return () => {
       if (writeTimeout) clearTimeout(writeTimeout);
       unsubscribe();
+      unsubscribeShortcuts();
     };
   // Only attach once per area mount — areaId stabilises the subscription identity
   // eslint-disable-next-line react-hooks/exhaustive-deps

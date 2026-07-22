@@ -145,3 +145,16 @@ export function getNestedValue(obj: any, keyPath: string): any {
   }
   return current;
 }
+
+export function setNestedValue(obj: any, keyPath: string, value: any): any {
+  const clone = obj && typeof obj === 'object' ? structuredClone(obj) : {};
+  const parts = keyPath.split('.').filter(Boolean);
+  if (parts.length === 0) return clone;
+  let current = clone;
+  for (const part of parts.slice(0, -1)) {
+    if (!current[part] || typeof current[part] !== 'object') current[part] = {};
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = value;
+  return clone;
+}
