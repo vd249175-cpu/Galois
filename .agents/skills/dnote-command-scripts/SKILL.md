@@ -13,6 +13,11 @@ execution behavior.
 For APP page/button/shortcut development, also read
 `docs/APP_DEVELOPMENT_SCENARIOS.md`.
 
+When a script emits Markdown, when building a complete notebook demo, or when
+renderer parity matters, read `references/markdown-rendering-contract.md` and
+use `template-project/08_完整Markdown与程序生成验收.md` plus
+`template-project/script/render_showcase.py` as the executable baseline.
+
 ## 0. Mode Routing
 
 Most Galois users are in **Assist Mode** inside a notebook project. This skill
@@ -128,6 +133,10 @@ command set until the next successful read. After adding a command, confirm it
 appears in `.dnote_runtime.json.shortcutRegistry` and, for `content` commands, in
 the already-open `/` menu; do not insert a literal `/` into the note as a test
 artifact.
+
+For a reusable content demo, prefer the existing `project.renderShowcase`
+command in `template-project/command/commands.json`. It inserts a reactive
+Markdown block without consuming a default shortcut.
 
 ## 3. Scope Rules
 

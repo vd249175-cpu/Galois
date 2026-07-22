@@ -1,0 +1,113 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { BC } from '../../CORE/BloodChannels';
+import { isUvProgressStderr } from '../utils';
+import { __TYPE_ID__Actions } from './actions';
+
+interface ProjectSummary {
+  noteCount: number;
+  tagCount: number;
+  topTags: string[];
+}
+
+interface __PASCAL_NAME__ViewProps {
+  areaId: string;
+  state: Record<string, any>;
+  updateBloodKey: (key: string, value: any) => void;
+  lastAction: { id: string; timestamp: number } | null;
+}
+
+export function __PASCAL_NAME__View({ state, updateBloodKey, lastAction }: __PASCAL_NAME__ViewProps) {
+  const projectPath = String(state[BC.system.projectPath] || '');
+  const resolvedTags = state[BC.system.resolvedTags] || {};
+  const [summary, setSummary] = useState<ProjectSummary | null>(null);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const requestGenerationRef = useRef(0);
+
+  const refresh = useCallback(async () => {
+    if (!projectPath) {
+      setSummary(null);
+      setStatus('idle');
+      return;
+    }
+
+    const generation = ++requestGenerationRef.current;
+    setStatus('loading');
+    setErrorMessage('');
+    try {
+      const scriptPath = await window.electronAPI.getServiceScriptPath('__FOLDER_NAME__', 'project_summary.py');
+      const result = await window.electronAPI.runScript(
+        scriptPath,
+        JSON.stringify({ resolvedTags }),
+        projectPath,
+        { DNOTE_PROJECT_PATH: projectPath },
+      );
+      if (generation !== requestGenerationRef.current) return;
+      if (result.stderr?.trim() && !isUvProgressStderr(result.stderr.trim())) {
+        throw new Error(result.stderr.trim());
+      }
+      setSummary(JSON.parse(result.stdout || '{}'));
+      setStatus('ready');
+    } catch (error: any) {
+      if (generation !== requestGenerationRef.current) return;
+      const message = error?.message || String(error);
+      setErrorMessage(message);
+      setStatus('error');
+      updateBloodKey(BC.events.scriptError('__TYPE_ID__'), { message, ts: Date.now() });
+    }
+  }, [projectPath, resolvedTags, updateBloodKey]);
+
+  useEffect(() => {
+    void refresh();
+    return () => { requestGenerationRef.current += 1; };
+  }, [refresh]);
+
+  useEffect(() => {
+    if (lastAction?.id === '__TYPE_ID__.refresh') void refresh();
+  }, [lastAction, refresh]);
+
+  if (!projectPath) return <div style={{ padding: 20 }}>请先打开一个笔记项目。</div>;
+
+  return (
+    <section style={{ height: '100%', overflow: 'auto', padding: 20, boxSizing: 'border-box' }}>
+      <h2 style={{ marginTop: 0 }}>__DISPLAY_NAME__</h2>
+      <p style={{ color: 'var(--text-muted)' }}>
+        这是可运行的参考器官：读取 Blood、处理 toolbar action，并通过插件自有 Python 服务返回 JSON。
+      </p>
+      {status === 'loading' && <p>计算中…</p>}
+      {status === 'error' && <p style={{ color: 'var(--error-color)' }}>{errorMessage}</p>}
+      {summary && (
+        <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
+          <Metric label="笔记" value={summary.noteCount} />
+          <Metric label="唯一标签" value={summary.tagCount} />
+          <Metric label="标签样本" value={summary.topTags.join('、') || '无'} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 12 }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{label}</div>
+      <div style={{ marginTop: 5, fontWeight: 700 }}>{value}</div>
+    </div>
+  );
+}
+
+export const __PASCAL_NAME__Component = {
+  typeId: '__TYPE_ID__',
+  displayName: '__DISPLAY_NAME__',
+  shortName: '__SHORT_NAME__',
+  iconName: 'custom',
+  component: __PASCAL_NAME__View,
+  actions: __TYPE_ID__Actions,
+  bloodChannels: [BC.system.projectPath, BC.system.resolvedTags],
+  manifest: {
+    description: '完整 APP 插件参考实现',
+    reads: [BC.system.projectPath, BC.system.resolvedTags],
+    writes: [BC.events.scriptError('__TYPE_ID__')],
+    dependsOn: ['fileTree'],
+  },
+};

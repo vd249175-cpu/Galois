@@ -17,7 +17,11 @@ DNOTE 目前处于**开发者工作区 / 内部试用**阶段。源码模式下�
 
 相关文档：
 
+- [APP 页面/按钮/快捷键开发场景](docs/APP_DEVELOPMENT_SCENARIOS.md)
 - [插件环境契约](docs/PLUGIN_ENVIRONMENT.md)
+- [完整 APP 插件可执行参考](.agents/skills/dnote-app-plugins/references/complete-plugin-walkthrough.md)
+- [Markdown 与程序生成渲染契约](.agents/skills/dnote-command-scripts/references/markdown-rendering-contract.md)
+- [端到端完整项目验收矩阵](.agents/skills/dnote-complete-project/references/end-to-end-acceptance.md)
 - [扩展工作区契约](docs/EXTENSION_WORKSPACE.md)
 - [五层架构分层](docs/ARCHITECTURE_LAYERS.md)
 - [macOS DMG 首次启动引导计划](docs/MACOS_DMG_ONBOARDING.md)

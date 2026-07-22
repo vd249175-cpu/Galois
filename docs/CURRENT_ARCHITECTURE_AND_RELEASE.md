@@ -184,6 +184,18 @@ map excludes note bodies, caches, dependency trees, and unbounded recursive
 listings. Reuse it during the task and refresh it only after a project switch or
 a material structure change.
 
+Complex end-to-end work uses `dnote-complete-project` as a coordinator before
+domain skills. Canonical executable references are kept in source control:
+
+- `.agents/skills/dnote-app-plugins/scripts/scaffold_plugin.py` generates a
+  complete non-overwriting APP organ with action, Blood, service, and error
+  handling boundaries.
+- `template-project/08_完整Markdown与程序生成验收.md` and
+  `script/render_showcase.py` exercise ordinary and program-generated Markdown
+  through the same interaction contract.
+- `.agents/skills/dnote-complete-project/scripts/validate_reference_examples.py`
+  checks both references deterministically so documentation drift is detected.
+
 ## Naming Protocol
 
 Use these names consistently so humans, plugins, and the assistant do not cross

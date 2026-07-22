@@ -20,6 +20,10 @@ Frontmatter。编辑器顶部标签栏只增删手动 YAML 标签；正文标签
 必须在正文中修改。这样删除手动标签不会被同名正文标签立刻写回 YAML，也不会因
 点击顶部关闭按钮而意外改写笔记正文。
 
+如果任务同时要演示 Frontmatter、正文标签和程序生成 Markdown，读取
+`../dnote-command-scripts/references/markdown-rendering-contract.md`，并以
+`template-project/08_完整Markdown与程序生成验收.md` 为可执行基准。
+
 ---
 
 ## 1. YAML Frontmatter 标签声明

@@ -31,6 +31,8 @@ Galois 只有三种工作模式。不要要求用户声明“我是开发者”�
 
 ## Skill 路由
 
+- `dnote-complete-project`：完整项目、端到端功能、跨 APP/脚本/Markdown
+  的复杂实现、无遗漏迁移和全面验收。先建立功能矩阵，再路由到下列领域 skill。
 - `dnote-runtime`：当前笔记项目、`.dnote_runtime.json`、active file、光标、选区、协助模式入口。
 - `dnote-project-overview`：协助模式初始化时生成有界项目地图；了解已有 Markdown、命令、脚本、配置与媒体概况，禁止用无上限递归目录代替。
 - `dnote-tags`：Frontmatter tags、正文 `#标签`、`re:`、`run:`、文件图标、标签解析。
@@ -39,6 +41,9 @@ Galois 只有三种工作模式。不要要求用户声明“我是开发者”�
 - `dnote-app-plugins`：APP 页面、右栏按钮、快捷键、动作、Blood 订阅、插件服务脚本、`plugin.json`。
 - `dnote-configs`：主题、字号、快捷键配置、布局、窗口状态、Settings UI、配置 IPC。
 - `dnote-graph-view`：`APP/graph-view` 标签格/拓扑图、lattice 算法、标签数量滑杆、虚标签合并、图搜索联动。
+
+当用户说“完整项目”、“完整功能”、“全面演示”、“生产可用”或“确保无遗漏”时，
+不得只读单一领域 skill；必须先用 `dnote-complete-project` 建立端到端验收矩阵。
 
 ## 项目形态
 

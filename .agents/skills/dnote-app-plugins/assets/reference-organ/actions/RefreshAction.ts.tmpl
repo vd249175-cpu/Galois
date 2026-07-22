@@ -1,0 +1,14 @@
+import React from 'react';
+import type { OrganAction } from '../../../CORE/ComponentRegistry';
+
+export const refreshAction: OrganAction = {
+  id: '__TYPE_ID__.refresh',
+  label: '重新计算项目摘要',
+  isToolbar: true,
+  // Demos intentionally omit a default shortcut. Check shortcutRegistry before adding one.
+  icon: React.createElement(
+    'svg',
+    { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 },
+    React.createElement('path', { d: 'M13 5V2m0 0h-3m3 0-2.1 2.1A5 5 0 1 0 13 9' }),
+  ),
+};

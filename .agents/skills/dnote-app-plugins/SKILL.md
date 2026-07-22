@@ -16,6 +16,11 @@ For plugin-owned runtimes, also read `docs/PLUGIN_ENVIRONMENT.md`.
 For common page/button/shortcut tasks, also read
 `docs/APP_DEVELOPMENT_SCENARIOS.md`.
 
+When creating a new plugin or an end-to-end organ, read
+`references/complete-plugin-walkthrough.md` and start from the executable asset
+with `scripts/scaffold_plugin.py`. Do not assemble a complex plugin from the
+small snippets in this file alone.
+
 ## 0. Mode Scope
 
 Use this skill after choosing **Source Development Mode** or **Build Mode** for
@@ -111,6 +116,17 @@ into the external workbench and can be resolved through
 `electronAPI.getServiceScriptPath(pluginFolder, scriptName)`. Packaged Galois
 resolves the external workbench first, then falls back to the classic seed
 bundled inside the app.
+
+Create a complete safe starting point from the active Galois root with:
+
+```bash
+npm run scaffold:plugin -- my-plugin \
+  --display-name "My Plugin" --short-name "Plugin"
+```
+
+The scaffold demonstrates discovery, a toolbar action, Blood subscriptions,
+manifest alignment, plugin-owned Python execution, stale-response rejection,
+and error signaling. It refuses to overwrite an existing plugin.
 
 ## 2. Registration Entry
 
@@ -326,12 +342,12 @@ immediate external-workbench restart is requested, use:
 npm run sync:workbench -- --reopen
 ```
 
-The sync command refuses to overwrite a dirty target Git worktree and refuses
-to run when source and target resolve to the same directory. It replaces only
-managed Galois source items and preserves target-only `APP/[plugin]/`
-directories as user-owned plugins. After replacement it creates a Git rollback
-checkpoint for the managed changes. Do not use it from Build Mode inside the
-external workbench itself.
+The sync command refuses dirty managed files and refuses to run when source and
+target resolve to the same directory. Dirty target-only `APP/[plugin]/`
+directories are allowed: they are excluded from replacement and from the
+managed-source rollback commit. After replacement the command creates a Git
+rollback checkpoint for managed changes. Do not use it from Build Mode inside
+the external workbench itself.
 
 In packaged DMG mode, opening the app hands off to the external runtime
 workbench. The assistant should edit:
