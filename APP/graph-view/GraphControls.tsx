@@ -187,11 +187,11 @@ export function GraphControls({
 	              }}
 	            />
 	            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 'calc(var(--graph-control-font-size, 11px) - 3px)', color: 'var(--text-muted)', marginTop: '2px' }}>
-	              <span>抽象</span>
+	              <span>无虚概念</span>
 	              <span>完整</span>
 	            </div>
 	            <div style={{ fontSize: 'calc(var(--graph-control-font-size, 11px) - 3px)', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-	              真实标签参与计算；可见虚概念会按 support 闭包合并。
+	              0% 只显示真实节点；其余档位按 support 闭包合并虚概念。
 	            </div>
 	          </div>
 

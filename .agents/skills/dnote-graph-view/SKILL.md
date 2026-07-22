@@ -42,6 +42,9 @@ in packaged mode and then the classic seed.
 - Entity tags are never removed by the node-count slider.
 - The node-count/granularity slider only controls virtual-tag merging and
   abstract-layer display.
+- Granularity `0` is a hard boundary with no virtual nodes. Clear the visible
+  virtual layer immediately and ignore stale async service results from older
+  slider values.
 - Repeated virtual tags that have no unique referents should merge, including
   repeated tag sets, not just single tag labels.
 - The most abstract layer should show the fewest meaningful nodes, not many

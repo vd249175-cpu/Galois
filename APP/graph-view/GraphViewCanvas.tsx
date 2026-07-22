@@ -288,6 +288,11 @@ export function GraphView({
   }, [lastAction]);
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  useEffect(() => {
+    if (hoveredNode && !nodeById.has(hoveredNode)) setHoveredNode(null);
+    if (selectedNodeId && !nodeById.has(selectedNodeId)) setSelectedNodeId(null);
+  }, [nodeById, hoveredNode, selectedNodeId]);
+
   const neighborById = useMemo(() => {
     const neighbors = new Map<string, Set<string>>();
     nodes.forEach((node) => neighbors.set(node.id, new Set()));

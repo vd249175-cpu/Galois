@@ -309,6 +309,14 @@ should be treated as trusted project automation.
 Plugin service scripts use `runScript` because plugin-owned services and
 notebook project scripts intentionally have different environment ownership.
 
+## Graph Topology Baseline
+
+The graph-view concept-granularity slider controls only virtual concepts; real
+note nodes remain present. A value of `0` is a hard real-only boundary. The
+renderer clears its current virtual layer synchronously and applies only the
+latest asynchronous `lattice.py` result, so an older slider request cannot
+reintroduce virtual nodes after the user returns to zero.
+
 ## Editor UX Baseline
 
 The editor now exposes two user-facing modes:

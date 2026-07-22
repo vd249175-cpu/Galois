@@ -26,8 +26,13 @@ export function useLatticeData({
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const simRef = useRef<{ nodes: Node[]; links: Link[] }>({ nodes: [], links: [] });
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
+    const requestGeneration = ++requestGenerationRef.current;
+    let disposed = false;
+    const isStale = () => disposed || requestGeneration !== requestGenerationRef.current;
+
     if (!projectPath) {
       setNodes([]);
       setLinks([]);
@@ -35,9 +40,24 @@ export function useLatticeData({
       return;
     }
 
+    // Zero detail is a hard "no virtual concepts" boundary. Clear the previous
+    // virtual layer synchronously so a slow service call cannot leave stale
+    // pills visible while the real-only graph is being recalculated.
+    if (virtualDetail <= 0 || graphMode === 'flat') {
+      const realNodes = simRef.current.nodes.filter((node) => !node.isVirtual);
+      const realNodeIds = new Set(realNodes.map((node) => node.id));
+      const realLinks = simRef.current.links.filter(
+        (link) => realNodeIds.has(link.source) && realNodeIds.has(link.target),
+      );
+      simRef.current = { nodes: realNodes, links: realLinks };
+      setNodes(realNodes);
+      setLinks(realLinks);
+    }
+
     const buildLatticeGraph = async () => {
       try {
         const files = await (window as any).electronAPI.listDir(projectPath);
+        if (isStale()) return;
         const mdFiles = files.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
 
         const currentResolvedTags = resolvedTags || {};
@@ -59,7 +79,8 @@ export function useLatticeData({
 
         // Call Python lattice.py — 传入 { nodes, showVirtual }，由 Python 侧做 FCA 虚节点计算
         const scriptPath = await (window as any).electronAPI.getServiceScriptPath('graph-view', 'lattice.py');
-        const showVirtual = graphMode !== 'flat';
+        if (isStale()) return;
+        const showVirtual = graphMode !== 'flat' && virtualDetail > 0;
         const latticePayload = JSON.stringify({
           nodes: rawNodes,
           showVirtual,
@@ -67,6 +88,7 @@ export function useLatticeData({
           maxVirtualNodes: 180,
         });
         const result = await (window as any).electronAPI.runScript(scriptPath, latticePayload, projectPath);
+        if (isStale()) return;
 
         if (result.stderr && result.stderr.trim()) {
           // uv writes normal first-run progress (venv creation, package installs) to stderr.
@@ -174,16 +196,19 @@ export function useLatticeData({
           }));
         }
 
+        if (isStale()) return;
         simRef.current = { nodes: displayNodes, links: displayEdges };
         setNodes(displayNodes);
         setLinks(displayEdges);
         wakeSimulation();
       } catch (err) {
+        if (isStale()) return;
         console.error('Lattice builder error:', err);
       }
     };
 
-    buildLatticeGraph();
+    void buildLatticeGraph();
+    return () => { disposed = true; };
   }, [projectPath, resolvedTags, fileSavedEvent, graphMode, virtualDetail]);
 
   return {
