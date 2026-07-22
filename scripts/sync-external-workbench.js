@@ -49,14 +49,6 @@ if (!targetRoot.endsWith(path.join('Documents', 'Galois', 'workbench', 'Galois-v
 }
 
 fs.mkdirSync(targetRoot, { recursive: true });
-if (fs.existsSync(path.join(targetRoot, '.git'))) {
-  const status = spawnSync('git', ['status', '--porcelain'], { cwd: targetRoot, encoding: 'utf-8' });
-  if (status.status !== 0) fail('Could not inspect the external workbench Git state.');
-  if (status.stdout.trim()) {
-    fail('External workbench has uncommitted changes. Commit/stash them before replacing it.');
-  }
-}
-
 const sourcePluginRoot = path.join(sourceRoot, 'APP');
 const targetPluginRoot = path.join(targetRoot, 'APP');
 const sourcePluginNames = new Set(fs.readdirSync(sourcePluginRoot, { withFileTypes: true })
@@ -67,6 +59,36 @@ const protectedPluginNames = fs.existsSync(targetPluginRoot)
     .filter((entry) => entry.isDirectory() && !sourcePluginNames.has(entry.name))
     .map((entry) => entry.name)
   : [];
+const protectedPluginPaths = protectedPluginNames.map((name) => `APP/${name}/`);
+
+function isProtectedPluginPath(filePath) {
+  const normalized = filePath.replaceAll('\\', '/');
+  return protectedPluginPaths.some((pluginPath) => normalized.startsWith(pluginPath));
+}
+
+if (fs.existsSync(path.join(targetRoot, '.git'))) {
+  const status = spawnSync(
+    'git',
+    ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
+    { cwd: targetRoot, encoding: 'utf-8' },
+  );
+  if (status.status !== 0) fail('Could not inspect the external workbench Git state.');
+
+  const fields = status.stdout.split('\0').filter(Boolean);
+  const unprotectedChanges = [];
+  for (let index = 0; index < fields.length;) {
+    const record = fields[index++];
+    const statusCode = record.slice(0, 2);
+    const paths = [record.slice(3)];
+    if ((statusCode.includes('R') || statusCode.includes('C')) && index < fields.length) {
+      paths.push(fields[index++]);
+    }
+    if (!paths.every(isProtectedPluginPath)) unprotectedChanges.push(...paths);
+  }
+  if (unprotectedChanges.length > 0) {
+    fail(`External workbench has uncommitted managed changes: ${unprotectedChanges.join(', ')}`);
+  }
+}
 
 console.log(`[sync:workbench] Replacing managed source in ${targetRoot}`);
 for (const item of managedItems) {
@@ -98,7 +120,8 @@ if (protectedPluginNames.length > 0) {
 if (fs.existsSync(path.join(targetRoot, '.git'))) {
   run('git', ['config', 'user.name', 'Galois Workbench'], targetRoot);
   run('git', ['config', 'user.email', 'galois-workbench@local'], targetRoot);
-  run('git', ['add', '-A', '--', ...managedItems], targetRoot);
+  const protectedPathspecs = protectedPluginNames.map((name) => `:(exclude)APP/${name}/**`);
+  run('git', ['add', '-A', '--', ...managedItems, ...protectedPathspecs], targetRoot);
   const staged = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: targetRoot });
   if (staged.status === 1) {
     run('git', ['commit', '-m', 'Sync managed Galois source'], targetRoot);

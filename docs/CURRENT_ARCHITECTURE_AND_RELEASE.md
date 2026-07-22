@@ -148,9 +148,10 @@ Runtime development split:
   `npm run rebuild:reopen`.
 - A separate source checkout can replace the clean external runtime workbench
   with `npm run sync:workbench`; add `-- --reopen` when Electron CORE/preload
-  must be rebuilt and the workbench reopened. The command refuses dirty targets
-  and same-path source/target execution, and preserves target-only `APP` plugin
-  directories owned by the user.
+  must be rebuilt and the workbench reopened. The command refuses dirty managed
+  files and same-path source/target execution. Target-only `APP` plugin folders
+  may remain dirty: they are excluded from replacement and from the
+  managed-source rollback commit, so user plugins survive unchanged.
 
 At startup the app publishes runtime facts into Blood:
 
