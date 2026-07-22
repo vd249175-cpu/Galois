@@ -21,7 +21,7 @@ const updateCursorState = (overrideContent?: string) => {
       scrollLeft: scroll?.left || 0,
     }));
   }
-  
+
   updateBloodKey(`system.editorCursor.${areaId}`, {
     line,
     column,

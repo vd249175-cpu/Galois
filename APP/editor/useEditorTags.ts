@@ -11,13 +11,13 @@ const handleUpdateTags = async (nextTags: string[]) => {
   setTags(cleanTags);
   const fullContent = updateYamlFrontmatterTags(contentRef.current, cleanTags);
   if (fullContent === lastSavedContentRef.current) return;
-  
+
   if (textareaRef.current) {
     pushStateToUndoStack(contentRef.current, textareaRef.current.selectionStart, textareaRef.current.selectionEnd);
   } else {
     pushStateToUndoStack(contentRef.current, 0, 0);
   }
-  
+
   setContent(fullContent);
   markHistoryContent(fullContent);
   try {

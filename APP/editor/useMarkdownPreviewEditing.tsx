@@ -275,7 +275,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
         const newText = e.currentTarget.value || '';
         const selectionStart = e.currentTarget.selectionStart ?? newText.length;
         const selectionEnd = e.currentTarget.selectionEnd ?? selectionStart;
-        
+
         const currentLines = content.split('\n');
         currentLines[lineIdx] = newText;
         const draft = currentLines.join('\n');
@@ -334,13 +334,13 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
         const currentLines = content.split('\n');
         const currentText = e.currentTarget.value || '';
         const prevText = currentLines[lineIdx - 1] || '';
-        
+
         isJumpingToNextLineRef.current = true;
         pendingCaretPosRef.current = prevText.length;
-        
+
         currentLines[lineIdx - 1] = prevText + currentText;
         currentLines.splice(lineIdx, 1);
-        
+
         onContentChange(currentLines.join('\n'));
         setEditingLineIdx(lineIdx - 1);
       }

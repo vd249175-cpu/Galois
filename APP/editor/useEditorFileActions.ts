@@ -96,7 +96,7 @@ const handleRenameCurrentFile = async () => {
 
       updateBloodKey(BC.events.fileSaved(oldPath), Date.now());
       updateBloodKey(BC.events.fileSaved(newPath), Date.now());
-      
+
       setStatusMessage(`Editing Note: ${newName.trim()}`);
     } catch (err: any) {
       alert(`重命名笔记失败: ${err.message}`);

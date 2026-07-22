@@ -171,6 +171,8 @@ DNOTE 内置了**视频时间轴与无损拉片剪辑系统**，专为音视频�
 
 ## 📂 项目目录结构 (Directory Structure)
 
+> 下面的树保留了部分历史命名，用于介绍产品模块。当前源码的准确文件归属、迁移后的 Editor/MarkdownPreview 边界和验证要求，请以 [项目结构与迁移审计](docs/PROJECT_STRUCTURE_AND_MIGRATION_AUDIT.md) 及 [当前架构与发布基准](docs/CURRENT_ARCHITECTURE_AND_RELEASE.md) 为准。
+
 ```
 DNOTE/
 ├── CORE/                        # 核心中枢系统层 (System Core)

@@ -48,10 +48,10 @@ const handleExecuteCommand = (
 
   if (cmd.id.startsWith('custom.')) {
     pushStateToUndoStack(workingContent, actualStart, actualEnd);
-    
+
     const before = workingContent.substring(0, actualStart);
     const after = workingContent.substring(actualEnd);
-    
+
     const snippet = cmd.content || '';
     const textAfterInsert = before + snippet + after;
     setContent(textAfterInsert);
@@ -81,16 +81,16 @@ const handleExecuteCommand = (
 
     // Fallback: Run project script command
     pushStateToUndoStack(workingContent, actualStart, actualEnd);
-    
+
     const before = workingContent.substring(0, actualStart);
     const after = workingContent.substring(actualEnd);
     const cleanContent = before + after;
-    
+
     setContent(cleanContent);
     markHistoryContent(cleanContent);
     saveNodeFile(cleanContent);
     setShowSlashMenu(false);
-    
+
     if (projCmd) {
       setTimeout(() => {
         if (activeEditor && textareaRef.current) {

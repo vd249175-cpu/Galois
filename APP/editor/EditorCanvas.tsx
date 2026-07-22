@@ -127,7 +127,7 @@ export function EditorView({
       }
       setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
       updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
-      
+
       // If we are not in reading mode, detect and run any immediate scripts matching {{...}}
       if (!isReadingMode) {
         triggerImmediateScripts(fullContent);

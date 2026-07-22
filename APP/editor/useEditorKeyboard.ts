@@ -31,7 +31,7 @@ const handleKeyDown = (e: KeyboardEvent, start: number, end: number) => {
   if (e.ctrlKey) pressedComboParts.push('control');
   if (e.altKey) pressedComboParts.push('alt');
   if (e.shiftKey) pressedComboParts.push('shift');
-  
+
   const keyName = e.key.toLowerCase();
   const isModifier = ['control', 'meta', 'alt', 'shift'].includes(keyName);
   if (!isModifier) {
@@ -69,7 +69,7 @@ const handleKeyDown = (e: KeyboardEvent, start: number, end: number) => {
         setContent(res.text);
         markHistoryContent(res.text);
         saveNodeFile(res.text);
-        
+
         setTimeout(() => {
           if (textareaRef.current) {
             textareaRef.current.focus();
@@ -83,7 +83,7 @@ const handleKeyDown = (e: KeyboardEvent, start: number, end: number) => {
       setContent(res.text);
       markHistoryContent(res.text);
       saveNodeFile(res.text);
-      
+
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
