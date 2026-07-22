@@ -11,6 +11,7 @@ import { useFrameReference } from './useFrameReference';
 import { VideoTimelineStyles } from './VideoTimelineStyles';
 import { VideoTimelineHome } from './VideoTimelineHome';
 import { VideoTimelineActive } from './VideoTimelineActive';
+import { renderFilmstripSlots as renderVideoFilmstripSlots } from './filmstripSlots';
 
 
 
@@ -1030,61 +1031,7 @@ export function VideoTimelineView({
 
 
 
-  // Render the tiled keyframe filmstrip slots dynamically (aspect-ratio preserved, non-stretched)
-  const renderFilmstripSlots = () => {
-    if (thumbnails.length === 0) {
-      return (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--video-timeline-font-size, 11px)', opacity: 0.3 }}>
-          正在初始化时间轴预览...
-        </div>
-      );
-    }
-
-    const trackWidth = containerWidth * zoom;
-    const slotWidth = 100; // Fixed width per keyframe image block (NLE standard)
-    const numSlots = Math.ceil(trackWidth / slotWidth);
-
-    const slots = [];
-    for (let i = 0; i < numSlots; i++) {
-      const pct = (i + 0.5) / numSlots;
-      // Fetch nearest preloaded thumbnail from cache
-      const thumbIdx = Math.max(0, Math.min(thumbnails.length - 1, Math.floor(pct * thumbnails.length)));
-      const imgUrl = thumbnails[thumbIdx];
-
-      slots.push(
-        imgUrl ? (
-          <img
-            key={i}
-            src={imgUrl}
-            style={{
-              width: slotWidth,
-              height: '100%',
-              objectFit: 'cover',
-              flexShrink: 0,
-              borderRight: '1px solid rgba(255, 255, 255, 0.05)',
-            }}
-          />
-        ) : (
-          <div
-            key={i}
-            style={{
-              width: slotWidth,
-              height: '100%',
-              background: 'rgba(255,255,255,0.02)',
-              borderRight: '1px solid rgba(255,255,255,0.05)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            <div style={{ width: 8, height: 8, border: '1px solid rgba(255,255,255,0.2)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-          </div>
-        )
-      );
-    }
-    return slots;
-  };
+  const renderFilmstripSlots = () => renderVideoFilmstripSlots(thumbnails, containerWidth, zoom);
 
   // Sync playhead DOM position and time readout from React currentTime state (only when not scrubbing)
   // This avoids React JSX reconciler overwriting the direct DOM updates from the lerp scrub loop
