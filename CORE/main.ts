@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -9,6 +9,9 @@ import { registerFileIpcHandlers } from './mainFileIpc';
 import { createClassicWorkspaceServices } from './classicWorkspace';
 import { registerShellIpcHandlers } from './mainShellIpc';
 import { createAppConfigIpc } from './mainAppConfigIpc';
+import { registerTerminalIpcHandlers } from './mainTerminalIpc';
+import { registerAppIpcHandlers } from './mainAppIpc';
+import { registerWindowStateIpc } from './mainWindowStateIpc';
 
 // Register dnote-file as a privileged scheme to load local media and bypass Content Security Policy
 protocol.registerSchemesAsPrivileged([
@@ -837,309 +840,29 @@ registerShellIpcHandlers({
   resolveExtensionRoot,
   runShellCommand,
 });
-ipcMain.handle('window:openSecondary', async (_, { id, componentType, title }: { id: string; componentType: string; title: string }) => {
-  if (secondaryWindows.has(id)) {
-    secondaryWindows.get(id)?.focus();
-    return;
-  }
-
-  const win = new BrowserWindow({
-    width: 600,
-    height: 400,
-    title: title || 'Workspace Pane',
-    titleBarStyle: 'hidden',
-    backgroundColor: '#121212',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-
-  const queryParams = `?popped=true&areaId=${id}&type=${componentType}`;
-  if (process.env.NODE_ENV === 'development') {
-    win.loadURL(`http://localhost:5173/${queryParams}`);
-  } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'), { hash: queryParams });
-  }
-
-  win.on('closed', () => {
-    secondaryWindows.delete(id);
-    if (mainWindow) {
-      mainWindow.webContents.send('window:secondaryClosed', id);
-    }
-  });
-
-  secondaryWindows.set(id, win);
+registerWindowStateIpc({ getMainWindow: () => mainWindow, secondaryWindows });
+registerAppIpcHandlers({
+  assertWritableTarget,
+  checkTool,
+  ensureDefaultNotebookProject: () => ensureDefaultNotebookProject(),
+  ensureParentDir,
+  getClassicCodeSourcePath,
+  getClassicCodeWorkspacePath,
+  getExtensionDevPaths,
+  getGaloisLogPath,
+  getRuntimeInfo,
+  getSecureEnv,
+  getUserExtensionsPath,
+  inspectPluginEnvironment,
+  inspectProjectEnvironment,
+  listUserExtensions,
+  quoteShellArg,
+  repairPluginEnvironment,
+  repairProjectEnvironment,
+  runShellCommand,
+  setExtensionDevPaths,
+  syncClassicCodeWorkspace: (overwrite: boolean) => syncClassicCodeWorkspace(overwrite),
 });
-
-ipcMain.handle('window:closeSecondary', async (_, id: string) => {
-  const win = secondaryWindows.get(id);
-  if (win) {
-    win.close();
-  }
-});
-
-// Shared Blood state store across windows
-let sharedState: Record<string, any> = {};
-
-// NOTE: fs.watch project path watcher was intentionally removed.
-// Per AGENTS.md §3: business-level file watching must be implemented inside
-// APP organ components (e.g. file-tree plugin), not in CORE main process.
-// The file-tree plugin broadcasts events.fileSaved.* when it saves files.
-
-
-ipcMain.handle('blood:getInitialState', () => {
-  return sharedState;
-});
-
-ipcMain.handle('blood:updateState', (event, values: Record<string, any>) => {
-  sharedState = { ...sharedState, ...values };
-  console.log('[Blood Main Sync] State updated:', JSON.stringify(values));
-  
-  // Broadcast updates to all other open windows
-  const senderWebContents = event.sender;
-  
-  const broadcast = (win: BrowserWindow) => {
-    if (!win.isDestroyed() && win.webContents !== senderWebContents) {
-      win.webContents.send('blood:stateChanged', values);
-    }
-  };
-  
-  if (mainWindow) {
-    broadcast(mainWindow);
-  }
-  for (const [_, win] of secondaryWindows) {
-    broadcast(win);
-  }
-});
-
-ipcMain.handle('app:getAppPath', () => app.getAppPath());
-
-ipcMain.handle('app:getRuntimeInfo', () => getRuntimeInfo());
-
-ipcMain.handle('app:listAppPluginEntries', () => {
-  try {
-    const appDir = path.join(app.getAppPath(), 'APP');
-    if (!fs.existsSync(appDir)) return [];
-    return fs.readdirSync(appDir, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => {
-        const indexPath = path.join(appDir, entry.name, 'index.ts');
-        if (!fs.existsSync(indexPath)) return null;
-        const stat = fs.statSync(indexPath);
-        return {
-          folder: entry.name,
-          indexPath,
-          modulePath: `/APP/${entry.name}/index.ts`,
-          mtimeMs: stat.mtimeMs,
-        };
-      })
-      .filter(Boolean);
-  } catch (err: any) {
-    console.warn('[app:listAppPluginEntries] Failed:', err?.message || err);
-    return [];
-  }
-});
-
-ipcMain.handle('app:ensureExtensionsDir', () => {
-  const extensionPath = getUserExtensionsPath();
-  fs.mkdirSync(extensionPath, { recursive: true });
-  return extensionPath;
-});
-
-ipcMain.handle('app:listExtensions', () => listUserExtensions());
-
-ipcMain.handle('app:seedExtensions', () => {
-  return [];
-});
-
-ipcMain.handle('app:addExtensionDevPath', (_, devPath: string) => {
-  const resolvedPath = path.resolve(devPath);
-  if (!fs.existsSync(resolvedPath)) {
-    throw new Error(`Extension development path does not exist: ${resolvedPath}`);
-  }
-  const devPaths = getExtensionDevPaths();
-  setExtensionDevPaths([...devPaths, resolvedPath]);
-  return listUserExtensions();
-});
-
-ipcMain.handle('app:removeExtensionDevPath', (_, devPath: string) => {
-  const resolvedPath = path.resolve(devPath);
-  const devPaths = getExtensionDevPaths().filter((item) => item !== resolvedPath);
-  setExtensionDevPaths(devPaths);
-  return listUserExtensions();
-});
-
-ipcMain.handle('app:openPath', async (_, targetPath: string) => {
-  const error = await shell.openPath(targetPath);
-  if (error) {
-    throw new Error(error);
-  }
-  return true;
-});
-
-function findPluginManifest(rootPath: string): string | null {
-  const directManifest = path.join(rootPath, 'plugin.json');
-  if (fs.existsSync(directManifest)) return directManifest;
-  for (const entry of fs.readdirSync(rootPath, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const manifestPath = path.join(rootPath, entry.name, 'plugin.json');
-    if (fs.existsSync(manifestPath)) return manifestPath;
-  }
-  return null;
-}
-
-ipcMain.handle('app:importExtensionArchive', async (_, archivePath: string) => {
-  const resolvedArchivePath = path.resolve(archivePath);
-  if (!fs.existsSync(resolvedArchivePath)) {
-    throw new Error(`Archive not found: ${resolvedArchivePath}`);
-  }
-  if (path.extname(resolvedArchivePath).toLowerCase() !== '.zip') {
-    throw new Error('Only .zip extension packages are supported right now');
-  }
-
-  const extensionRoot = getUserExtensionsPath();
-  fs.mkdirSync(extensionRoot, { recursive: true });
-  const tempRoot = fs.mkdtempSync(path.join(app.getPath('temp'), 'dnote-extension-'));
-  await runShellCommand(
-    `ditto -x -k ${quoteShellArg(resolvedArchivePath)} ${quoteShellArg(tempRoot)}`,
-    tempRoot,
-    getSecureEnv()
-  );
-
-  const manifestPath = findPluginManifest(tempRoot);
-  if (!manifestPath) {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-    throw new Error('Extension package must contain plugin.json at root or inside one top-level folder');
-  }
-
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-  const extensionId = String(manifest.id || path.basename(path.dirname(manifestPath))).trim();
-  if (!extensionId) {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-    throw new Error('Extension plugin.json must declare an id');
-  }
-
-  const packageRoot = path.dirname(manifestPath);
-  let targetPath = path.join(extensionRoot, extensionId);
-  let index = 2;
-  while (fs.existsSync(targetPath)) {
-    targetPath = path.join(extensionRoot, `${extensionId}-${index}`);
-    index += 1;
-  }
-  fs.renameSync(packageRoot, targetPath);
-  fs.rmSync(tempRoot, { recursive: true, force: true });
-  return {
-    extensionPath: targetPath,
-    extensions: listUserExtensions(),
-  };
-});
-
-ipcMain.handle('app:getEnvironmentStatus', async () => {
-  const [uv, python, python3, agy, node, git, mpv] = await Promise.all([
-    checkTool('uv'),
-    checkTool('python'),
-    checkTool('python3'),
-    checkTool('agy'),
-    checkTool('node'),
-    checkTool('git'),
-    checkTool('mpv'),
-  ]);
-  return {
-    shell: {
-      available: Boolean(process.env.SHELL),
-      path: process.env.SHELL || '',
-    },
-    uv,
-    python: python.available ? python : python3,
-    python3,
-    agy,
-    node,
-    git,
-    mpv,
-  };
-});
-
-ipcMain.handle('app:inspectProjectEnvironment', async (_, projectPath: string) => {
-  return inspectProjectEnvironment(projectPath, getSecureEnv());
-});
-
-ipcMain.handle('app:repairProjectEnvironment', async (_, projectPath: string) => {
-  assertWritableTarget(projectPath, 'repairProjectEnvironment');
-  return repairProjectEnvironment(projectPath, getSecureEnv());
-});
-
-ipcMain.handle('app:ensureNotebookProjectDeclaration', async (_, projectPath: string) => {
-  const resolvedProjectPath = path.resolve(projectPath);
-  assertWritableTarget(resolvedProjectPath, 'ensureNotebookProjectDeclaration');
-  fs.mkdirSync(resolvedProjectPath, { recursive: true });
-
-  const pyprojectPath = path.join(resolvedProjectPath, 'pyproject.toml');
-  const commandDir = path.join(resolvedProjectPath, 'command');
-  const commandsPath = path.join(commandDir, 'commands.json');
-  const scriptDir = path.join(resolvedProjectPath, 'script');
-  const created: string[] = [];
-
-  if (!fs.existsSync(pyprojectPath)) {
-    const projectName = path.basename(resolvedProjectPath).toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-    fs.writeFileSync(pyprojectPath, `[project]
-name = "${projectName || 'dnote-project'}"
-version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = []
-`, 'utf-8');
-    created.push(pyprojectPath);
-  }
-
-  if (!fs.existsSync(commandsPath)) {
-    fs.mkdirSync(commandDir, { recursive: true });
-    fs.writeFileSync(commandsPath, JSON.stringify({ commands: [] }, null, 2), 'utf-8');
-    created.push(commandsPath);
-  }
-
-  if (!fs.existsSync(scriptDir)) {
-    fs.mkdirSync(scriptDir, { recursive: true });
-    created.push(scriptDir);
-  }
-
-  return { projectPath: resolvedProjectPath, created };
-});
-
-ipcMain.handle('app:inspectPluginEnvironment', async (_, extensionId: string) => {
-  const extension = listUserExtensions().find((item) => item.id === extensionId);
-  if (!extension) throw new Error(`Extension not found: ${extensionId}`);
-  return inspectPluginEnvironment(extension.id, extension.path, extension.manifestPath, getSecureEnv());
-});
-
-ipcMain.handle('app:repairPluginEnvironment', async (_, extensionId: string) => {
-  const extension = listUserExtensions().find((item) => item.id === extensionId);
-  if (!extension) throw new Error(`Extension not found: ${extensionId}`);
-  assertWritableTarget(extension.path, 'repairPluginEnvironment');
-  return repairPluginEnvironment(extension.id, extension.path, extension.manifestPath, getSecureEnv());
-});
-
-ipcMain.handle('app:logRendererError', (_, errorMsg: any) => {
-  try {
-    const logPath = getGaloisLogPath('renderer_error.log');
-    ensureParentDir(logPath);
-    fs.appendFileSync(logPath, JSON.stringify(errorMsg) + '\n', 'utf-8');
-    return true;
-  } catch (err) {
-    console.error('Failed to log renderer error:', err);
-    return false;
-  }
-});
-
-ipcMain.handle('app:getDevDefault', () => ensureDefaultNotebookProject());
-
-ipcMain.handle('app:getClassicCodeWorkspace', () => ({
-  sourcePath: getClassicCodeSourcePath(),
-  workspacePath: getClassicCodeWorkspacePath(),
-}));
-
-ipcMain.handle('app:restoreClassicCodeWorkspace', () => syncClassicCodeWorkspace(true));
-
 const { getDefaultAppConfig } = createAppConfigIpc({
   BUILTIN_THEME_FILES,
   ensureParentDir,
@@ -1161,128 +884,4 @@ const { ensureDefaultNotebookProject, getDefaultNotebookProjectPath, initUserDat
   getSecureEnv,
   quoteShellArg,
 });
-// ── PTY Terminal Manager (node-pty) ──────────────────────────────────────────
-// Uses a real PTY — same as VS Code, Hyper, Warp. Supports TUI apps (agy, vim, etc.)
-type PtyProcess = import('node-pty').IPty;
-type PtyListener = import('node-pty').IDisposable;
-
-const ptyProcesses = new Map<string, PtyProcess>();
-const ptyListeners = new Map<string, PtyListener>();
-
-ipcMain.handle('terminal:spawn', (event, id: string, cwd: string, cols: number, rows: number) => {
-  let ptyProcess = ptyProcesses.get(id);
-
-  // Clean up any old listener bound to a previous (potentially destroyed) WebContents
-  const oldListener = ptyListeners.get(id);
-  if (oldListener) {
-    oldListener.dispose();
-    ptyListeners.delete(id);
-  }
-
-  if (ptyProcess) {
-    // Re-bind listener to the new active window's WebContents
-    const listener = ptyProcess.onData((data) => {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send(`terminal:output:${id}`, data);
-      }
-    });
-    ptyListeners.set(id, listener);
-    return true;
-  }
-
-  let shell = 'zsh';
-  if (process.platform === 'win32') {
-    shell = 'cmd.exe';
-  } else {
-    const envShell = process.env.SHELL;
-    if (envShell && fs.existsSync(envShell)) {
-      shell = envShell;
-    } else if (fs.existsSync('/bin/zsh')) {
-      shell = '/bin/zsh';
-    } else if (fs.existsSync('/bin/bash')) {
-      shell = '/bin/bash';
-    } else {
-      shell = 'zsh';
-    }
-  }
-
-  let spawnCwd = cwd;
-  if (!spawnCwd || !fs.existsSync(spawnCwd)) {
-    spawnCwd = os.homedir();
-  }
-
-  try {
-    const pty = require('node-pty') as typeof import('node-pty');
-    ptyProcess = pty.spawn(shell, [], {
-      name: 'xterm-256color',
-      cols: cols || 80,
-      rows: rows || 24,
-      cwd: spawnCwd,
-      env: getSecureEnv() as Record<string, string>,
-    });
-
-    const listener = ptyProcess.onData((data) => {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send(`terminal:output:${id}`, data);
-      }
-    });
-    ptyListeners.set(id, listener);
-
-    ptyProcess.onExit(() => {
-      ptyProcesses.delete(id);
-      const listenerToDispose = ptyListeners.get(id);
-      if (listenerToDispose) {
-        listenerToDispose.dispose();
-        ptyListeners.delete(id);
-      }
-      if (!event.sender.isDestroyed()) {
-        event.sender.send(`terminal:exit:${id}`);
-      }
-    });
-
-    ptyProcesses.set(id, ptyProcess);
-    return true;
-  } catch (err: any) {
-    console.error('[terminal:spawn pty error]', err);
-    throw err;
-  }
-});
-
-ipcMain.handle('terminal:write', (_, id: string, data: string) => {
-  const ptyProcess = ptyProcesses.get(id);
-  if (ptyProcess) {
-    ptyProcess.write(data);
-    return true;
-  }
-  return false;
-});
-
-ipcMain.handle('terminal:resize', (_, id: string, cols: number, rows: number) => {
-  const ptyProcess = ptyProcesses.get(id);
-  if (ptyProcess) {
-    ptyProcess.resize(cols, rows);
-    return true;
-  }
-  return false;
-});
-
-ipcMain.handle('terminal:kill', (_, id: string) => {
-  const ptyProcess = ptyProcesses.get(id);
-  if (ptyProcess) {
-    ptyProcess.kill();
-    ptyProcesses.delete(id);
-  }
-  const listener = ptyListeners.get(id);
-  if (listener) {
-    listener.dispose();
-    ptyListeners.delete(id);
-  }
-  return true;
-});
-
-app.on('will-quit', () => {
-  for (const [_, ptyProcess] of ptyProcesses) {
-    ptyProcess.kill();
-  }
-  ptyProcesses.clear();
-});
+registerTerminalIpcHandlers(getSecureEnv);
