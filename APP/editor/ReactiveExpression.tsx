@@ -2,20 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { parseExpression, getNestedValue, setNestedValue } from './editorUtils';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
 import { ReactiveMarkdownValue } from './ReactiveMarkdownValue';
-
-interface ReactiveExpressionProps {
-  rawExpression: string;
-  areaId: string;
-  projectPath: string;
-  state: Record<string, any>;
-  updateBloodKey: (key: string, value: any) => void;
-  currentFile: string;
-  lineIndex: number;
-  onRequestEdit?: () => void;
-  handleLinkClick?: (targetNodeText: string) => void;
-  slashCommands?: any[];
-  getShortcutDisplay?: (id: string) => string;
-}
+import type { ReactiveExpressionProps } from './ReactiveExpression.types';
 
 export function ReactiveExpression({
   rawExpression,
