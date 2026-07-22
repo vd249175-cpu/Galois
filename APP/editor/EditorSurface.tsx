@@ -16,7 +16,7 @@ const LiveMarkdownEditor = React.lazy(async () => {
 });
 
 export function EditorSurface(props: any) {
-  const { activeTags, allCommands, allManageableActions, allProjectTags, areaId, content, currentFile,
+  const { activeTags, allCommands, allManageableActions, allProjectTags, areaId, bodyTags, content, currentFile,
     customCommands, editorMode, editorShortcuts, expandedRule, filteredCommands, getShortcutDisplay,
     handleAddCustomCommand, handleAddTag, handleDeleteCustomCommand, handleDeleteTagGroup, handleDragEnter,
     handleDragLeave, handleDragOver, handleDropAtIndex, handleEditorDrop, handleExecuteCommand, handleFocus,
@@ -56,6 +56,7 @@ return (
 
     <TagToolbar
       currentFile={currentFile}
+      bodyTags={bodyTags}
       tags={tags}
       handleRemoveTag={handleRemoveTag}
       ruleMatches={ruleMatches}

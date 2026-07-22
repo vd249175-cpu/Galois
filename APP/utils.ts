@@ -56,9 +56,28 @@ export function parseFrontmatterTags(content: string): string[] {
 export function extractBodyHashtags(content: string): string[] {
   const resolved = new Set<string>();
   const bodyText = parseMarkdownBody(content);
+  const searchableLines: string[] = [];
+  let fencedCodeMarker = '';
+  for (const line of bodyText.split('\n')) {
+    const fence = line.match(/^\s*(`{3,}|~{3,})/);
+    if (fence) {
+      const marker = fence[1][0];
+      if (!fencedCodeMarker) fencedCodeMarker = marker;
+      else if (fencedCodeMarker === marker) fencedCodeMarker = '';
+      searchableLines.push('');
+      continue;
+    }
+    if (fencedCodeMarker) {
+      searchableLines.push('');
+      continue;
+    }
+    // Inline code is literal Markdown and must never create note tags.
+    searchableLines.push(line.replace(/(`+)(.*?)\1/g, ''));
+  }
+  const searchableBody = searchableLines.join('\n');
   const tagChar = String.raw`[\p{L}\p{N}_-]`;
-  const hashtagRegex = new RegExp(String.raw`(?:^|[^\p{L}\p{N}_#/-])#(${tagChar}+(?:/${tagChar}+)*)`, 'gu');
-  for (const match of bodyText.matchAll(hashtagRegex)) {
+  const hashtagRegex = new RegExp(String.raw`(?:^|[^\p{L}\p{N}_#/\\-])#(${tagChar}+(?:/${tagChar}+)*)`, 'gu');
+  for (const match of searchableBody.matchAll(hashtagRegex)) {
     const val = match[1].trim();
     if (val && isNaN(Number(val))) resolved.add(val);
   }

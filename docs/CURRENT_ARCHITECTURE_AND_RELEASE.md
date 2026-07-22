@@ -82,6 +82,13 @@ editable files inside hidden application support folders.
   expressions plus multiline `$$...$$` and `\[...\]` display blocks use the same
   `MarkdownPreview` path for ordinary notes and reactive/generated Markdown.
   Fenced and inline code are protected before math parsing.
+- Safe inline HTML remains an explicit allowlist rather than unrestricted raw
+  HTML. `<kbd>...</kbd>` is supported by the shared inline renderer, including
+  table cells and reactive/generated Markdown.
+- Frontmatter `tags:` are manually managed tags. Body `#hashtags` are derived
+  tags and are never copied into Frontmatter during load or save. The top tag
+  toolbar may remove only manual tags; body tags are source-labelled and must be
+  changed in the Markdown body.
 - Runtime/cache files such as `.dnote_runtime.json` and `.dnote_cache/` remain
   project-local and should not be packaged into the starter template.
 - Editor undo/redo history is project-local too:

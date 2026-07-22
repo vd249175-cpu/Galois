@@ -2,6 +2,7 @@ import React from 'react';
 
 interface TagToolbarProps {
   currentFile: string;
+  bodyTags: string[];
   tags: string[];
   handleRemoveTag: (tag: string) => void;
   ruleMatches: Record<string, string[]>;
@@ -18,6 +19,7 @@ interface TagToolbarProps {
 
 export function TagToolbar({
   currentFile,
+  bodyTags,
   tags,
   handleRemoveTag,
   ruleMatches,
@@ -98,6 +100,30 @@ export function TagToolbar({
             >
               &times;
             </button>
+          </span>
+        ))}
+
+        {/* Body hashtags are derived from Markdown and intentionally not
+            removable here. Editing YAML must never rewrite note prose. */}
+        {bodyTags.map((tag) => (
+          <span
+            key={`body_tag_${tag}`}
+            title={`正文派生标签：请在正文中修改或删除 #${tag}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '11px',
+              fontWeight: 600,
+              backgroundColor: 'transparent',
+              color: 'var(--text-muted)',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              border: '1px dashed var(--border-color)',
+            }}
+          >
+            #{tag}
+            <span style={{ fontSize: '9px', opacity: 0.72 }}>正文</span>
           </span>
         ))}
 

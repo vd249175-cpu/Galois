@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
 import { extractBodyHashtags, parseFrontmatterTags } from '../utils';
-import { updateYamlFrontmatterTags } from './editorUtils';
 import { useMediaDrop } from './hooks/useMediaDrop';
 import { useLinkNavigator } from './hooks/useLinkNavigator';
 import { BC } from '../../CORE/BloodChannels';
@@ -68,6 +67,8 @@ export function EditorView({
   const textareaRef = useRef<EditorTextHandle>(null);
   const contentRef = useRef(content);
   contentRef.current = content;
+  const currentFileRef = useRef(currentFile);
+  currentFileRef.current = currentFile;
   const tagsRef = useRef(tags);
   tagsRef.current = tags;
   const lastSavedContentRef = useRef<string>('');
@@ -86,45 +87,26 @@ export function EditorView({
     restoredCursorForFileRef.current = '';
   }, [currentFile]);
 
-  const mergeInlineTagsIntoFrontmatter = (draft: string) => {
-    const frontmatterTags = parseFrontmatterTags(draft);
-    const inlineTags = extractBodyHashtags(draft);
-    if (inlineTags.length === 0) {
-      return { text: draft, tags: frontmatterTags, changed: false, delta: 0 };
-    }
-    const mergedTags = Array.from(new Set([...frontmatterTags, ...inlineTags])).sort();
-    const missingInlineTag = inlineTags.some((tag) => !frontmatterTags.includes(tag));
-    if (!missingInlineTag) {
-      return { text: draft, tags: mergedTags, changed: false, delta: 0 };
-    }
-    const nextText = updateYamlFrontmatterTags(draft, mergedTags);
-    return { text: nextText, tags: mergedTags, changed: nextText !== draft, delta: nextText.length - draft.length };
-  };
+  // YAML tags are manually managed. Body #hashtags remain derived tags and
+  // must not be copied into frontmatter during load/save, otherwise removing a
+  // manual tag immediately recreates it from the body.
+  const readMarkdownTagState = (draft: string) => ({
+    text: draft,
+    tags: parseFrontmatterTags(draft),
+  });
 
   // ── saveNodeFile ──────────────────────────────────────────────────────────
   const saveNodeFile = async (customContent?: string) => {
     if (!currentFile) { setStatusMessage('无打开的笔记可保存'); return; }
     const sourceContent = customContent !== undefined ? customContent : contentRef.current;
-    const normalized = mergeInlineTagsIntoFrontmatter(sourceContent);
+    const normalized = readMarkdownTagState(sourceContent);
     const fullContent = normalized.text;
     if (fullContent === lastSavedContentRef.current) return;
     try {
       pendingInternalContentRef.current = fullContent;
       await (window as any).electronAPI.writeFile(currentFile, fullContent);
       lastSavedContentRef.current = fullContent;
-      if (normalized.changed) {
-        const editor = textareaRef.current;
-        const selectionStart = editor?.selectionStart ?? 0;
-        const selectionEnd = editor?.selectionEnd ?? selectionStart;
-        const scroll = editor?.getScrollPosition?.();
-        setTags(normalized.tags);
-        setContent(fullContent);
-        requestAnimationFrame(() => {
-          if (!textareaRef.current) return;
-          textareaRef.current.setSelectionRange(selectionStart + normalized.delta, selectionEnd + normalized.delta);
-          if (scroll) textareaRef.current.setScrollPosition?.(scroll.top, scroll.left);
-        });
-      }
+      setTags(normalized.tags);
       setStatusMessage(`保存于 ${new Date().toLocaleTimeString()}`);
       updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
 
@@ -237,8 +219,8 @@ export function EditorView({
 
   const fileSavedEvent = state[BC.events.fileSaved(openedFile)] || 0;
   useEditorFileLoader({
-    areaId, contentRef, fileSavedEvent, lastSavedContentRef, mergeInlineTagsIntoFrontmatter,
-    openedFile, setContent, setCurrentFile, setEditorMode, setStatusMessage, setTags, updateBloodKey,
+    areaId, contentRef, currentFile, fileSavedEvent, lastSavedContentRef, readMarkdownTagState,
+    openedFile, setContent, setCurrentFile, setEditorMode, setStatusMessage, setTags,
   });
 
   useExternalFileSync({
@@ -247,7 +229,7 @@ export function EditorView({
     lastSavedContentRef,
     pendingInternalContentRef,
     autoSaveTimerRef,
-    normalizeMarkdown: mergeInlineTagsIntoFrontmatter,
+    normalizeMarkdown: readMarkdownTagState,
     applyExternalContent: (nextContent, nextTags) => {
       setTags(nextTags);
       setContent(nextContent);
@@ -262,8 +244,9 @@ export function EditorView({
   useEditorTagResolution({ content, currentFile, projectPath, setActiveTags, setRuleMatches, state, tags });
   // ── Tag update helper ──────────────────────────────────────────────────
   const { handleAddTag, handleRemoveTag, handleUpdateTags } = useEditorTags({
-    contentRef, currentFile, lastSavedContentRef, markHistoryContent, newTagInput,
-    pushStateToUndoStack, setContent, setNewTagInput, setStatusMessage, setTags, tags, textareaRef, updateBloodKey,
+    contentRef, currentFile, currentFileRef, lastSavedContentRef, markHistoryContent, newTagInput,
+    pendingInternalContentRef, pushStateToUndoStack, setContent, setNewTagInput, setStatusMessage,
+    setTags, tagsRef, textareaRef, updateBloodKey,
   });
   const { handleDeleteCurrentFile, handleRenameCurrentFile, handleSetAsTemplate } = useEditorFileActions({
     contentRef, currentFile, projectPath, setStatusMessage, showPrompt, state, updateBloodKey,
@@ -291,6 +274,7 @@ export function EditorView({
   return (
     <EditorSurface
         activeTags={activeTags}
+        bodyTags={extractBodyHashtags(content).filter((tag) => !tags.includes(tag))}
         allCommands={allCommands}
         allManageableActions={allManageableActions}
         allProjectTags={allProjectTags}

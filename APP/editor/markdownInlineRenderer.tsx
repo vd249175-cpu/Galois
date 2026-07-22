@@ -96,6 +96,38 @@ export function createInlineRenderer(options: any) {
       );
     });
 
+    // 0.25 Safe inline HTML subset: render keyboard chords without enabling
+    // arbitrary raw HTML. This works in paragraphs, generated Markdown and
+    // table cells because all three use the same inline renderer.
+    parts = splitByRegex(parts, /<kbd>([\s\S]*?)<\/kbd>/gi, (match, idx) => (
+      <kbd
+        key={`html_kbd_${lineIndex}_${idx}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minWidth: '1.5em',
+          minHeight: '1.55em',
+          padding: '0.08em 0.42em',
+          margin: '0 0.08em',
+          border: '1px solid var(--border-color)',
+          borderBottomWidth: '2px',
+          borderRadius: '5px',
+          background: 'var(--bg-input, rgba(0,0,0,0.035))',
+          color: 'var(--text-main)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.86em',
+          fontWeight: 650,
+          lineHeight: 1.2,
+          boxShadow: '0 1px 0 rgba(0,0,0,0.08)',
+          verticalAlign: 'middle',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {renderInline(match[1], lineIndex)}
+      </kbd>
+    ));
+
     // 0.5 HTML Spans with inline styles (e.g. for rainbow colors)
     parts = splitByRegex(parts, /<span\s+[^>]*?style=["']([^"']*)["'][^>]*?>([\s\S]*?)<\/span>/gi, (match, idx) => {
       const styleStr = match[1];
@@ -314,4 +346,3 @@ export function createInlineRenderer(options: any) {
 
   return renderInline;
 }
-

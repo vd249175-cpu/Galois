@@ -1,47 +1,77 @@
-import type React from 'react';
+import { useRef, type FormEvent } from 'react';
 import { BC } from '../../CORE/BloodChannels';
-import { updateYamlFrontmatterTags } from './editorUtils';
+import { normalizeManualTags, updateYamlFrontmatterTags } from './editorUtils';
 
 export function useEditorTags(props: any) {
-  const { contentRef, currentFile, lastSavedContentRef, markHistoryContent, newTagInput,
-    pushStateToUndoStack, setContent, setNewTagInput, setStatusMessage, setTags, tags, textareaRef, updateBloodKey } = props;
-const handleUpdateTags = async (nextTags: string[]) => {
-  if (!currentFile) return;
-  const cleanTags = Array.from(new Set(nextTags.map((t) => t.trim()).filter(Boolean))).sort();
-  setTags(cleanTags);
-  const fullContent = updateYamlFrontmatterTags(contentRef.current, cleanTags);
-  if (fullContent === lastSavedContentRef.current) return;
+  const { contentRef, currentFile, currentFileRef, lastSavedContentRef, markHistoryContent, newTagInput,
+    pendingInternalContentRef, pushStateToUndoStack, setContent, setNewTagInput, setStatusMessage,
+    setTags, tagsRef, textareaRef, updateBloodKey } = props;
+  const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const updateRevisionRef = useRef(0);
 
-  if (textareaRef.current) {
-    pushStateToUndoStack(contentRef.current, textareaRef.current.selectionStart, textareaRef.current.selectionEnd);
-  } else {
-    pushStateToUndoStack(contentRef.current, 0, 0);
-  }
+  const handleUpdateTags = async (nextTags: string[]) => {
+    if (!currentFile) return;
+    const targetFile = currentFile;
+    const cleanTags = normalizeManualTags(nextTags);
+    const previousContent = contentRef.current;
+    const previousTags = tagsRef.current;
+    const fullContent = updateYamlFrontmatterTags(previousContent, cleanTags);
+    if (fullContent === previousContent) {
+      tagsRef.current = cleanTags;
+      setTags(cleanTags);
+      return;
+    }
 
-  setContent(fullContent);
-  markHistoryContent(fullContent);
-  try {
-    await (window as any).electronAPI.writeFile(currentFile, fullContent);
-    lastSavedContentRef.current = fullContent;
-    setStatusMessage('标签已更新。');
-    updateBloodKey(BC.events.fileSaved(currentFile), Date.now());
-  } catch (err: any) {
-    console.error('[Editor] Tag update failed:', err);
-    alert(`更新标签失败: ${err.message}`);
-  }
-};
+    const revision = ++updateRevisionRef.current;
+    tagsRef.current = cleanTags;
+    setTags(cleanTags);
 
-const handleAddTag = (e: React.FormEvent) => {
-  e.preventDefault();
-  const cleanInput = newTagInput.trim();
-  if (!cleanInput) return;
-  handleUpdateTags([...tags, cleanInput]);
-  setNewTagInput('');
-};
+    if (textareaRef.current) {
+      pushStateToUndoStack(previousContent, textareaRef.current.selectionStart, textareaRef.current.selectionEnd);
+    } else {
+      pushStateToUndoStack(previousContent, 0, 0);
+    }
 
-const handleRemoveTag = (tagToRemove: string) => {
-  handleUpdateTags(tags.filter((t: string) => t !== tagToRemove));
-};
+    contentRef.current = fullContent;
+    setContent(fullContent);
+    markHistoryContent(fullContent);
+    const write = async () => {
+      try {
+        pendingInternalContentRef.current = fullContent;
+        await (window as any).electronAPI.writeFile(targetFile, fullContent);
+        if (currentFileRef.current === targetFile) {
+          lastSavedContentRef.current = fullContent;
+          if (revision === updateRevisionRef.current) setStatusMessage('手动标签已更新。');
+        }
+        updateBloodKey(BC.events.fileSaved(targetFile), Date.now());
+      } catch (err: any) {
+        console.error('[Editor] Tag update failed:', err);
+        if (revision === updateRevisionRef.current && currentFileRef.current === targetFile) {
+          contentRef.current = previousContent;
+          tagsRef.current = previousTags;
+          setContent(previousContent);
+          setTags(previousTags);
+          setStatusMessage(`标签更新失败: ${err.message || String(err)}`);
+        }
+      } finally {
+        if (pendingInternalContentRef.current === fullContent) pendingInternalContentRef.current = null;
+      }
+    };
+    writeQueueRef.current = writeQueueRef.current.catch(() => undefined).then(write);
+    await writeQueueRef.current;
+  };
+
+  const handleAddTag = (e: FormEvent) => {
+    e.preventDefault();
+    const cleanInput = newTagInput.trim();
+    if (!cleanInput) return;
+    void handleUpdateTags([...tagsRef.current, cleanInput]);
+    setNewTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    void handleUpdateTags(tagsRef.current.filter((tag: string) => tag !== tagToRemove));
+  };
 
   return { handleAddTag, handleRemoveTag, handleUpdateTags };
 }
