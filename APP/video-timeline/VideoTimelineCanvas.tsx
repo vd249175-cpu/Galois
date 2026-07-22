@@ -2,7 +2,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import { BC } from '../../CORE/BloodChannels';
 import {
   VideoSegment,
-  loadAsset,
   buildClipMarkdown,
 } from './VideoAssetManager';
 import { useFrameReference } from './useFrameReference';
@@ -10,13 +9,19 @@ import { VideoTimelineStyles } from './VideoTimelineStyles';
 import { VideoTimelineHome } from './VideoTimelineHome';
 import { VideoTimelineActive } from './VideoTimelineActive';
 import { renderFilmstripSlots as renderVideoFilmstripSlots } from './filmstripSlots';
-import { extractVideoThumbnails } from './extractVideoThumbnails';
 import { useSavedVideoAssets } from './useSavedVideoAssets';
 import { useVideoTimelinePersistence } from './useVideoTimelinePersistence';
 import { useTimelineViewport } from './useTimelineViewport';
+import { useVideoAssetRestore } from './useVideoAssetRestore';
 
 
 
+
+const generateColor = (index: number) => `hsl(${(index * 137.5) % 360}, 70%, 45%)`;
+const formatTimeShort = (time: number) => {
+  if (isNaN(time)) return '00:00';
+  return `${Math.floor(time / 60).toString().padStart(2, '0')}:${Math.floor(time % 60).toString().padStart(2, '0')}`;
+};
 
 export function VideoTimelineView({
   areaId,
@@ -103,81 +108,17 @@ export function VideoTimelineView({
   });
 
   useTimelineViewport({ containerWidth, currentTime, duration, isPlaying, setContainerWidth, timelineRef, videoPath });
+  useVideoAssetRestore({
+    areaId, duration, projectPath, setIsAssetLoaded, setIsExtractingThumbnails, setSegments,
+    setSelectedSegmentIds, setThumbnails, videoPath,
+  });
 
-  // Generate HSL colors dynamically
-  const generateColor = (index: number) => {
-    const hue = (index * 137.5) % 360; // golden angle distribution
-    return `hsl(${hue}, 70%, 45%)`;
-  };
-
-  // Format Helper: mm:ss
-  const formatTimeShort = (time: number) => {
-    if (isNaN(time)) return '00:00';
-    const mins = Math.floor(time / 60);
-    const secs = Math.floor(time % 60);
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Setup initial segments and load asset when duration, videoPath, and projectPath are resolved
-  useEffect(() => {
-    const projectPath = state[BC.system.projectPath] || '';
-    console.log('[VideoTimeline] restoreAsset hook fired:', { projectPath, videoPath, duration });
-    if (!projectPath || !videoPath || duration <= 0 || isNaN(duration)) {
-      console.log('[VideoTimeline] restoreAsset hook skipped (incomplete parameters)');
-      return;
-    }
-
-    let active = true;
-    const restoreAsset = async () => {
-      console.log('[VideoTimeline] restoreAsset: Loading asset JSON...');
-      const asset = await loadAsset(projectPath, videoPath);
-      if (!active) {
-        console.log('[VideoTimeline] restoreAsset: hook unmounted during load, aborting');
-        return;
-      }
-
-      if (asset && asset.segments.length > 0) {
-        console.log('[VideoTimeline] restoreAsset success: loaded segments:', asset.segments);
-        setSegments(asset.segments);
-        setSelectedSegmentIds(new Set([asset.segments[0].id]));
-      } else {
-        // No saved asset — create the default full-video segment
-        console.log('[VideoTimeline] restoreAsset: no saved asset found. Creating default segment.');
-        const defaultSeg: VideoSegment = {
-          id: 'seg-1',
-          start: 0,
-          end: duration,
-          name: `${formatTimeShort(0)} - ${formatTimeShort(duration)}`,
-          color: generateColor(0),
-        };
-        setSegments([defaultSeg]);
-        setSelectedSegmentIds(new Set(['seg-1']));
-      }
-
-      setIsAssetLoaded(true);
-      console.log('[VideoTimeline] restoreAsset complete. Triggering extractThumbnails...');
-      extractThumbnails(videoPath, duration, projectPath);
-    };
-
-    restoreAsset();
-
-    return () => {
-      active = false;
-    };
-  }, [state[BC.system.projectPath], videoPath, duration]);
-
-  // Setup video duration when video metadata is resolved
   const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      const dur = videoRef.current.duration;
-      console.log('[VideoTimeline] Loaded video metadata: duration =', dur);
-      setDuration(dur);
-    }
+    if (!videoRef.current) return;
+    const dur = videoRef.current.duration;
+    console.log('[VideoTimeline] Loaded video metadata: duration =', dur);
+    setDuration(dur);
   };
-
-  // Dual-mode fast frame extractor (FFmpeg background command with HTML5 fallback)
-  const extractThumbnails = (path: string, dur: number, projectPath: string) =>
-    extractVideoThumbnails({ areaId, path, dur, projectPath, setIsExtractingThumbnails, setThumbnails });
 
   const handleTimeUpdate = () => {
     if (videoRef.current && !isScrubbingRef.current && !videoRef.current.seeking) {
