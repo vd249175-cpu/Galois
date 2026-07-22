@@ -14,7 +14,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { terminalActions } from './actions';
 import { Blood, useBloodChannel } from '../../CORE/Blood';
 import { BC } from '../../CORE/BloodChannels';
 import '@xterm/xterm/css/xterm.css';
@@ -45,37 +44,9 @@ const xtermInstances = new Map<string, XTermInstance>();
 const BLOOD_TABS       = BC.system.terminalTabs;
 const BLOOD_ACTIVE_TAB = BC.system.terminalActiveTabId;
 
-// ─── Plugin manifest ──────────────────────────────────────────────────────────
-
-export const TerminalComponent = {
-  typeId: 'terminal',
-  displayName: '终端控制台',
-  shortName: '控制台',
-  iconName: 'terminal',
-  icon: (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-      <path d="M4 6.5l2 1.5-2 1.5" />
-      <line x1="7.5" y1="9.5" x2="10.5" y2="9.5" />
-    </svg>
-  ),
-  component: TerminalView,
-  actions: terminalActions,
-  bloodChannels: [BC.system.projectPath, BC.system.agentWorkspace, BC.system.config],
-  manifest: {
-    description: '原生 PTY 终端（xterm.js + node-pty），并提供系统 Terminal AGY 启动入口',
-    reads: [BC.system.projectPath, BC.system.agentWorkspace, BC.system.config],
-    writes: [
-      BC.system.terminalTabs,         // Tab 列表持久化到 Blood
-      BC.system.terminalActiveTabId,  // 活跃 Tab ID
-    ],
-    dependsOn: [],
-  },
-};
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-function TerminalView({
+export function TerminalView({
   areaId,
   lastAction,
 }: {

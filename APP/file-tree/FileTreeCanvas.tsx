@@ -1,17 +1,14 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { calculateAllResolvedTags } from './tagResolver';
 import { useProjectLifecycle } from './useProjectLifecycle';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
-import { updateYamlFrontmatterIcon } from '../utils';
 import { Blood } from '../../CORE/Blood';
 import { FileInfo } from './types';
 import { tokenizeQuery, matchesTagQuery, matchesFilename } from './searchHelpers';
 import { useProjectHistory } from './useProjectHistory';
-import { TemplateModal } from './TemplateModal';
-import { PromptModal } from './PromptModal';
-import { IconPickerModal } from './IconPickerModal';
-import { HistoryProjectsMenu } from './HistoryProjectsMenu';
-import { FileCard } from './FileCard';
+import { FileTreeSurface } from './FileTreeSurface';
+import { useFileTreeSearch } from './useFileTreeSearch';
+import { useFileTreeTemplates } from './useFileTreeTemplates';
 
 export function FileTreeView({
   state,
@@ -30,11 +27,7 @@ export function FileTreeView({
   );
 
   const [files, setFiles] = useState<FileInfo[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedPath, setSelectedPath] = useState('');
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showAutocomplete, setShowAutocomplete] = useState(false);
-  const [autocompleteIndex, setAutocompleteIndex] = useState(0);
   const linkedSearchQuery = state[BC.system.fileSearchQuery] || '';
 
   const [showHistoryMenu, setShowHistoryMenu] = useState(false);
@@ -62,178 +55,17 @@ export function FileTreeView({
     return () => document.removeEventListener('mousedown', handleGlobalClick);
   }, [showHistoryMenu]);
 
-  const allProjectTags = useMemo(() => {
-    const resolved = state[BC.system.resolvedTags] || {};
-    const staticTags = state[BC.system.staticTags] || {};
-    const set = new Set<string>();
-
-    for (const fileTags of Object.values(resolved)) {
-      if (Array.isArray(fileTags)) {
-        fileTags.forEach(t => {
-          if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
-            t.split('#').filter(Boolean).forEach((part: string) => set.add(part));
-          } else {
-            set.add(t);
-          }
-        });
-      }
-    }
-
-    for (const fileTags of Object.values(staticTags)) {
-      if (Array.isArray(fileTags)) {
-        fileTags.forEach(t => {
-          if (t && !t.startsWith('re:') && !t.startsWith('run:') && t.includes('#')) {
-            t.split('#').filter(Boolean).forEach((part: string) => set.add(part));
-          } else {
-            set.add(t);
-          }
-        });
-      }
-    }
-
-    return Array.from(set).sort();
-  }, [state[BC.system.resolvedTags], state[BC.system.staticTags]]);
-
-  const filteredSuggestions = useMemo(() => {
-    const match = searchQuery.match(/#([^\s#()]*)$/);
-    if (!match) return [];
-    const query = match[1].toLowerCase();
-    
-    const getSuggestionDisplay = (suggestion: string) => {
-      if (suggestion.startsWith('re:')) return suggestion.substring(3);
-      if (suggestion.startsWith('run:')) return suggestion.substring(4);
-      return suggestion;
-    };
-
-    return allProjectTags.filter((t) => {
-      const display = getSuggestionDisplay(t).toLowerCase();
-      return display.includes(query) || t.toLowerCase().includes(query);
-    });
-  }, [searchQuery, allProjectTags]);
-
-  const handleSelectSuggestion = (suggestion: string) => {
-    const match = searchQuery.match(/(.*)#([^\s#()]*)$/);
-    if (!match) return;
-    const prefix = match[1];
-    const replacement = `#${suggestion}`;
-    setSearchQuery(prefix + replacement + ' ');
-    setShowAutocomplete(false);
-  };
-
-  useEffect(() => {
-    if (linkedSearchQuery !== searchQuery) {
-      setSearchQuery(linkedSearchQuery);
-      setAutocompleteIndex(0);
-    }
-  }, [linkedSearchQuery]);
-
-  useEffect(() => {
-    if (searchQuery !== linkedSearchQuery) {
-      updateBloodKey(BC.system.fileSearchQuery, searchQuery);
-    }
-  }, [searchQuery]);
-  const [templateFiles, setTemplateFiles] = useState<{ name: string; path: string; content: string }[]>([]);
-  const [promptConfig, setPromptConfig] = useState<{
-    show: boolean;
-    title: string;
-    defaultValue: string;
-    onConfirm: (val: string) => void;
-  }>({ show: false, title: '', defaultValue: '', onConfirm: () => {} });
-
-  const showPrompt = (title: string, defaultValue: string, onConfirm: (val: string) => void) => {
-    setPromptConfig({ show: true, title, defaultValue, onConfirm });
-  };
-
-  const [iconPickerFile, setIconPickerFile] = useState<FileInfo | null>(null);
-
-  const handleSaveIcon = async (file: FileInfo, newIcon: string) => {
-    try {
-      const content = await (window as any).electronAPI.readFile(file.path);
-      const updated = updateYamlFrontmatterIcon(content, newIcon);
-      await (window as any).electronAPI.writeFile(file.path, updated);
-      setIconPickerFile(null);
-      updateBloodKey(BC.events.fileSaved(file.path), Date.now());
-    } catch (err: any) {
-      alert(`保存图标失败: ${err.message}`);
-    }
-  };
-
+  const {
+    autocompleteIndex, filteredSuggestions, handleSelectSuggestion, searchQuery,
+    setAutocompleteIndex, setSearchQuery, setShowAutocomplete, showAutocomplete,
+  } = useFileTreeSearch({
+    resolvedTags: state[BC.system.resolvedTags] || {},
+    staticTags: state[BC.system.staticTags] || {},
+    linkedSearchQuery,
+    updateBloodKey,
+  });
   // Project lifecycle scripts (on_project_open.py, on_project_run.py, on_project_close.py)
   useProjectLifecycle(projectPath);
-
-  const handleOpenTemplateModal = async () => {
-    if (!projectPath) {
-      alert('Please open a folder first.');
-      return;
-    }
-    const templeDir = `${projectPath}/temple`;
-    try {
-      let list: any[] = [];
-      try {
-        list = await (window as any).electronAPI.listDir(templeDir);
-      } catch (err: any) {
-        if (err.message.includes('ENOENT') || err.message.includes('no such file')) {
-          await (window as any).electronAPI.writeFile(`${templeDir}/.gitkeep`, '');
-          list = [];
-        } else {
-          throw err;
-        }
-      }
-      
-      const mdFiles = list.filter((f: any) => !f.isDir && f.name.endsWith('.md'));
-      const templates = await Promise.all(
-        mdFiles.map(async (file) => {
-          const content = await (window as any).electronAPI.readFile(file.path);
-          return {
-            name: file.name,
-            path: file.path,
-            content,
-          };
-        })
-      );
-      setTemplateFiles(templates);
-      setShowTemplateModal(true);
-    } catch (err: any) {
-      alert(`Failed to load templates: ${err.message}`);
-    }
-  };
-
-  const handleUseTemplate = async (template: { name: string; path: string; content: string }) => {
-    const defaultName = template.name.replace('.md', '');
-    showPrompt('Name your new note:', defaultName, async (name) => {
-      if (!name) return;
-
-      const cleanName = name.trim().endsWith('.md') ? name.trim() : `${name.trim()}.md`;
-      const fullPath = `${projectPath}/${cleanName}`;
-
-      const list = await (window as any).electronAPI.listDir(projectPath);
-      const exists = list.some((f: any) => f.name.toLowerCase() === cleanName.toLowerCase());
-      if (exists) {
-        alert('A note with this name already exists!');
-        return;
-      }
-
-      const sanitizedContent = template.content;
-      try {
-        await (window as any).electronAPI.writeFile(fullPath, sanitizedContent);
-        updateBloodKey(BC.events.fileSaved(fullPath), Date.now());
-        handleFileClick({ name: cleanName, path: fullPath, isDir: false, size: 0, tags: [] });
-        setShowTemplateModal(false);
-      } catch (err: any) {
-        alert(`Failed to create note from template: ${err.message}`);
-      }
-    });
-  };
-
-  const handleOpenTempleFolder = async () => {
-    if (!projectPath) return;
-    const templePath = `${projectPath}/temple`;
-    try {
-      await (window as any).electronAPI.execCommand(`open "${templePath}"`, projectPath);
-    } catch (err: any) {
-      console.error('[FileTree] Failed to open temple folder:', err);
-    }
-  };
 
   // Handle sidebar action triggers
   useEffect(() => {
@@ -423,6 +255,12 @@ export function FileTreeView({
     });
   };
 
+  const {
+    templateFiles, showTemplateModal, setShowTemplateModal, iconPickerFile, setIconPickerFile,
+    promptConfig, setPromptConfig, showPrompt, handleSaveIcon, handleOpenTemplateModal,
+    handleUseTemplate, handleOpenTempleFolder,
+  } = useFileTreeTemplates({ projectPath, updateBloodKey, handleFileClick });
+
   const filteredFiles = files.filter((f) => {
     if (!searchQuery.trim()) return true;
 
@@ -523,187 +361,13 @@ export function FileTreeView({
 
   const folderName = projectPath.split('/').pop() || projectPath;
 
-  return (
-    <div className="file-list" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '12px 10px 8px 10px', position: 'relative' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
-          <span style={{ fontSize: 'calc(var(--panel-title-size, 11px) - 2px)', fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-muted)', display: 'block', letterSpacing: '0.5px' }}>笔记本</span>
-          <span style={{ fontSize: 'var(--panel-title-size, 11px)', fontWeight: 600, color: 'var(--text-main)' }} title={projectPath}>{folderName}</span>
-        </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <button className="area-btn" onClick={handleCreateFile} title="新建笔记">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v10M3 8h10" /></svg>
-          </button>
-          <button className="area-btn" onClick={handleOpenFolder} title="切换目录">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M1.5 3.5a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1h-11a1 1 0 01-1-1v-9z" />
-              <path d="M4 10.5h8" />
-            </svg>
-          </button>
-          <button id="history-projects-btn" className="area-btn" onClick={() => setShowHistoryMenu(!showHistoryMenu)} title="历史项目" style={{ position: 'relative' }}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="8" cy="8" r="7" />
-              <path d="M8 3v5h3" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <HistoryProjectsMenu
-        show={showHistoryMenu}
-        displayedHistory={displayedHistory}
-        projectPath={projectPath}
-        demoPath={demoPath}
-        onSelectHistoryProject={handleSelectHistoryProject}
-      />
-
-      <div style={{ marginBottom: '10px', position: 'relative' }}>
-        <input
-          type="text"
-          placeholder="搜索... #标签 #正则(如 #^cal) 标题(如 ^标题) and or not"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setAutocompleteIndex(0);
-            setShowAutocomplete(true);
-          }}
-          onFocus={() => setShowAutocomplete(true)}
-          onBlur={() => {
-            setTimeout(() => setShowAutocomplete(false), 200);
-          }}
-          onKeyDown={(e) => {
-            if (showAutocomplete && filteredSuggestions.length > 0) {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setAutocompleteIndex((prev) => (prev + 1) % filteredSuggestions.length);
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setAutocompleteIndex((prev) => (prev - 1 + filteredSuggestions.length) % filteredSuggestions.length);
-              } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const selected = filteredSuggestions[autocompleteIndex];
-                if (selected) {
-                  handleSelectSuggestion(selected);
-                }
-              } else if (e.key === 'Escape') {
-                e.preventDefault();
-                setShowAutocomplete(false);
-              }
-            }
-          }}
-          style={{ width: '100%', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-main)', padding: '5px 8px', borderRadius: '6px', fontSize: 'var(--ui-font-size, 12px)', outline: 'none' }}
-        />
-
-        {showAutocomplete && filteredSuggestions.length > 0 && (
-          <div style={{
-            position: 'absolute',
-            top: '28px',
-            left: 0,
-            right: 0,
-            zIndex: 1000,
-            maxHeight: '160px',
-            overflowY: 'auto',
-            backgroundColor: 'var(--bg-main)',
-            border: '1.2px solid rgba(0, 0, 0, 0.12)',
-            borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            flexDirection: 'column',
-            padding: '2px',
-          }}>
-            {filteredSuggestions.map((suggestion, index) => {
-              const isSelected = index === autocompleteIndex;
-              const isRegex = suggestion.startsWith('re:');
-              const isScript = suggestion.startsWith('run:');
-              
-              const getSuggestionDisplay = (s: string) => {
-                if (s.startsWith('re:')) return s.substring(3);
-                if (s.startsWith('run:')) return s.substring(4);
-                return s;
-              };
-              const display = getSuggestionDisplay(suggestion);
-
-              return (
-                <div
-                  key={suggestion}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleSelectSuggestion(suggestion);
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    fontSize: 'calc(var(--ui-font-size, 12px) - 2px)',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    backgroundColor: isSelected ? 'var(--highlight-color)' : 'transparent',
-                    color: isSelected ? 'var(--accent-color)' : 'var(--text-main)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  <span style={{ fontSize: 'calc(var(--ui-font-size, 12px) - 3px)', opacity: 0.7 }}>
-                    {isRegex ? '⚡ 正则' : isScript ? '⚡ 脚本' : '#'}
-                  </span>
-                  <span style={{ fontWeight: isSelected ? 700 : 500 }}>{display}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div style={{ flexGrow: 1, overflowY: 'auto' }}>
-        {filteredFiles.length === 0 ? (
-          <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 'var(--ui-font-size, 12px)', color: 'var(--text-muted)' }}>没有找到任何笔记。</div>
-        ) : (
-          <div className="file-grid-container">
-            {filteredFiles.map((file) => {
-              const isSelected = selectedPath === file.path;
-              return (
-                <FileCard
-                  key={file.path}
-                  file={file}
-                  isSelected={isSelected}
-                  onFileClick={handleFileClick}
-                  onRenameFile={handleRenameFile}
-                  onDeleteFile={handleDeleteFile}
-                  onIconClick={(e, f) => {
-                    e.stopPropagation();
-                    setIconPickerFile(f);
-                  }}
-                />
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <TemplateModal
-        show={showTemplateModal}
-        onClose={() => setShowTemplateModal(false)}
-        templateFiles={templateFiles}
-        onUseTemplate={handleUseTemplate}
-        onOpenTempleFolder={handleOpenTempleFolder}
-      />
-
-      <PromptModal
-        show={promptConfig.show}
-        title={promptConfig.title}
-        defaultValue={promptConfig.defaultValue}
-        onConfirm={promptConfig.onConfirm}
-        onClose={() => setPromptConfig(prev => ({ ...prev, show: false }))}
-      />
-
-      <IconPickerModal
-        file={iconPickerFile}
-        onClose={() => setIconPickerFile(null)}
-        onSaveIcon={handleSaveIcon}
-      />
-    </div>
-  );
+  return <FileTreeSurface {...{
+    autocompleteIndex, demoPath, displayedHistory, filteredFiles, filteredSuggestions, folderName,
+    handleCreateFile, handleDeleteFile, handleFileClick, handleOpenFolder, handleOpenTempleFolder,
+    handleRenameFile, handleSaveIcon, handleSelectHistoryProject, handleSelectSuggestion,
+    handleUseTemplate, iconPickerFile, projectPath, promptConfig, searchQuery, selectedPath,
+    setAutocompleteIndex, setIconPickerFile, setPromptConfig, setSearchQuery, setShowAutocomplete,
+    setShowHistoryMenu, setShowTemplateModal, showAutocomplete, showHistoryMenu, showTemplateModal,
+    templateFiles,
+  }} />;
 }
