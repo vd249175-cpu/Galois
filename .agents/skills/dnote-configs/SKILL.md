@@ -265,7 +265,8 @@ await window.electronAPI.setProjectState(projectPath, state);
 
 ## 4. 运行时配置启动顺序
 
-`CORE/App.tsx` 在主窗口初始化时（`initApp()`）按以下顺序加载配置：
+`CORE/useAppBootstrap.ts` 的 `useAppBootstrap()` 在主窗口初始化时按以下顺序加载配置；
+`CORE/App.tsx` 只组合并调用该 Hook：
 
 ```
 0. electronAPI.getRuntimeInfo() + electronAPI.getEnvironmentStatus()（并行）
@@ -306,7 +307,8 @@ await window.electronAPI.setProjectState(projectPath, state);
 
 ## 6. No-Reload 配置热更新
 
-Galois 内置 AGY/终端助手运行在软件窗口里，配置热更新不得刷新 renderer。
+Galois 的嵌入式终端与原生 Terminal 中启动的 AGY 会话都不应被配置热更新中断；
+配置热更新不得刷新 renderer。
 
 当前实现：
 

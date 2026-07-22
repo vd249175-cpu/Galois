@@ -12,6 +12,7 @@
 - `docs/APP_DEVELOPMENT_SCENARIOS.md`
 - `docs/PLUGIN_ENVIRONMENT.md`
 - `docs/MACOS_DMG_ONBOARDING.md`
+- `docs/PROJECT_STRUCTURE_AND_MIGRATION_AUDIT.md`
 - `.agents/skills/*/SKILL.md`
 
 ## 模式判定
@@ -157,6 +158,7 @@ npm run package:mac
 ## 文件长度与 Git
 
 - 原则上每个 TS/TSX 文件不超过 400 行。修改遗留大文件时优先抽 hooks、services 或工具文件。
+- 当前迁移后的受管 APP/CORE 文件没有超过 500 行；400 行上下且职责单一的文件可以保留，禁止为了凑行数按任意区段拆分。
 - 工作树可能很脏，不要回滚用户或前序任务改动。
 - 不要使用 `git reset --hard` 或 `git checkout --`，除非用户明确要求。
 - 推送前确认远端和目标分支。

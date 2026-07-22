@@ -82,7 +82,8 @@ The packaged `.app` bundle is only a launcher, classic seed, and recovery
 source. Do not create separate agent-doc or plugin-development directories as
 the default answer.
 
-Every plugin under `APP/` should follow this layout:
+New APP plugins should use this layout when the capability needs actions,
+services, or package/interpreter metadata:
 
 ```text
 APP/[plugin-name]/
@@ -95,6 +96,11 @@ APP/[plugin-name]/
 ├── services/
 └── plugin.json
 ```
+
+`index.ts` is the only registration requirement. `plugin.json` is required for
+plugin-owned services or declared runtime metadata, but some existing built-in
+renderer-only organs predate manifests and are still valid. Do not add an empty
+manifest merely to imitate an older directory tree.
 
 The main view file lives directly in the plugin root. Do not create a
 `components/` folder unless a future refactor establishes that convention.
@@ -385,5 +391,6 @@ Current no-reload behavior:
 ## 8. File Size and Modularity
 
 The project rule remains: TS/TSX files should generally stay under 400 lines.
-Several legacy files exceed this today. Do not make them larger when adding
-features. Extract hooks or services when touching those areas.
+Current audited APP/CORE files stay below 500 lines; a cohesive file around 400
+lines may remain intact. Do not grow a focused file substantially past that
+boundary—extract hooks, services, or rendering surfaces by responsibility.
