@@ -24,8 +24,9 @@ Read `references/end-to-end-acceptance.md` before editing. Then route each slice
   `dnote-project-overview` in Assist Mode.
 - Search, graph, or configuration behavior: use the corresponding domain skill.
 
-Always read `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md`. Source code wins over an
-example if the example has become stale; update the example in the same change.
+Always read `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md`, followed by
+`docs/AGENT_CAPABILITY_OVERVIEW.md`. Source code wins over an example if the
+example has become stale; update the overview/example in the same change.
 
 ## Workflow
 

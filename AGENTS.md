@@ -4,11 +4,16 @@
 
 ## 文档基准
 
-优先阅读 `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md`。当 README、skill 文档、历史注释和源码不一致时，以该文档记录的“当前事实 + 迁移目标”为准。
+优先阅读 `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md`，然后读取
+`docs/AGENT_CAPABILITY_OVERVIEW.md` 了解当前能力、任务路由、可执行示例和验收入口。
+当 README、skill 文档、历史注释和源码不一致时，以当前源码与
+`CURRENT_ARCHITECTURE_AND_RELEASE.md` 记录的“当前事实 + 迁移目标”为准，
+并在同一次修改中校正纵览文档。
 
 相关文档：
 
 - `docs/CURRENT_ARCHITECTURE_AND_RELEASE.md`
+- `docs/AGENT_CAPABILITY_OVERVIEW.md`
 - `docs/APP_DEVELOPMENT_SCENARIOS.md`
 - `docs/PLUGIN_ENVIRONMENT.md`
 - `docs/MACOS_DMG_ONBOARDING.md`

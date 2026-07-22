@@ -17,6 +17,7 @@ DNOTE 目前处于**开发者工作区 / 内部试用**阶段。源码模式下�
 
 相关文档：
 
+- [Agent 能力、资料与验收纵览](docs/AGENT_CAPABILITY_OVERVIEW.md)
 - [APP 页面/按钮/快捷键开发场景](docs/APP_DEVELOPMENT_SCENARIOS.md)
 - [插件环境契约](docs/PLUGIN_ENVIRONMENT.md)
 - [完整 APP 插件可执行参考](.agents/skills/dnote-app-plugins/references/complete-plugin-walkthrough.md)
