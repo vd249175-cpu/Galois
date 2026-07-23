@@ -114,6 +114,9 @@ Agent 新增或修改 APP action、项目命令快捷键前，必须先读取这
 
 - 默认工作对象是当前笔记项目。
 - 必须先读取 `{projectPath}/.dnote_runtime.json`，再判断当前文件、光标和选区。
+- 新建可被 Galois 文件树、标签解析和图谱发现的 Markdown 笔记时，必须直接写入
+  `{projectPath}/文件名.md`。当前文件树只扫描项目根目录的直接子文件；不要把笔记
+  写入 `docs/`、`script/`、`media/`、`.dnote/` 或其他子目录。
 - 每个任务首次进入某个笔记项目时，必须随后使用 `dnote-project-overview` 生成一次有界项目地图；同一任务内复用该摘要，仅在切换项目或目录结构发生实质变化后刷新。
 - 项目概况只能列出受限数量的路径、命令元数据和媒体统计，不得为“了解项目”读取全部 Markdown 正文、展开无限目录树或注入缓存/依赖目录。
 - 可以修改当前笔记项目中的 Markdown、`command/commands.json`、`script/`、`.dnote/`、`pyproject.toml`、`uv.lock`、`media/`。

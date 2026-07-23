@@ -62,6 +62,12 @@ editable files inside hidden application support folders.
   using classic-code recovery.
 - The default starter notebook lives under
   `~/Documents/Galois Projects/Getting Started`.
+- Discoverable notebook Markdown files are direct children of the selected
+  notebook root: `{projectPath}/note.md`. The current file tree, tag resolver,
+  and graph do not recursively discover Markdown under `docs/`, `script/`,
+  `media/`, `.dnote/`, or arbitrary subdirectories. Agents must create new
+  notes at the project root unless this storage contract is deliberately
+  migrated in source first.
 - Notebook media belongs to the notebook project. Dragged Markdown media is
   archived under `{projectPath}/media/`; generated video timeline assets live
   under `{projectPath}/.dnote_assets/`.

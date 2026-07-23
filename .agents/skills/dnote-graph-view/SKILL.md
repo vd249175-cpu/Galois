@@ -89,11 +89,18 @@ When graph nodes interact with the left file search, use the same query
 semantics as `dnote-search`. Graph-driven filtering should write or derive
 `system.fileSearchQuery` rather than inventing a parallel search language.
 
+Treat graph-to-file-tree updates as externally sourced replacements. The file
+tree may adopt the new query, but must not publish its previous local value back
+in the same effect cycle. Test both real and virtual node clicks: each click
+must settle on one query without oscillation or visible file-list jumping.
+
 ## Implementation Checklist
 
 - Keep graph-specific code inside `APP/graph-view`.
 - Keep CORE free of graph business logic.
 - Keep service execution on `electronAPI.runScript`.
 - Use Blood channels declared in `CORE/BloodChannels.ts`.
+- Verify real-node and virtual-node search linking settles after one shared
+  query update and does not bounce between old and new values.
 - Validate large graphs for candidate caps and non-explosive runtime before
   changing abstraction or merge heuristics.

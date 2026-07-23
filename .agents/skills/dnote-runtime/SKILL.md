@@ -142,11 +142,14 @@ const editorCursor = useBloodChannel(
 
 1. **首先读取** `.dnote_runtime.json` 以了解用户当前正在编辑的文档和光标位置。
 2. 首次进入该项目时，使用 `dnote-project-overview` 生成一次有界项目地图，确认已有 Markdown、脚本、命令和配置布局；不要递归读取整个项目。
-3. 若 `cursor.selectedText` 非空，将其视为用户的**直接操作目标**或上下文引用。
-4. 对比 `timestamp` 确保数据是最新的（超过 30 秒未更新说明用户可能已切换工作区）。
-5. 通过 `activeFile` 的路径读取笔记内容，结合 `cursor.line` 定位用户关注的段落。
-6. 新增项目快捷键前检查 `shortcutRegistry.actions`；全局 action 会与任意作用域冲突。
-7. 默认只处理当前笔记项目和当前文件；不要因为协助写笔记而修改 `APP/` 或 `CORE/`。
+3. 新建笔记必须直接写成 `{projectPath}/文件名.md`。当前文件树、标签解析和图谱
+   只发现项目根目录的 Markdown 直接子文件；不要把笔记写入 `docs/`、`script/`、
+   `media/`、`.dnote/` 或其他子目录。写完后确认它出现在文件树中。
+4. 若 `cursor.selectedText` 非空，将其视为用户的**直接操作目标**或上下文引用。
+5. 对比 `timestamp` 确保数据是最新的（超过 30 秒未更新说明用户可能已切换工作区）。
+6. 通过 `activeFile` 的路径读取笔记内容，结合 `cursor.line` 定位用户关注的段落。
+7. 新增项目快捷键前检查 `shortcutRegistry.actions`；全局 action 会与任意作用域冲突。
+8. 默认只处理当前笔记项目和当前文件；不要因为协助写笔记而修改 `APP/` 或 `CORE/`。
 
 Assist Mode 常见输出目标：
 

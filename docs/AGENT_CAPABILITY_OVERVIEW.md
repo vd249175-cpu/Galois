@@ -99,13 +99,18 @@ Before writing:
 
 1. Read `{projectPath}/.dnote_runtime.json`.
 2. Run the bounded project overview once.
-3. Preserve the existing project layout, commands, scripts, tags, and media.
-4. Use Frontmatter for manual tags and body `#hashtags` for derived tags; do not
+3. Create every discoverable note directly as `{projectPath}/name.md`. The
+   current file tree, tag resolver, and graph scan only root-level Markdown;
+   Markdown placed in a subdirectory does not become a notebook note.
+4. Preserve the existing project layout, commands, scripts, tags, and media.
+5. Use Frontmatter for manual tags and body `#hashtags` for derived tags; do not
    copy one source into the other.
 
 Acceptance:
 
 - Open the note in Live Preview and Reading mode.
+- Confirm the note is a direct child of `projectPath` and appears in the file
+  tree, tag resolution, and graph when tagged.
 - Edit ordinary text, nested tasks, and table cells; reload and confirm disk
   persistence.
 - Toggle ordinary, nested, and table checkboxes.

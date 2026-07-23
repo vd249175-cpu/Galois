@@ -49,6 +49,10 @@ recursive listing. Query the relevant directory or filename pattern narrowly.
 ## Safety
 
 - Treat the reported project root as the Assist Mode write boundary.
+- Create notebook Markdown only as a direct child of that root
+  (`{projectPath}/name.md`). The current file tree does not recursively discover
+  Markdown in subdirectories; reserve `script/`, `media/`, `.dnote/`, and other
+  structural directories for their declared purposes.
 - Do not modify `.dnote_runtime.json`, `.dnote_cache/`, `.git/`, `.venv/`, or
   generated caches while building context.
 - Before creating a note or script, check the overview and then inspect the

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { BC } from '../../CORE/BloodChannels';
+import { decideFileTreeSearchSync } from './fileTreeSearchSync';
 
 interface FileTreeSearchOptions {
   resolvedTags: Record<string, unknown>;
@@ -14,7 +15,8 @@ export function useFileTreeSearch({
   linkedSearchQuery,
   updateBloodKey,
 }: FileTreeSearchOptions) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => linkedSearchQuery);
+  const previousLinkedQueryRef = useRef(linkedSearchQuery);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [autocompleteIndex, setAutocompleteIndex] = useState(0);
   const allProjectTags = useMemo(() => {
@@ -52,13 +54,25 @@ export function useFileTreeSearch({
     setShowAutocomplete(false);
   };
   useEffect(() => {
-    if (linkedSearchQuery !== searchQuery) {
-      setSearchQuery(linkedSearchQuery);
+    const decision = decideFileTreeSearchSync(
+      previousLinkedQueryRef.current,
+      linkedSearchQuery,
+      searchQuery,
+    );
+    previousLinkedQueryRef.current = decision.nextLinkedQuery;
+
+    // Graph nodes and other organs can replace the shared query. Adopt that
+    // value without publishing the stale local query back during the same
+    // effect cycle; otherwise the two values oscillate and the file list jumps.
+    if (decision.adoptLinkedQuery !== null) {
+      setSearchQuery(decision.adoptLinkedQuery);
       setAutocompleteIndex(0);
+      return;
     }
-  }, [linkedSearchQuery]);
-  useEffect(() => {
-    if (searchQuery !== linkedSearchQuery) updateBloodKey(BC.system.fileSearchQuery, searchQuery);
+
+    if (decision.publishLocalQuery !== null) {
+      updateBloodKey(BC.system.fileSearchQuery, decision.publishLocalQuery);
+    }
   }, [linkedSearchQuery, searchQuery, updateBloodKey]);
   return {
     autocompleteIndex, filteredSuggestions, handleSelectSuggestion, searchQuery,

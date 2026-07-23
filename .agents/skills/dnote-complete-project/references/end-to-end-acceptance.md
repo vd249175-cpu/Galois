@@ -48,6 +48,9 @@ npm run scaffold:plugin -- capability-name --dry-run
 Minimum complete slice:
 
 - Read `.dnote_runtime.json`, then obtain one bounded project overview.
+- Create discoverable Markdown directly at `{projectPath}/name.md`; confirm it
+  appears in the root-only file tree, tag resolver, and graph. Do not place a
+  note in a structural subdirectory.
 - Preserve existing `commands.json`; add unique project-scoped ids.
 - Distinguish `script` background commands from `content` slash insertions.
 - Use `runProjectScript` and write valid JSON to `DNOTE_OUTPUT_FILE`.
