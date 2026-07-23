@@ -7,8 +7,9 @@ import { GraphView } from './GraphViewCanvas';
  *
  * 契约声明：
  *   READS:  system.projectPath, system.resolvedTags, system.config,
- *           events.fileSaved.*, system.lastFocusedEditorId, system.activeEditors
- *   WRITES: events.openFile.{editorId}  (双击节点跳转)
+ *           system.fileSearchQuery, events.fileSaved.*,
+ *           system.lastFocusedEditorId, system.activeEditors
+ *   WRITES: events.openFile.{editorId}  (单击真实笔记节点跳转)
  *           events.scriptError.graphView (lattice 脚本错误)
  *   DEPENDS ON: fileTree (提供 system.resolvedTags)
  */
@@ -41,15 +42,14 @@ export const GraphViewComponent = {
     reads: [
       BC.system.projectPath,
       BC.system.resolvedTags,       // 由 fileTree 写入，graphView 是消费者
-      BC.system.fileSearchQuery,    // 与左侧文件树搜索联动
+      BC.system.fileSearchQuery,    // 文件树搜索仅单向驱动图谱高亮
       BC.system.config,             // 图谱字号配置
       BC_PREFIX.fileSavedAll,       // 文件保存时重建图谱
       BC.system.lastFocusedEditorId,
       BC.system.activeEditors,
     ],
     writes: [
-      BC.events.openFile('*'),              // 双击节点时发送打开请求
-      BC.system.fileSearchQuery,            // 点击节点时反向更新左侧搜索
+      BC.events.openFile('*'),              // 单击真实笔记节点时发送打开请求
       BC.events.scriptError('graphView'),   // lattice.py 失败时广播错误
     ],
     dependsOn: ['fileTree'],  // 依赖 fileTree 提供 resolvedTags（必须先 mount）

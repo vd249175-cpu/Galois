@@ -335,6 +335,14 @@ renderer clears its current virtual layer synchronously and applies only the
 latest asynchronous `lattice.py` result, so an older slider request cannot
 reintroduce virtual nodes after the user returns to zero.
 
+Graph navigation targets the editor, not the file browser. A single click on a
+real note node opens that node's backing Markdown through
+`events.openFile.{lastFocusedEditorId}`. A virtual concept has no backing file;
+it stays selected in the graph and exposes supporting real-note links. Clicking
+canvas whitespace clears graph focus. `system.fileSearchQuery` may highlight
+graph nodes from an existing file-tree search, but graph clicks never write the
+file-tree query.
+
 ## Editor UX Baseline
 
 The editor now exposes two user-facing modes:

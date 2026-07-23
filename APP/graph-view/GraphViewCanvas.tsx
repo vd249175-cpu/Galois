@@ -163,6 +163,11 @@ export function GraphView({
     svgClickStartPos.current = { x: e.clientX, y: e.clientY };
   };
 
+  const clearGraphFocus = () => {
+    setSelectedNodeId(null);
+    setHoveredNode(null);
+  };
+
   const handleSVGMouseMove = (e: React.MouseEvent) => {
     if (isPanning.current) {
       setPan({
@@ -185,68 +190,10 @@ export function GraphView({
     }
   };
 
-  const getSearchQueryForNode = (nodeId: string) => {
+  const openNodeInEditor = (nodeId: string) => {
     const node = simRef.current.nodes.find((item) => item.id === nodeId);
-    const tags = node?.tags || [];
-    if (tags.length > 0) {
-      return tags.map((tag) => `#${tag}`).join(' ');
-    }
-    if (nodeId.startsWith('tag:')) {
-      return `#${nodeId.substring(4)}`;
-    }
-    return node?.label || '';
-  };
+    if (!node || node.isVirtual) return;
 
-  const handleSVGMouseUp = (e?: React.MouseEvent) => {
-    const wasPanning = isPanning.current;
-    isPanning.current = false;
-    
-    if (dragNodeId.current) {
-      if (e && nodeDragStartPos.current) {
-        const dx = e.clientX - nodeDragStartPos.current.x;
-        const dy = e.clientY - nodeDragStartPos.current.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 5) {
-          setSelectedNodeId(dragNodeId.current);
-          updateBloodKey(BC.system.fileSearchQuery, getSearchQueryForNode(dragNodeId.current));
-        }
-      }
-      dragNodeId.current = null;
-      return;
-    }
-
-    if (wasPanning && e && svgClickStartPos.current) {
-      const dx = e.clientX - svgClickStartPos.current.x;
-      const dy = e.clientY - svgClickStartPos.current.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 5) {
-        setSelectedNodeId(null);
-      }
-    }
-  };
-
-  const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    dragNodeId.current = nodeId;
-    nodeDragStartPos.current = { x: e.clientX, y: e.clientY };
-    const node = simRef.current.nodes.find((n) => n.id === nodeId);
-    if (node) {
-      node.vx = 0;
-      node.vy = 0;
-    }
-    wakeSimulation();
-  };
-
-  const handleNodeDoubleClick = (nodeId: string) => {
-    let targetPath = nodeId;
-    if (nodeId.startsWith('virtual:')) {
-      const tags = nodeId.substring(8).split('|');
-      targetPath = `${projectPath}/#${tags.join('#')}.md`;
-    } else if (nodeId.startsWith('tag:')) {
-      const tagName = nodeId.substring(4);
-      targetPath = `${projectPath}/${tagName}.md`;
-    }
-    
     const lastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
     const activeEds = Blood.getValue<string[]>(BC.system.activeEditors, []);
     let targetEditorId = lastFocused || activeEds[0];
@@ -262,7 +209,53 @@ export function GraphView({
     }
     if (!targetEditorId) targetEditorId = 'editor-root';
 
-    updateBloodKey(BC.events.openFile(targetEditorId), targetPath);
+    updateBloodKey(BC.events.openFile(targetEditorId), node.id);
+  };
+
+  const handleNodeActivate = (nodeId: string) => {
+    setSelectedNodeId(nodeId);
+    openNodeInEditor(nodeId);
+  };
+
+  const handleSVGMouseUp = (e?: React.MouseEvent) => {
+    const wasPanning = isPanning.current;
+    isPanning.current = false;
+    
+    if (dragNodeId.current) {
+      if (e && nodeDragStartPos.current) {
+        const dx = e.clientX - nodeDragStartPos.current.x;
+        const dy = e.clientY - nodeDragStartPos.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 5) {
+          handleNodeActivate(dragNodeId.current);
+        }
+      }
+      dragNodeId.current = null;
+      nodeDragStartPos.current = null;
+      return;
+    }
+
+    if (wasPanning && e && svgClickStartPos.current) {
+      const dx = e.clientX - svgClickStartPos.current.x;
+      const dy = e.clientY - svgClickStartPos.current.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 5) {
+        clearGraphFocus();
+      }
+    }
+    svgClickStartPos.current = null;
+  };
+
+  const handleNodeMouseDown = (nodeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    dragNodeId.current = nodeId;
+    nodeDragStartPos.current = { x: e.clientX, y: e.clientY };
+    const node = simRef.current.nodes.find((n) => n.id === nodeId);
+    if (node) {
+      node.vx = 0;
+      node.vy = 0;
+    }
+    wakeSimulation();
   };
 
   const handleZoom = (factor: number) => {
@@ -338,7 +331,7 @@ export function GraphView({
 
   return <GraphViewSurface {...{
     activePaletteName, arrowSize, getLevelColor, graphMode, graphNodeBaseFontSize,
-    handleNodeDoubleClick, handleNodeMouseDown, handleSVGMouseDown, handleSVGMouseMove,
+    handleNodeActivate, handleNodeMouseDown, handleSVGMouseDown, handleSVGMouseMove,
     handleSVGMouseUp, hoveredNode, isPanning, isPaletteEditorOpen, links, neighborById,
     nodeById, nodes, palettes, pan, projectPath, repulsion, searchFocus, selectedNodeId,
     setActivePaletteName, setArrowSize, setGraphMode, setHoveredNode, setIsPaletteEditorOpen,

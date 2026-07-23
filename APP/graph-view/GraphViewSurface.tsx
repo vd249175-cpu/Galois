@@ -6,7 +6,7 @@ import { getPillWidth } from './helpers';
 export function GraphViewSurface(props: any) {
   const {
     activePaletteName, arrowSize, getLevelColor, graphMode, graphNodeBaseFontSize,
-    handleNodeDoubleClick, handleNodeMouseDown, handleSVGMouseDown, handleSVGMouseMove,
+    handleNodeActivate, handleNodeMouseDown, handleSVGMouseDown, handleSVGMouseMove,
     handleSVGMouseUp, hoveredNode, isPanning, isPaletteEditorOpen, links, neighborById,
     nodeById, nodes, palettes, pan, projectPath, repulsion, searchFocus, selectedNodeId,
     setActivePaletteName, setArrowSize, setGraphMode, setHoveredNode, setIsPaletteEditorOpen,
@@ -151,7 +151,6 @@ export function GraphViewSurface(props: any) {
                 key={node.id}
                 transform={`translate(${node.x}, ${node.y})`}
                 onMouseDown={(e) => { handleSVGMouseUp(); handleNodeMouseDown(node.id, e); }}
-                onDoubleClick={() => handleNodeDoubleClick(node.id)}
                 onMouseEnter={() => setHoveredNode(node.id)}
                 onMouseLeave={() => setHoveredNode(null)}
                 style={{ cursor: 'pointer', opacity: isDimmed ? 0.18 : 1.0, transition: 'opacity 0.25s' }}
@@ -291,7 +290,7 @@ export function GraphViewSurface(props: any) {
           projectPath={projectPath}
           getLevelColor={getLevelColor}
           setSelectedNodeId={setSelectedNodeId}
-          handleNodeDoubleClick={handleNodeDoubleClick}
+          handleNodeActivate={handleNodeActivate}
           svgRef={svgRef}
           zoom={zoom}
           setPan={setPan}

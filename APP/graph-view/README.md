@@ -38,7 +38,9 @@ Lattice Graph 是 Galois 的**可视化拓扑器官**，将笔记项目中所有
 
 - 鼠标悬停节点：显示**光晕高亮环**，其余无关节点和边**降低透明度**
 - 有边节点和边根据 DAG **层级深度**自动着色
-- 双击节点：通过 `Blood: events.openFile.{lastFocusedEditorId}` 在编辑器中打开对应笔记
+- 单击真实节点：通过 `Blood: events.openFile.{lastFocusedEditorId}` 在编辑器中打开对应笔记，不修改左侧文件搜索
+- 单击虚拟节点：只选中概念并列出关联真实笔记；虚拟概念没有对应 Markdown 文件
+- 单击画布空白：清除节点焦点并关闭详情抽屉
 
 ### 4. 🖱️ 交互操作
 
@@ -47,7 +49,9 @@ Lattice Graph 是 Galois 的**可视化拓扑器官**，将笔记项目中所有
 | 拖拽空白区域 | 平移视图（Pan） |
 | 鼠标滚轮 | 缩放到光标位置（范围 0.2×–3.0×） |
 | 拖拽节点 | 固定该节点位置，物理模拟继续 |
-| 双击节点 | 在编辑器中打开对应笔记 |
+| 单击真实节点 | 在最后聚焦的编辑器中打开对应笔记 |
+| 单击虚拟节点 | 查看概念及其关联笔记，不创建虚构文件 |
+| 单击画布空白 | 取消图谱节点焦点；画布拖拽不触发失焦 |
 
 ### 5. 🎮 控制面板（GraphControls）
 右下角悬浮控制面板（默认折叠，点击展开）：
@@ -71,10 +75,12 @@ Lattice Graph 是 Galois 的**可视化拓扑器官**，将笔记项目中所有
 
 ```
 typeId:     'graphView'
-reads:      system.projectPath, system.resolvedTags, events.fileSaved.*, system.lastFocusedEditorId
+reads:      system.projectPath, system.resolvedTags, system.fileSearchQuery, events.fileSaved.*, system.lastFocusedEditorId
 writes:     events.openFile.{editorId}, events.scriptError.graphView
 dependsOn:  ['fileTree']  （依赖 fileTree 提供 resolvedTags）
 ```
+
+`system.fileSearchQuery` 只用于文件树搜索对图谱的单向高亮；图谱节点点击不写回该频道。
 
 ## ⚡ 右侧栏动作
 

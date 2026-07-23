@@ -83,16 +83,19 @@ If a graph service needs packages, declare them in `APP/graph-view/plugin.json`:
 Prefer standard library plus PEP 723 when possible. Do not require users to
 manually install `numpy` for graph-view.
 
-## Search Linking
+## Editor Navigation and Search Highlighting
 
-When graph nodes interact with the left file search, use the same query
-semantics as `dnote-search`. Graph-driven filtering should write or derive
-`system.fileSearchQuery` rather than inventing a parallel search language.
+File-tree search may drive graph highlighting through
+`system.fileSearchQuery`, but the direction is one-way. Clicking a graph node
+must never rewrite the file browser query.
 
-Treat graph-to-file-tree updates as externally sourced replacements. The file
-tree may adopt the new query, but must not publish its previous local value back
-in the same effect cycle. Test both real and virtual node clicks: each click
-must settle on one query without oscillation or visible file-list jumping.
+- Single-click a real note node to write `events.openFile.{editorId}` and open
+  its backing Markdown in the last-focused editor.
+- Select a virtual concept only inside the graph. It has no backing file; show
+  its supporting real notes and let those links open the editor. Never invent a
+  `#tag.md` path for a virtual concept.
+- Click graph canvas whitespace to clear the selected/hovered graph focus and
+  close its detail drawer. Do not clear an independently entered file search.
 
 ## Implementation Checklist
 
@@ -100,7 +103,9 @@ must settle on one query without oscillation or visible file-list jumping.
 - Keep CORE free of graph business logic.
 - Keep service execution on `electronAPI.runScript`.
 - Use Blood channels declared in `CORE/BloodChannels.ts`.
-- Verify real-node and virtual-node search linking settles after one shared
-  query update and does not bounce between old and new values.
+- Verify a real-node click changes the editor and leaves the file browser query
+  unchanged; verify virtual support links open real notes.
+- Verify a whitespace click clears graph selection without treating a drag as
+  a click.
 - Validate large graphs for candidate caps and non-explosive runtime before
   changing abstraction or merge heuristics.

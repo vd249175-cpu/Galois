@@ -19,6 +19,8 @@
     "scaffold:plugin": "python3 .agents/skills/dnote-app-plugins/scripts/scaffold_plugin.py",
     "validate:examples": "python3 .agents/skills/dnote-complete-project/scripts/validate_reference_examples.py",
     "validate:file-search-sync": "node scripts/probe-file-search-sync.js",
+    "validate:graph-navigation": "node scripts/probe-graph-node-navigation.js",
+    "validate:interactions": "npm run validate:file-search-sync && npm run validate:graph-navigation",
     "rebuild:reopen": "npm run build:electron && node scripts/restart-workbench.js",
     "build": "npm run build:icon && npm run build:vite && npm run build:electron",
     "start": "NODE_ENV=production electron .",
