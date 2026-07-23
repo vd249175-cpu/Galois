@@ -37,10 +37,12 @@ Lattice Graph 是 Galois 的**可视化拓扑器官**，将笔记项目中所有
 | FCA 虚拟节点（virtual） | 圆角矩形药丸，标签在内部 | 宽高按度数比例缩放 |
 
 - 鼠标悬停节点：显示**光晕高亮环**，其余无关节点和边**降低透明度**
+- 悬浮或聚焦节点：保留一层直接上游作为语境，并沿有向边显示全部下游节点和边，贯穿到最底层叶子节点
 - 有边节点和边根据 DAG **层级深度**自动着色
 - 单击真实节点：通过 `Blood: events.openFile.{lastFocusedEditorId}` 在编辑器中打开对应笔记，不修改左侧文件搜索
-- 单击虚拟节点：只选中概念并列出关联真实笔记；虚拟概念没有对应 Markdown 文件
-- 单击画布空白：清除节点焦点并关闭详情抽屉
+- 单击虚拟节点：在项目根目录创建 `概念-*.md` 临时笔记，写入概念标签和关联笔记，并在编辑器打开
+- 临时概念笔记实际修改并保存后转为正式笔记；只打开未修改时，在离开、切换节点/项目或图谱卸载时自动删除
+- 单击画布空白：清除节点焦点、关闭详情抽屉并结算未编辑的临时概念笔记
 
 ### 4. 🖱️ 交互操作
 
@@ -50,8 +52,11 @@ Lattice Graph 是 Galois 的**可视化拓扑器官**，将笔记项目中所有
 | 鼠标滚轮 | 缩放到光标位置（范围 0.2×–3.0×） |
 | 拖拽节点 | 固定该节点位置，物理模拟继续 |
 | 单击真实节点 | 在最后聚焦的编辑器中打开对应笔记 |
-| 单击虚拟节点 | 查看概念及其关联笔记，不创建虚构文件 |
-| 单击画布空白 | 取消图谱节点焦点；画布拖拽不触发失焦 |
+| 单击虚拟节点 | 创建并打开可编辑的临时概念 Markdown |
+| 编辑并保存临时概念 | 移除临时标记并永久保留笔记 |
+| 离开未编辑的临时概念 | 删除临时文件并刷新文件树/图谱 |
+| 单击画布空白 | 取消图谱焦点并清理未编辑临时笔记；画布拖拽不触发失焦 |
+| 悬浮/聚焦节点 | 高亮完整下游路径到最底层，而非只显示一跳邻居 |
 
 ### 5. 🎮 控制面板（GraphControls）
 右下角悬浮控制面板（默认折叠，点击展开）：
@@ -76,11 +81,12 @@ Lattice Graph 是 Galois 的**可视化拓扑器官**，将笔记项目中所有
 ```
 typeId:     'graphView'
 reads:      system.projectPath, system.resolvedTags, system.fileSearchQuery, events.fileSaved.*, system.lastFocusedEditorId
-writes:     events.openFile.{editorId}, events.scriptError.graphView
+writes:     events.openFile.{editorId}, events.fileSaved.*, events.scriptError.graphView
 dependsOn:  ['fileTree']  （依赖 fileTree 提供 resolvedTags）
 ```
 
 `system.fileSearchQuery` 只用于文件树搜索对图谱的单向高亮；图谱节点点击不写回该频道。
+临时概念笔记始终位于项目根目录，因此与普通笔记走同一套编辑、保存、标签解析和图谱刷新逻辑。
 
 ## ⚡ 右侧栏动作
 

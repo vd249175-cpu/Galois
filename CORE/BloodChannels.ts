@@ -143,7 +143,7 @@ export const BC = {
   // events.* — 业务事件（文件保存、打开文件、脚本完成等）
   // ─────────────────────────────────────────────────────────────────────────
   events: {
-    /** 请求在指定 area 打开文件。Writer: fileTree(click) | editor(wikilink) | graphView(dblclick) → Reader: editor */
+    /** 请求在指定 area 打开文件。Writer: fileTree(click) | editor(wikilink) | graphView(click) → Reader: editor */
     openFile: (areaId: string) => `events.openFile.${areaId}` as const,
 
     /** 文件已保存通知（timestamp）。Writer: editor(save) | fileTree(createFile) → Reader: fileTree, graphView */

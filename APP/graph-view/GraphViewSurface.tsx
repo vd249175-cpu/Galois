@@ -7,7 +7,7 @@ export function GraphViewSurface(props: any) {
   const {
     activePaletteName, arrowSize, getLevelColor, graphMode, graphNodeBaseFontSize,
     handleNodeActivate, handleNodeMouseDown, handleSVGMouseDown, handleSVGMouseMove,
-    handleSVGMouseUp, hoveredNode, isPanning, isPaletteEditorOpen, links, neighborById,
+    handleSVGMouseUp, hoveredNode, isPanning, isPaletteEditorOpen, links, focusPath,
     nodeById, nodes, palettes, pan, projectPath, repulsion, searchFocus, selectedNodeId,
     setActivePaletteName, setArrowSize, setGraphMode, setHoveredNode, setIsPaletteEditorOpen,
     setPalettes, setPan, setRepulsion, setSelectedNodeId, setSpacing, setVirtualDetail,
@@ -77,7 +77,7 @@ export function GraphViewSurface(props: any) {
             if (!source || !target) return null;
 
             const activeFocusNode = hoveredNode || selectedNodeId;
-            const isRelated = activeFocusNode === link.source || activeFocusNode === link.target;
+            const isRelated = focusPath.highlightedLinkIds.has(`${link.source}\u0000${link.target}`);
             
             // Calculate proper directional line endpoints with arrow markers
             const isTargetFocused = activeFocusNode === link.target;
@@ -142,8 +142,7 @@ export function GraphViewSurface(props: any) {
             const isSearchMatched = matchesSearchFocus(node);
 
             const activeFocusNode = hoveredNode || selectedNodeId;
-            const isFocusDimmed = activeFocusNode !== null && !isHovered && !isSelected && 
-              !(neighborById.get(node.id)?.has(activeFocusNode));
+            const isFocusDimmed = activeFocusNode !== null && !focusPath.visibleNodeIds.has(node.id);
             const isDimmed = isFocusDimmed || (searchFocus.active && !isSearchMatched);
 
             return (

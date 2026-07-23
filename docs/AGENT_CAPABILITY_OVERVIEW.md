@@ -43,7 +43,7 @@ installed `.app` bundle.
 | --- | --- | --- |
 | Editor | Live Preview, Reading mode, Markdown editing/rendering, commands, tags, media, reactive JSON | `APP/editor/README.md`, `dnote-command-scripts` |
 | File Tree | Files, search, tag resolution, icons, project state | `APP/file-tree/README.md`, `dnote-search`, `dnote-tags` |
-| Graph View | Tag topology, virtual concepts, file-search highlighting, editor navigation | `APP/graph-view/README.md`, `dnote-graph-view` |
+| Graph View | Tag topology, deep descendant focus paths, temporary editable concept notes, file-search highlighting, editor navigation | `APP/graph-view/README.md`, `dnote-graph-view` |
 | Video Timeline | Timeline assets and clip references | `APP/video-timeline/`, architecture media contract |
 | Terminal | Embedded PTY and native assistant launch | `APP/terminal/README.md` |
 | Settings | Themes, shortcuts, environment and configuration | `APP/settings/README.md`, `dnote-configs` |

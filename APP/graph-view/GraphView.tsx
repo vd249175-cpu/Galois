@@ -7,7 +7,7 @@ import { GraphView } from './GraphViewCanvas';
  *
  * 契约声明：
  *   READS:  system.projectPath, system.resolvedTags, system.config,
- *           system.fileSearchQuery, events.fileSaved.*,
+ *           system.fileSearchQuery, events.fileSaved.*, events.openFile.*,
  *           system.lastFocusedEditorId, system.activeEditors
  *   WRITES: events.openFile.{editorId}  (单击真实笔记节点跳转)
  *           events.scriptError.graphView (lattice 脚本错误)
@@ -36,6 +36,7 @@ export const GraphViewComponent = {
     BC_PREFIX.fileSavedAll,
     BC.system.lastFocusedEditorId,
     BC.system.activeEditors,
+    BC_PREFIX.openFileAll,
   ],
   manifest: {
     description: 'Tag Lattice 关系图，使用 Python subset-inclusion 算法绘制笔记包含关系',
@@ -47,9 +48,11 @@ export const GraphViewComponent = {
       BC_PREFIX.fileSavedAll,       // 文件保存时重建图谱
       BC.system.lastFocusedEditorId,
       BC.system.activeEditors,
+      BC_PREFIX.openFileAll,         // 临时概念笔记离开编辑器时结算
     ],
     writes: [
-      BC.events.openFile('*'),              // 单击真实笔记节点时发送打开请求
+      BC.events.openFile('*'),              // 打开真实/临时概念笔记，清理后关闭临时笔记
+      BC.events.fileSaved('*'),             // 临时概念笔记创建、转正或删除后刷新项目
       BC.events.scriptError('graphView'),   // lattice.py 失败时广播错误
     ],
     dependsOn: ['fileTree'],  // 依赖 fileTree 提供 resolvedTags（必须先 mount）

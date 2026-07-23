@@ -91,11 +91,22 @@ must never rewrite the file browser query.
 
 - Single-click a real note node to write `events.openFile.{editorId}` and open
   its backing Markdown in the last-focused editor.
-- Select a virtual concept only inside the graph. It has no backing file; show
-  its supporting real notes and let those links open the editor. Never invent a
-  `#tag.md` path for a virtual concept.
+- Single-click a virtual concept to create a collision-safe temporary Markdown
+  directly under the notebook root and open it in the last-focused editor. The
+  template contains the concept's Frontmatter tags and supporting WikiLinks.
+- Promote the temporary note only after its disk content differs from the
+  generated template and the editor saves it. Remove the internal temporary
+  marker during promotion. If it stays unchanged, delete it when the user
+  leaves the note, selects another graph node/project, clicks canvas whitespace,
+  or unmounts graph-view.
+- Never overwrite an existing promoted concept note. Rapid virtual-node clicks
+  must settle the previous temporary note and reject stale creation results.
 - Click graph canvas whitespace to clear the selected/hovered graph focus and
   close its detail drawer. Do not clear an independently entered file search.
+- Hovering or selecting a node keeps its direct parent layer for context and
+  follows every outgoing edge transitively through the deepest descendant
+  layer. Highlight the complete reachable edge chain; do not stop at immediate
+  neighbors or brighten unrelated branches.
 
 ## Implementation Checklist
 
@@ -104,8 +115,15 @@ must never rewrite the file browser query.
 - Keep service execution on `electronAPI.runScript`.
 - Use Blood channels declared in `CORE/BloodChannels.ts`.
 - Verify a real-node click changes the editor and leaves the file browser query
-  unchanged; verify virtual support links open real notes.
+  unchanged.
+- Verify virtual creation happens at `{projectPath}/概念-*.md`, editing plus
+  save retains it without the temporary marker, and leaving an unchanged file
+  deletes it from disk, file tree, and graph.
+- Verify an existing promoted concept file is opened without overwrite and two
+  rapid virtual clicks do not leave an orphan file.
 - Verify a whitespace click clears graph selection without treating a drag as
   a click.
+- Verify hover and selection expose the complete downstream path to leaf nodes,
+  retain only one direct parent layer, and restore the full graph after defocus.
 - Validate large graphs for candidate caps and non-explosive runtime before
   changing abstraction or merge heuristics.

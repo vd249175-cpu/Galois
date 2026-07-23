@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useLatticeData } from './useLatticeData';
 import { usePhysicsSimulation } from './usePhysicsSimulation';
+import { useGraphNodeNavigation } from './useGraphNodeNavigation';
 import { GraphViewSurface } from './GraphViewSurface';
 import { BC, BC_PREFIX } from '../../CORE/BloodChannels';
-import { Blood } from '../../CORE/Blood';
+import { getDownstreamFocusPath } from './helpers';
 
 export function GraphView({
   areaId: _areaId,
@@ -21,6 +22,7 @@ export function GraphView({
   const graphConfig = state[BC.system.config]?.graph || {};
   const graphNodeBaseFontSize = Number(graphConfig.nodeFontSize) || 9;
   const fileSavedMap = state[BC_PREFIX.fileSavedAll] || {};
+  const openFileMap = state[BC_PREFIX.openFileAll] || {};
   const fileSavedEvent = Object.values(fileSavedMap).reduce((max: number, val: any) => Math.max(max, Number(val) || 0), 0);
 
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
@@ -89,6 +91,14 @@ export function GraphView({
   });
 
   const dragNodeId = useRef<string | null>(null);
+
+  const { activateNode, discardTemporaryNote } = useGraphNodeNavigation({
+    projectPath,
+    nodes,
+    openFileMap,
+    fileSavedMap,
+    updateBloodKey,
+  });
 
   const {
     wakeSimulation,
@@ -166,6 +176,12 @@ export function GraphView({
   const clearGraphFocus = () => {
     setSelectedNodeId(null);
     setHoveredNode(null);
+    void discardTemporaryNote().catch((error) => {
+      updateBloodKey(BC.events.scriptError('graphView'), {
+        message: error instanceof Error ? error.message : String(error),
+        ts: Date.now(),
+      });
+    });
   };
 
   const handleSVGMouseMove = (e: React.MouseEvent) => {
@@ -190,31 +206,14 @@ export function GraphView({
     }
   };
 
-  const openNodeInEditor = (nodeId: string) => {
-    const node = simRef.current.nodes.find((item) => item.id === nodeId);
-    if (!node || node.isVirtual) return;
-
-    const lastFocused = Blood.getValue<string | null>(BC.system.lastFocusedEditorId, null);
-    const activeEds = Blood.getValue<string[]>(BC.system.activeEditors, []);
-    let targetEditorId = lastFocused || activeEds[0];
-    if (!targetEditorId) {
-      const allState = Blood.getRawState() || {};
-      const prefix = 'system.areaComponentTypes.';
-      for (const [key, value] of Object.entries(allState)) {
-        if (key.startsWith(prefix) && value === 'editor') {
-          targetEditorId = key.substring(prefix.length);
-          break;
-        }
-      }
-    }
-    if (!targetEditorId) targetEditorId = 'editor-root';
-
-    updateBloodKey(BC.events.openFile(targetEditorId), node.id);
-  };
-
   const handleNodeActivate = (nodeId: string) => {
     setSelectedNodeId(nodeId);
-    openNodeInEditor(nodeId);
+    void activateNode(nodeId).catch((error) => {
+      updateBloodKey(BC.events.scriptError('graphView'), {
+        message: error instanceof Error ? error.message : String(error),
+        ts: Date.now(),
+      });
+    });
   };
 
   const handleSVGMouseUp = (e?: React.MouseEvent) => {
@@ -286,15 +285,11 @@ export function GraphView({
     if (selectedNodeId && !nodeById.has(selectedNodeId)) setSelectedNodeId(null);
   }, [nodeById, hoveredNode, selectedNodeId]);
 
-  const neighborById = useMemo(() => {
-    const neighbors = new Map<string, Set<string>>();
-    nodes.forEach((node) => neighbors.set(node.id, new Set()));
-    links.forEach((link) => {
-      neighbors.get(link.source)?.add(link.target);
-      neighbors.get(link.target)?.add(link.source);
-    });
-    return neighbors;
-  }, [nodes, links]);
+  const activeFocusNode = hoveredNode || selectedNodeId;
+  const focusPath = useMemo(
+    () => getDownstreamFocusPath(activeFocusNode, links),
+    [activeFocusNode, links],
+  );
 
   const searchFocus = useMemo(() => {
     const query = fileSearchQuery.trim().toLowerCase();
@@ -332,7 +327,7 @@ export function GraphView({
   return <GraphViewSurface {...{
     activePaletteName, arrowSize, getLevelColor, graphMode, graphNodeBaseFontSize,
     handleNodeActivate, handleNodeMouseDown, handleSVGMouseDown, handleSVGMouseMove,
-    handleSVGMouseUp, hoveredNode, isPanning, isPaletteEditorOpen, links, neighborById,
+    handleSVGMouseUp, hoveredNode, isPanning, isPaletteEditorOpen, links, focusPath,
     nodeById, nodes, palettes, pan, projectPath, repulsion, searchFocus, selectedNodeId,
     setActivePaletteName, setArrowSize, setGraphMode, setHoveredNode, setIsPaletteEditorOpen,
     setPalettes, setPan, setRepulsion, setSelectedNodeId, setSpacing, setVirtualDetail,

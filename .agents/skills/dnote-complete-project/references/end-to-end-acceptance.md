@@ -58,6 +58,9 @@ Minimum complete slice:
 - Declare dependencies through the project environment, not an APP plugin.
 - Confirm new actions appear in `shortcutRegistry` and new content commands in
   an already-open slash menu without inserting a stray `/`.
+- For graph-created temporary Markdown, verify create/open, edited-save
+  promotion, unchanged cleanup, project switch, unmount, collision avoidance,
+  and rapid-click stale-result handling as separate lifecycle states.
 
 ## 4. Markdown/rendering slice
 

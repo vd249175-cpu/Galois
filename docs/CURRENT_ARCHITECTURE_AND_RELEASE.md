@@ -337,11 +337,20 @@ reintroduce virtual nodes after the user returns to zero.
 
 Graph navigation targets the editor, not the file browser. A single click on a
 real note node opens that node's backing Markdown through
-`events.openFile.{lastFocusedEditorId}`. A virtual concept has no backing file;
-it stays selected in the graph and exposes supporting real-note links. Clicking
-canvas whitespace clears graph focus. `system.fileSearchQuery` may highlight
-graph nodes from an existing file-tree search, but graph clicks never write the
-file-tree query.
+`events.openFile.{lastFocusedEditorId}`. Clicking a virtual concept creates a
+collision-safe temporary `概念-*.md` at the notebook root with Frontmatter tags
+and supporting WikiLinks, then opens it through the same editor path. A disk
+content change followed by save promotes the note and removes its temporary
+marker. If it remains equal to the generated template, leaving it, switching
+node/project, clicking graph whitespace, or unmounting graph-view deletes it
+and broadcasts `events.fileSaved.*`. Existing promoted files are never
+overwritten. `system.fileSearchQuery` may highlight graph nodes from an existing
+file-tree search, but graph clicks never write the file-tree query.
+
+Graph hover/selection focus is transitive in the outgoing lattice direction:
+the focused node, one direct parent layer, and every reachable descendant and
+edge remain visible through the deepest leaf layer. Unrelated branches dim, and
+canvas defocus restores the complete graph.
 
 ## Editor UX Baseline
 
