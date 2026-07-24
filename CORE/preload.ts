@@ -195,4 +195,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('app:configFileChanged', listener);
     return () => { ipcRenderer.removeListener('app:configFileChanged', listener); };
   },
+  setTitleBarOverlay: (color: string, symbolColor: string) =>
+    ipcRenderer.invoke('window:setTitleBarOverlay', { color, symbolColor }),
+  isMaximized: () =>
+    ipcRenderer.invoke('window:isMaximized'),
+  onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+    const listener = (_event: any, state: boolean) => callback(state);
+    ipcRenderer.on('window:maximizedChange', listener);
+    return () => { ipcRenderer.removeListener('window:maximizedChange', listener); };
+  },
 });

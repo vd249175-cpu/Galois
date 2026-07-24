@@ -251,9 +251,10 @@ ipcMain.handle('shell:runProjectScript', async (_, projectPath: string, request:
     if (!isInsidePath(cwd, scriptPath)) {
       throw new Error('Project scriptName must stay inside its script directory');
     }
+    const quoteFn = process.platform === 'win32' ? quoteCmdArg : quoteShellArg;
     command = request.useUv === false
-      ? quoteShellArg(scriptPath)
-      : `uv run ${quoteShellArg(scriptPath)}`;
+      ? quoteFn(scriptPath)
+      : `uv run ${quoteFn(scriptPath)}`;
   }
   if (!command) {
     throw new Error('Missing project script command');

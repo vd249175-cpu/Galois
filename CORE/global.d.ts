@@ -220,6 +220,9 @@ export interface ElectronAPI {
   getLastProjectPath: () => Promise<string | null>;
   setLastProjectPath: (projectPath: string) => Promise<boolean>;
   onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => () => void;
+  setTitleBarOverlay: (color: string, symbolColor: string) => Promise<void>;
+  isMaximized: () => Promise<boolean>;
+  onMaximizedChange: (callback: (isMaximized: boolean) => void) => () => void;
 }
 
 declare global {

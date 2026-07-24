@@ -18,6 +18,27 @@ function createMainWindow() {
     } catch (_) {}
   }
 
+  // On Windows, read saved config to pick the right overlay color for the current theme
+  let overlayBg = '#f9f8f5';    // default-light bg
+  let overlaySymbol = '#2b2b2f'; // default-light text color
+  if (process.platform === 'win32') {
+    const configPath = path.join(app.getPath('documents'), 'Galois', 'config', 'galois.config.json');
+    try {
+      if (fs.existsSync(configPath)) {
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const themeId = cfg?.theme || 'default-light';
+        const themeOverlayColors: Record<string, [string, string]> = {
+          'default-light': ['#f9f8f5', '#2b2b2f'],
+          'default-dark':  ['#121212', '#cccccc'],
+          'lavender':      ['#f0edf8', '#2b2b2f'],
+          'yuebai':        ['#eef4f7', '#2b2b2f'],
+          'black-gold':    ['#0a0a0a', '#d4af37'],
+        };
+        [overlayBg, overlaySymbol] = themeOverlayColors[themeId] || themeOverlayColors['default-light'];
+      }
+    } catch (_) { /* use defaults */ }
+  }
+
   const mainWindow = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
@@ -25,7 +46,16 @@ function createMainWindow() {
     height: bounds.height || 800,
     title: 'Galois Workspace',
     titleBarStyle: 'hidden',
-    backgroundColor: '#121212',
+    ...(process.platform === 'win32'
+      ? {
+          titleBarOverlay: {
+            color: overlayBg,
+            symbolColor: overlaySymbol,
+            height: 30,
+          },
+        }
+      : {}),
+    backgroundColor: overlayBg,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -34,6 +64,13 @@ function createMainWindow() {
   });
 
   setMainWindow(mainWindow);
+
+  mainWindow.on('maximize', () => {
+    mainWindow.webContents.send('window:maximizedChange', true);
+  });
+  mainWindow.on('unmaximize', () => {
+    mainWindow.webContents.send('window:maximizedChange', false);
+  });
 
   const saveBounds = () => {
     try {

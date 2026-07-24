@@ -94,4 +94,20 @@ export async function applyTheme(themeId: string) {
     styleEl.textContent = defaultLight;
     document.documentElement.setAttribute('data-theme', 'default-light');
   }
+
+  // On Windows: sync native titleBarOverlay color with the active theme
+  const isWin = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('win');
+  if (isWin) {
+    const themeOverlayColors: Record<string, { bg: string; symbol: string }> = {
+      'default-light': { bg: '#f9f8f5',  symbol: '#2b2b2f' },
+      'default-dark':  { bg: '#121212',  symbol: '#cccccc' },
+      'lavender':      { bg: '#f0edf8',  symbol: '#2b2b2f' },
+      'yuebai':        { bg: '#eef4f7',  symbol: '#2b2b2f' },
+      'black-gold':    { bg: '#0a0a0a',  symbol: '#d4af37' },
+    };
+    const overlay = themeOverlayColors[themeId] || themeOverlayColors['default-light'];
+    try {
+      window.electronAPI?.setTitleBarOverlay?.(overlay.bg, overlay.symbol);
+    } catch (_) { /* safe to ignore if IPC not ready */ }
+  }
 }

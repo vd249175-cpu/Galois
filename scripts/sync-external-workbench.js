@@ -13,7 +13,7 @@ function fail(message) {
 }
 
 function run(command, args, cwd = sourceRoot) {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit' });
+  const result = spawnSync(command, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
   if (result.error) fail(result.error.message);
   if (result.status !== 0) process.exit(result.status || 1);
 }
@@ -70,7 +70,7 @@ if (fs.existsSync(path.join(targetRoot, '.git'))) {
   const status = spawnSync(
     'git',
     ['status', '--porcelain=v1', '-z', '--untracked-files=all'],
-    { cwd: targetRoot, encoding: 'utf-8' },
+    { cwd: targetRoot, encoding: 'utf-8', shell: process.platform === 'win32' },
   );
   if (status.status !== 0) fail('Could not inspect the external workbench Git state.');
 
@@ -90,6 +90,40 @@ if (fs.existsSync(path.join(targetRoot, '.git'))) {
   }
 }
 
+function syncDirectory(src, dest, excludeNames = new Set()) {
+  if (fs.existsSync(dest)) {
+    const destEntries = fs.readdirSync(dest, { withFileTypes: true });
+    for (const entry of destEntries) {
+      const entryName = entry.name;
+      if (entryName === '.DS_Store' || excludeNames.has(entryName)) {
+        continue;
+      }
+      const targetPath = path.join(dest, entryName);
+      const sourcePath = path.join(src, entryName);
+      if (!fs.existsSync(sourcePath)) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+      }
+    }
+  }
+
+  fs.mkdirSync(dest, { recursive: true });
+  const srcEntries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of srcEntries) {
+    const entryName = entry.name;
+    if (entryName === '.DS_Store' || excludeNames.has(entryName)) {
+      continue;
+    }
+    const sourcePath = path.join(src, entryName);
+    const targetPath = path.join(dest, entryName);
+    const stat = fs.statSync(sourcePath);
+    if (stat.isDirectory()) {
+      syncDirectory(sourcePath, targetPath);
+    } else {
+      fs.copyFileSync(sourcePath, targetPath);
+    }
+  }
+}
+
 console.log(`[sync:workbench] Replacing managed source in ${targetRoot}`);
 for (const item of managedItems) {
   const sourceItem = path.join(sourceRoot, item);
@@ -102,15 +136,13 @@ for (const item of managedItems) {
     continue;
   }
 
-  fs.mkdirSync(targetItem, { recursive: true });
-  const args = ['-a', '--delete', '--exclude', '.DS_Store'];
+  const excludeNames = new Set();
   if (item === 'APP') {
     for (const pluginName of protectedPluginNames) {
-      args.push('--exclude', `/${pluginName}/`);
+      excludeNames.add(pluginName);
     }
   }
-  args.push(`${sourceItem}/`, `${targetItem}/`);
-  run('rsync', args);
+  syncDirectory(sourceItem, targetItem, excludeNames);
 }
 
 console.log('[sync:workbench] Source code replaced successfully.');
@@ -122,7 +154,7 @@ if (fs.existsSync(path.join(targetRoot, '.git'))) {
   run('git', ['config', 'user.email', 'galois-workbench@local'], targetRoot);
   const protectedPathspecs = protectedPluginNames.map((name) => `:(exclude)APP/${name}/**`);
   run('git', ['add', '-A', '--', ...managedItems, ...protectedPathspecs], targetRoot);
-  const staged = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: targetRoot });
+  const staged = spawnSync('git', ['diff', '--cached', '--quiet'], { cwd: targetRoot, shell: process.platform === 'win32' });
   if (staged.status === 1) {
     run('git', ['commit', '-m', 'Sync managed Galois source'], targetRoot);
     console.log('[sync:workbench] Created a rollback checkpoint in the external workbench Git repository.');

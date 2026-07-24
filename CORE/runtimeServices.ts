@@ -13,7 +13,11 @@ function getSecureEnv() {
   const userEnv = { ...process.env };
   const homeDir = os.homedir();
   const utf8Locale = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8';
-  const commonPaths = [
+  const delimiter = path.delimiter;
+  const commonPaths = process.platform === 'win32' ? [
+    path.join(homeDir, '.cargo', 'bin'),
+    path.join(homeDir, '.local', 'bin'),
+  ] : [
     '/usr/local/bin',
     '/opt/homebrew/bin',
     path.join(homeDir, '.cargo/bin'),
@@ -25,11 +29,11 @@ function getSecureEnv() {
   ];
   const existingPath = userEnv.PATH || '';
   const allPaths = Array.from(new Set([
-    ...existingPath.split(':'),
+    ...existingPath.split(delimiter),
     ...commonPaths
   ])).filter(Boolean);
   
-  userEnv.PATH = allPaths.join(':');
+  userEnv.PATH = allPaths.join(delimiter);
   userEnv.LANG = userEnv.LANG && /utf-?8/i.test(userEnv.LANG) ? userEnv.LANG : utf8Locale;
   userEnv.LC_ALL = userEnv.LC_ALL && /utf-?8/i.test(userEnv.LC_ALL) ? userEnv.LC_ALL : utf8Locale;
   userEnv.LC_CTYPE = userEnv.LC_CTYPE && /utf-?8/i.test(userEnv.LC_CTYPE) ? userEnv.LC_CTYPE : utf8Locale;
@@ -56,7 +60,9 @@ function shouldLaunchExternalWorkbench(): boolean {
 }
 
 function launchExternalWorkbench() {
-  const runScriptPath = path.join(path.dirname(getClassicCodeWorkspacePath()), 'run-galois-workbench.sh');
+  const isWin = process.platform === 'win32';
+  const scriptName = isWin ? 'run-galois-workbench.bat' : 'run-galois-workbench.sh';
+  const runScriptPath = path.join(path.dirname(getClassicCodeWorkspacePath()), scriptName);
   if (!fs.existsSync(runScriptPath)) {
     throw new Error(`External workbench launcher not found: ${runScriptPath}`);
   }
@@ -64,7 +70,11 @@ function launchExternalWorkbench() {
   const logPath = getGaloisLogPath('external-workbench.log');
   ensureParentDir(logPath);
   const logFd = fs.openSync(logPath, 'a');
-  const child = spawn(runScriptPath, [], {
+  
+  const spawnCmd = isWin ? 'cmd.exe' : runScriptPath;
+  const spawnArgs = isWin ? ['/c', runScriptPath] : [];
+
+  const child = spawn(spawnCmd, spawnArgs, {
     cwd: path.dirname(getClassicCodeWorkspacePath()),
     detached: true,
     env: getSecureEnv(),
@@ -256,15 +266,19 @@ function getRuntimeInfo() {
 
 async function checkTool(command: string, versionArgs = '--version') {
   try {
-    const which = await runShellCommand(`command -v ${quoteShellArg(command)}`, os.homedir(), getSecureEnv());
+    const isWin = process.platform === 'win32';
+    const checkCmd = isWin ? `where.exe ${command}` : `command -v ${quoteShellArg(command)}`;
+    const which = await runShellCommand(checkCmd, os.homedir(), getSecureEnv());
     let version = '';
     try {
-      const result = await runShellCommand(`${quoteShellArg(command)} ${versionArgs}`, os.homedir(), getSecureEnv());
+      const execName = isWin ? command : quoteShellArg(command);
+      const result = await runShellCommand(`${execName} ${versionArgs}`, os.homedir(), getSecureEnv());
       version = (result.stdout || result.stderr).trim().split('\n')[0] || '';
     } catch (err: any) {
       version = err.message || '';
     }
-    return { available: true, path: which.stdout.trim(), version };
+    const toolPath = which.stdout.trim().split('\r\n')[0].split('\n')[0];
+    return { available: true, path: toolPath, version };
   } catch (err: any) {
     return { available: false, error: err.message || `${command} not found` };
   }

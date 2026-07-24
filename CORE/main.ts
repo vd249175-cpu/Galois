@@ -384,5 +384,6 @@ const { ensureDefaultNotebookProject, getDefaultNotebookProjectPath, initUserDat
   getGaloisShortcutsPath,
   getSecureEnv,
   quoteShellArg,
+  quoteCmdArg,
 });
 registerTerminalIpcHandlers(getSecureEnv);

@@ -8,7 +8,7 @@ export function createClassicWorkspaceServices(deps: any) {
   const {
     getClassicCodeSourcePath, getClassicCodeWorkspacePath, getDefaultAppConfig,
     getGaloisHomePath, getGaloisConfigPath, getGaloisShortcutsPath,
-    getSecureEnv, quoteShellArg,
+    getSecureEnv, quoteShellArg, quoteCmdArg,
   } = deps;
 
 const CLASSIC_CODE_ITEMS = [
@@ -127,7 +127,8 @@ function writeClassicWorkspaceScripts(sourceRoot: string, workspaceRoot: string)
   const launcherDir = path.dirname(workspaceRoot);
   fs.mkdirSync(launcherDir, { recursive: true });
 
-const runScript = `#!/bin/bash
+  // ── Unix Shell Scripts ──────────────────────────────────────────────────────
+  const runScript = `#!/bin/bash
 set -e
 cd ${quoteShellArg(workspaceRoot)}
 PID_FILE=${quoteShellArg(path.join(launcherDir, 'galois-workbench.pid'))}
@@ -248,6 +249,143 @@ echo "Restored classic Galois code to $TARGET"
   const restoreScriptPath = path.join(launcherDir, 'restore-galois-workbench.sh');
   fs.writeFileSync(restoreScriptPath, restoreScript, 'utf-8');
   fs.chmodSync(restoreScriptPath, 0o755);
+
+  // ── Windows Batch Scripts ──────────────────────────────────────────────────
+  const winRunScript = `@echo off
+cd /d "${workspaceRoot}"
+set "PID_FILE=${path.join(launcherDir, 'galois-workbench.pid')}"
+for /f "usebackq tokens=*" %%i in (\`node -e "console.log(process.ppid)"\`) do set MY_PID=%%i
+echo %MY_PID% > "%PID_FILE%"
+
+echo Starting external Galois workbench:
+echo   ${workspaceRoot}
+echo This process uses the external CORE/, APP/, docs/, and .agents/ tree.
+
+if not exist package.json goto INCOMPLETE
+if not exist CORE\\main.ts goto INCOMPLETE
+if not exist CORE\\preload.ts goto INCOMPLETE
+if not exist APP goto INCOMPLETE
+goto ENVIRONMENT
+
+:INCOMPLETE
+echo External Galois workbench is incomplete. Restore it with:
+echo   ${path.join(launcherDir, 'restore-galois-workbench.bat')}
+del "%PID_FILE%"
+exit /b 1
+
+:ENVIRONMENT
+where.exe node >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+  echo Node.js is required to run the editable Galois workbench.
+  echo Install it from https://nodejs.org/
+  del "%PID_FILE%"
+  exit /b 1
+)
+
+where.exe npm >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+  echo npm is required to install Galois workbench dependencies.
+  del "%PID_FILE%"
+  exit /b 1
+)
+
+where.exe git >nul 2>nul
+if %ERRORLEVEL% eq 0 (
+  if not exist .git (
+    git init >nul
+    git config user.name "Galois Workbench"
+    git config user.email "galois-workbench@local"
+    git add .
+    git commit -m "Initialize Galois external workbench" >nul 2>nul
+  )
+) else (
+  echo Warning: git was not found. Agent rollback will fall back to the classic restore script.
+)
+
+if not exist node_modules (
+  echo Installing dependencies...
+  call npm install
+)
+
+findstr /C:"fix:native" package.json >nul 2>nul
+if %ERRORLEVEL% eq 0 (
+  call npm run fix:native
+)
+
+call npm run dev
+del "%PID_FILE%"
+`;
+  fs.writeFileSync(path.join(launcherDir, 'run-galois-workbench.bat'), winRunScript, 'utf-8');
+
+  const winRestartScript = `@echo off
+set "LAUNCHER_DIR=${launcherDir}"
+set "WORKSPACE_ROOT=${workspaceRoot}"
+set "PID_FILE=%LAUNCHER_DIR%\\galois-workbench.pid"
+set "LOG_DIR=${path.join(getGaloisHomePath(), 'logs')}"
+
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+
+if exist "%PID_FILE%" (
+  set /p OLD_PID=<"%PID_FILE%"
+  if not "%OLD_PID%"=="" (
+    echo Stopping existing Galois workbench process: %OLD_PID%
+    taskkill /f /t /pid %OLD_PID% >nul 2>nul
+  )
+  del "%PID_FILE%"
+)
+
+cd /d "%WORKSPACE_ROOT%"
+echo Starting Galois workbench with HMR...
+start "" /b cmd /c "%LAUNCHER_DIR%\\run-galois-workbench.bat" >> "%LOG_DIR%\\external-workbench.log" 2>&1
+echo Galois workbench restart requested.
+`;
+  fs.writeFileSync(path.join(launcherDir, 'restart-galois-workbench.bat'), winRestartScript, 'utf-8');
+
+  const winRebuildScript = `@echo off
+set "LAUNCHER_DIR=${launcherDir}"
+set "WORKSPACE_ROOT=${workspaceRoot}"
+cd /d "%WORKSPACE_ROOT%"
+echo Rebuilding Electron CORE/preload, then reopening Galois...
+call npm run build:electron
+call "%LAUNCHER_DIR%\\restart-galois-workbench.bat"
+`;
+  fs.writeFileSync(path.join(launcherDir, 'rebuild-and-reopen-galois-workbench.bat'), winRebuildScript, 'utf-8');
+
+  const winRestoreScript = sameSourceAndTarget
+    ? `@echo off
+echo Restore refused: classic source and external workbench resolve to the same directory.
+echo Use Git in ${workspaceRoot} or sync from a separate source checkout with npm run sync:workbench.
+exit /b 1
+`
+    : `@echo off
+set "SOURCE=${sourceRoot}"
+set "TARGET=${workspaceRoot}"
+
+if not exist "%SOURCE%" (
+  echo Classic source not found: %SOURCE%
+  exit /b 1
+)
+
+echo Restoring classic Galois workbench...
+if exist "%TARGET%" rmdir /s /q "%TARGET%"
+mkdir "%TARGET%"
+robocopy "%SOURCE%" "%TARGET%" /E /XD .git node_modules .build dist dist-electron .venv .dnote_cache /XF .DS_Store >nul
+set ERRORLEVEL=0
+
+cd /d "%TARGET%"
+where.exe git >nul 2>nul
+if %ERRORLEVEL% eq 0 (
+  git init >nul
+  git config user.name "Galois Workbench"
+  git config user.email "galois-workbench@local"
+  git add .
+  git commit -m "Restore classic Galois workbench" >nul 2>nul
+) else (
+  echo Warning: git was not found. Classic code restored without a git checkpoint.
+)
+echo Restored classic Galois code to %TARGET%
+`;
+  fs.writeFileSync(path.join(launcherDir, 'restore-galois-workbench.bat'), winRestoreScript, 'utf-8');
 }
 
 function syncClassicCodeWorkspace(overwrite = false) {
@@ -313,7 +451,7 @@ function shouldRemoveStarterVenv(projectPath: string): boolean {
     if (homeMatch && !fs.existsSync(homeMatch[1].trim())) return true;
 
     const versionMatch = pyvenv.match(/^version_info\s*=\s*(\d+\.\d+)/m);
-    if (versionMatch) {
+    if (process.platform === 'darwin' && versionMatch) {
       const linkedDylib = path.join(venvPath, 'lib', `libpython${versionMatch[1]}.dylib`);
       const pythonBin = path.join(venvPath, 'bin', 'python3');
       if (fs.existsSync(pythonBin) && !fs.existsSync(linkedDylib)) return true;

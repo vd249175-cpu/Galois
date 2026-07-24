@@ -161,8 +161,11 @@ def main() -> None:
     if ICNS.exists():
         ICNS.unlink()
 
-    subprocess.run(["iconutil", "-c", "icns", str(ICONSET), "-o", str(ICNS)], check=True)
-    shutil.rmtree(ICONSET)
+    if shutil.which("iconutil"):
+        subprocess.run(["iconutil", "-c", "icns", str(ICONSET), "-o", str(ICNS)], check=True)
+        shutil.rmtree(ICONSET)
+    else:
+        print("[generate_app_icon] Warning: iconutil not found. Skipping .icns creation. Only .png iconset was written.")
 
 
 if __name__ == "__main__":
