@@ -11,10 +11,27 @@ export function createRuntimeServices(deps: any) {
   } = deps;
 function getSecureEnv() {
   const userEnv = { ...process.env };
+  const isWin = process.platform === 'win32';
   const homeDir = os.homedir();
   const utf8Locale = process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8';
   const delimiter = path.delimiter;
-  const commonPaths = process.platform === 'win32' ? [
+  
+  if (isWin) {
+    // Consolidate all variations of PATH/Path/path to a single uppercase PATH key
+    let mergedPath = '';
+    for (const key of Object.keys(userEnv)) {
+      if (key.toUpperCase() === 'PATH') {
+        const val = userEnv[key];
+        if (val) {
+          mergedPath = mergedPath ? mergedPath + ';' + val : val;
+        }
+        delete userEnv[key];
+      }
+    }
+    userEnv.PATH = mergedPath;
+  }
+
+  const commonPaths = isWin ? [
     path.join(homeDir, '.cargo', 'bin'),
     path.join(homeDir, '.local', 'bin'),
     'C:\\Windows\\system32',
@@ -32,21 +49,13 @@ function getSecureEnv() {
     '/sbin'
   ];
   
-  let pathKey = 'PATH';
-  for (const k of Object.keys(userEnv)) {
-    if (k.toUpperCase() === 'PATH') {
-      pathKey = k;
-      break;
-    }
-  }
-  
-  const existingPath = userEnv[pathKey] || '';
+  const existingPath = userEnv.PATH || '';
   const allPaths = Array.from(new Set([
     ...existingPath.split(delimiter),
     ...commonPaths
   ])).filter(Boolean);
   
-  userEnv[pathKey] = allPaths.join(delimiter);
+  userEnv.PATH = allPaths.join(delimiter);
   userEnv.LANG = userEnv.LANG && /utf-?8/i.test(userEnv.LANG) ? userEnv.LANG : utf8Locale;
   userEnv.LC_ALL = userEnv.LC_ALL && /utf-?8/i.test(userEnv.LC_ALL) ? userEnv.LC_ALL : utf8Locale;
   userEnv.LC_CTYPE = userEnv.LC_CTYPE && /utf-?8/i.test(userEnv.LC_CTYPE) ? userEnv.LC_CTYPE : utf8Locale;
