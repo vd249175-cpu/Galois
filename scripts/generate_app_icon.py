@@ -13,6 +13,7 @@ ASSETS = ROOT / "assets"
 ICONSET = ASSETS / "app-icon.iconset"
 PNG = ASSETS / "app-icon.png"
 ICNS = ASSETS / "app-icon.icns"
+ICO = ASSETS / "app-icon.ico"
 
 
 def _rounded_rect(draw: ImageDraw.ImageDraw, box, radius, fill, outline=None, width=1):
@@ -157,6 +158,13 @@ def main() -> None:
     base = _make_base()
     base.save(PNG)
     _write_iconset(base)
+
+    # Save Windows multi-resolution ICO icon
+    try:
+        base.save(ICO, format="ICO", sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
+        print("[generate_app_icon] Windows .ico icon generated successfully.")
+    except Exception as e:
+        print(f"[generate_app_icon] Warning: Failed to generate .ico: {e}")
 
     if ICNS.exists():
         ICNS.unlink()
