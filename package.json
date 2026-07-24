@@ -13,7 +13,7 @@
     "fix:native": "node scripts/fix-native-binaries.js",
     "dev:vite": "vite",
     "dev:electron": "npm run build:electron && node scripts/launch-electron.js development",
-    "dev": "npm run fix:native && concurrently -k \"npm run dev:vite\" \"node -e \\\"setTimeout(String, 1500)\\\" && npm run dev:electron\"",
+    "dev": "npm run fix:native && npm run build:electron && concurrently -k \"vite\" \"node -e \\\"setTimeout(String, 1500)\\\" && node scripts/launch-electron.js development\"",
     "restart:workbench": "node scripts/restart-workbench.js",
     "sync:workbench": "node scripts/sync-external-workbench.js",
     "scaffold:plugin": "node scripts/run-python.js .agents/skills/dnote-app-plugins/scripts/scaffold_plugin.py",

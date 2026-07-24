@@ -270,7 +270,7 @@ echo "Restored classic Galois code to $TARGET"
 cd /d "${workspaceRoot}"
 set "PID_FILE=${path.join(launcherDir, 'galois-workbench.pid')}"
 for /f "usebackq tokens=*" %%i in (\`node -e "console.log(process.ppid)"\`) do set MY_PID=%%i
-echo %MY_PID% > "%PID_FILE%"
+echo %MY_PID%>%PID_FILE%
 
 echo Starting external Galois workbench:
 echo   ${workspaceRoot}
@@ -319,15 +319,15 @@ if %ERRORLEVEL% EQU 0 (
 
 if not exist node_modules (
   echo Installing dependencies...
-  call npm install
+  call npm install <nul
 )
 
 findstr /C:"fix:native" package.json >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
-  call npm run fix:native
+  call npm run fix:native <nul
 )
 
-call npm run dev
+call npm run dev <nul
 del "%PID_FILE%"
 `;
   fs.writeFileSync(path.join(launcherDir, 'run-galois-workbench.bat'), winRunScript, 'utf-8');
@@ -351,7 +351,7 @@ if exist "%PID_FILE%" (
 
 cd /d "%WORKSPACE_ROOT%"
 echo Starting Galois workbench with HMR...
-start "" /b cmd /c "%LAUNCHER_DIR%\\run-galois-workbench.bat" >> "%LOG_DIR%\\external-workbench.log" 2>&1
+start "" /b cmd /c "%LAUNCHER_DIR%\\run-galois-workbench.bat" <nul >> "%LOG_DIR%\\external-workbench.log" 2>&1
 echo Galois workbench restart requested.
 `;
   fs.writeFileSync(path.join(launcherDir, 'restart-galois-workbench.bat'), winRestartScript, 'utf-8');
