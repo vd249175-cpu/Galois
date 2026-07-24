@@ -109,10 +109,27 @@ app.whenReady().then(async () => {
   if (shouldLaunchExternalWorkbench()) {
     try {
       await launchExternalWorkbench();
-      setTimeout(() => {
-        launcherStatusWindow?.close();
-        app.quit();
-      }, 30_000);
+      // Poll port 5173 every 500ms — close launcher as soon as Vite is up
+      const net = require('net');
+      const MAX_WAIT_MS = 90_000;
+      const started = Date.now();
+      const pollTimer = setInterval(() => {
+        if (launcherStatusWindow?.isDestroyed()) { clearInterval(pollTimer); return; }
+        const sock = new net.Socket();
+        sock.setTimeout(300);
+        sock.on('connect', () => {
+          sock.destroy();
+          clearInterval(pollTimer);
+          launcherStatusWindow?.close();
+        });
+        sock.on('error', () => sock.destroy());
+        sock.on('timeout', () => sock.destroy());
+        sock.connect(5173, '127.0.0.1');
+        if (Date.now() - started > MAX_WAIT_MS) {
+          clearInterval(pollTimer);
+          launcherStatusWindow?.close();
+        }
+      }, 500);
     } catch (err: any) {
       launcherStatusWindow?.close();
       dialog.showErrorBox('启动失败 / Launch Failed', err.message || String(err));
@@ -224,8 +241,11 @@ app.on('before-quit', () => {
   for (const child of mpvProcesses) child.kill();
   mpvProcesses.clear();
 
-  // Clean up external workbench processes on Windows upon quit
+  // Kill all workbench processes on Windows upon quit
+  // Strategy: kill by PID file first, then kill by port 5173 as fallback
   if (process.platform === 'win32') {
+    const execSync = require('child_process').execSync;
+    // 1. Kill by PID file
     const pidPath = path.join(app.getPath('documents'), 'Galois', 'workbench', 'galois-workbench.pid');
     if (fs.existsSync(pidPath)) {
       try {
@@ -233,14 +253,25 @@ app.on('before-quit', () => {
         if (pidStr) {
           const pid = parseInt(pidStr, 10);
           if (Number.isInteger(pid) && pid > 0) {
-            require('child_process').execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' });
+            execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' });
           }
         }
       } catch (_) {}
-      try {
-        fs.unlinkSync(pidPath);
-      } catch (_) {}
+      try { fs.unlinkSync(pidPath); } catch (_) {}
     }
+    // 2. Always kill by port 5173 (catches Vite even if PID file was missing)
+    try {
+      const out = execSync('netstat -ano | findstr ":5173 "', { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf-8' }) as string;
+      const pids = new Set<string>();
+      for (const line of out.split('\n')) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+      }
+      for (const pid of pids) {
+        try { execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' }); } catch (_) {}
+      }
+    } catch (_) {}
   }
 });
 
