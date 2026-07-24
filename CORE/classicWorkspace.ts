@@ -412,7 +412,16 @@ function syncClassicCodeWorkspace(overwrite = false) {
   }
 
   const versionMarkerPath = path.join(workspaceRoot, '.workspace_version');
-  const currentVersion = app.getVersion();
+  let currentVersion = app.getVersion();
+  try {
+    const launcherPackagePath = path.join(app.getAppPath(), 'package.json');
+    if (fs.existsSync(launcherPackagePath)) {
+      const pkg = JSON.parse(fs.readFileSync(launcherPackagePath, 'utf-8'));
+      if (pkg.buildTime) {
+        currentVersion = `${pkg.version}-${pkg.buildTime}`;
+      }
+    }
+  } catch (_) {}
 
   // If in production packaged app and workspace matches current version, skip copying
   if (app.isPackaged && !overwrite && fs.existsSync(versionMarkerPath)) {
