@@ -132,8 +132,16 @@ export function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const keys: string[] = [];
-      if (e.metaKey) keys.push('meta');
-      if (e.ctrlKey) keys.push('control');
+      const isWin = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('win');
+      
+      if (isWin) {
+        // On Windows, translate e.ctrlKey to 'meta' to match meta+s, meta+k, etc. default configs
+        if (e.ctrlKey) keys.push('meta');
+        if (e.metaKey) keys.push('control');
+      } else {
+        if (e.metaKey) keys.push('meta');
+        if (e.ctrlKey) keys.push('control');
+      }
       if (e.altKey) keys.push('alt');
       if (e.shiftKey) keys.push('shift');
 

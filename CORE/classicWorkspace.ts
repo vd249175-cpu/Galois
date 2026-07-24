@@ -411,6 +411,20 @@ function syncClassicCodeWorkspace(overwrite = false) {
     return { sourcePath: sourceRoot, workspacePath: workspaceRoot, copied: false };
   }
 
+  const versionMarkerPath = path.join(workspaceRoot, '.workspace_version');
+  const currentVersion = app.getVersion();
+
+  // If in production packaged app and workspace matches current version, skip copying
+  if (app.isPackaged && !overwrite && fs.existsSync(versionMarkerPath)) {
+    try {
+      const savedVersion = fs.readFileSync(versionMarkerPath, 'utf-8').trim();
+      if (savedVersion === currentVersion) {
+        console.log('[classic-code] Workspace is up-to-date, skipping sync');
+        return { sourcePath: sourceRoot, workspacePath: workspaceRoot, copied: false };
+      }
+    } catch (_) {}
+  }
+
   if (overwrite) {
     removePathIfExists(workspaceRoot);
   }
@@ -427,6 +441,10 @@ function syncClassicCodeWorkspace(overwrite = false) {
   assertClassicWorkspaceRunnable(workspaceRoot);
   writeClassicWorkspaceScripts(sourceRoot, workspaceRoot);
   const git = initializeClassicWorkspaceGit(workspaceRoot);
+
+  try {
+    fs.writeFileSync(versionMarkerPath, currentVersion, 'utf-8');
+  } catch (_) {}
 
   return { sourcePath: sourceRoot, workspacePath: workspaceRoot, copied: true, git };
 }
