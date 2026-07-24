@@ -134,13 +134,30 @@ async function launchExternalWorkbench() {
   // Truncate log on each fresh launch so the loader shows only current session
   const logFd = fs.openSync(logPath, 'w');
 
-  const spawnCmd = isWin ? 'cmd.exe' : runScriptPath;
-  const spawnArgs = isWin ? ['/c', runScriptPath] : [];
+  let spawnCmd: string;
+  let spawnArgs: string[];
+
+  if (isWin) {
+    // Use PowerShell with -WindowStyle Hidden so the bat and ALL its children
+    // (npm, node, git, concurrently) run without any visible console windows.
+    spawnCmd = 'powershell.exe';
+    spawnArgs = [
+      '-NoProfile',
+      '-NonInteractive',
+      '-WindowStyle', 'Hidden',
+      '-ExecutionPolicy', 'Bypass',
+      '-Command',
+      `& cmd.exe /c "${runScriptPath}"`,
+    ];
+  } else {
+    spawnCmd = runScriptPath;
+    spawnArgs = [];
+  }
 
   const child = spawn(spawnCmd, spawnArgs, {
     cwd: path.dirname(getClassicCodeWorkspacePath()),
     detached: true,
-    windowsHide: true,   // ← CRITICAL: prevents CMD window from appearing on screen
+    windowsHide: true,
     env: getSecureEnv(),
     stdio: ['ignore', logFd, logFd],
   });

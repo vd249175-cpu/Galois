@@ -120,6 +120,10 @@ app.whenReady().then(async () => {
         sock.on('connect', () => {
           sock.destroy();
           clearInterval(pollTimer);
+          // Close launcher window. window-all-closed will fire but
+          // we set workbenchLaunched=true so we do NOT quit — the
+          // workbench process is now independent and owns the session.
+          workbenchLaunched = true;
           launcherStatusWindow?.close();
         });
         sock.on('error', () => sock.destroy());
@@ -240,12 +244,24 @@ app.on('before-quit', () => {
   fileWatchEntries.clear();
   for (const child of mpvProcesses) child.kill();
   mpvProcesses.clear();
-  // Kill external workbench and Vite processes
-  if (process.platform === 'win32') killWorkbenchProcess();
+  // Only kill workbench processes when running as the actual workbench electron,
+  // NOT when running as the packaged launcher (which must let the workbench outlive it).
+  if (process.platform === 'win32' && !shouldLaunchExternalWorkbench()) {
+    killWorkbenchProcess();
+  }
 });
 
+// Track whether we successfully handed off to the external workbench.
+// If so, closing our launcher window should NOT quit the app — the
+// workbench electron owns the session from this point.
+let workbenchLaunched = false;
+
 app.on('window-all-closed', () => {
-  app.quit();
+  if (!workbenchLaunched) {
+    app.quit();
+  }
+  // else: workbench is running independently; do nothing, we stay alive
+  // until the OS cleans up (process exits naturally when node event loop empties).
 });
 
 }
