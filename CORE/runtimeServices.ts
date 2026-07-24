@@ -17,6 +17,10 @@ function getSecureEnv() {
   const commonPaths = process.platform === 'win32' ? [
     path.join(homeDir, '.cargo', 'bin'),
     path.join(homeDir, '.local', 'bin'),
+    'C:\\Windows\\system32',
+    'C:\\Windows',
+    'C:\\Windows\\System32\\Wbem',
+    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\'
   ] : [
     '/usr/local/bin',
     '/opt/homebrew/bin',
@@ -27,13 +31,22 @@ function getSecureEnv() {
     '/usr/sbin',
     '/sbin'
   ];
-  const existingPath = userEnv.PATH || '';
+  
+  let pathKey = 'PATH';
+  for (const k of Object.keys(userEnv)) {
+    if (k.toUpperCase() === 'PATH') {
+      pathKey = k;
+      break;
+    }
+  }
+  
+  const existingPath = userEnv[pathKey] || '';
   const allPaths = Array.from(new Set([
     ...existingPath.split(delimiter),
     ...commonPaths
   ])).filter(Boolean);
   
-  userEnv.PATH = allPaths.join(delimiter);
+  userEnv[pathKey] = allPaths.join(delimiter);
   userEnv.LANG = userEnv.LANG && /utf-?8/i.test(userEnv.LANG) ? userEnv.LANG : utf8Locale;
   userEnv.LC_ALL = userEnv.LC_ALL && /utf-?8/i.test(userEnv.LC_ALL) ? userEnv.LC_ALL : utf8Locale;
   userEnv.LC_CTYPE = userEnv.LC_CTYPE && /utf-?8/i.test(userEnv.LC_CTYPE) ? userEnv.LC_CTYPE : utf8Locale;
