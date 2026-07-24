@@ -8,8 +8,9 @@ Lattice Explorer 是 Galois 的**数据根源器官**，负责笔记项目的打
 
 ### 1. 📂 工作区文件夹管理
 - 通过 **"打开文件夹"** 动作（`meta+o`）或右侧栏按钮调用 `electronAPI.openDirectory()`，选择并加载笔记项目根目录。
+- 原生目录选择器在点击时获取当前 Electron 主窗口，不能在 IPC 注册阶段缓存尚未创建的窗口值。
 - 项目路径写入 `Blood: system.projectPath`，触发所有订阅该频道的器官（editor、graphView、terminal）同步更新状态。
-- 上次打开的项目路径持久化至 `localStorage`，重启后自动恢复。
+- 上次打开的项目路径持久化至 `~/Documents/Galois/config/project-state.json`；`localStorage` 仅用于旧版本迁移与历史项目菜单。
 
 ### 2. 📋 卡片式文件列表
 - 将项目根目录所有 `.md` 文件渲染为卡片网格布局。

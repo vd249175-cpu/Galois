@@ -106,6 +106,10 @@ editable files inside hidden application support folders.
   `__galoisApp.lastProjectPath`. Renderer `localStorage` is only a legacy
   migration source, so changing renderer origins or rebuilding the UI does not
   reset the selected notebook to the starter project.
+- The File Tree folder button and `fileTree.openFolder` action open a native
+  directory picker owned by the live main window. Main-process IPC must resolve
+  that window when the action runs; it must not capture the pre-startup `null`
+  window value while handlers are registered.
 - The installed `.app` bundle and `Contents/Resources/APP/` are treated as
   read-only application assets.
 

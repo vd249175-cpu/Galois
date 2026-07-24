@@ -36,6 +36,8 @@ installed `.app` bundle.
   target-only user-plugin preservation.
 - Shared file, script, project-script, terminal, configuration, layout, window,
   and media bridges exposed through preload.
+- Native project-directory selection resolves the current main window at click
+  time; validate this boundary with `npm run validate:project-opening`.
 
 ### Built-in organs
 

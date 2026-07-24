@@ -260,8 +260,8 @@ registerFileIpcHandlers({
   assertWritableTarget,
   fileWatchEntries,
   fileWatchSenderCleanup,
+  getMainWindow: () => mainWindow,
   isInsidePath,
-  mainWindow,
   releaseFileWatchesForSender,
   stopWatchingFileIfUnused,
 });
