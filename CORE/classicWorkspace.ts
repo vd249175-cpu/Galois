@@ -48,6 +48,21 @@ function shouldSkipClassicCodeItem(relativePath: string): boolean {
   );
 }
 
+function shouldAlwaysOverwrite(relativePath: string): boolean {
+  const normalized = relativePath.split(path.sep).join('/');
+  return (
+    normalized.startsWith('CORE/') ||
+    normalized.startsWith('APP/') ||
+    normalized.startsWith('scripts/') ||
+    normalized === 'package.json' ||
+    normalized === 'tsconfig.json' ||
+    normalized === 'vite.config.ts' ||
+    normalized === 'index.html' ||
+    normalized === 'index.tsx' ||
+    normalized === 'run.sh'
+  );
+}
+
 function copyClassicCodeItemSync(src: string, dest: string, relativePath: string, overwrite: boolean) {
   if (!fs.existsSync(src) || shouldSkipClassicCodeItem(relativePath)) return;
 
@@ -65,7 +80,7 @@ function copyClassicCodeItemSync(src: string, dest: string, relativePath: string
     return;
   }
 
-  if (overwrite || !fs.existsSync(dest)) {
+  if (overwrite || shouldAlwaysOverwrite(relativePath) || !fs.existsSync(dest)) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(src, dest);
   }
