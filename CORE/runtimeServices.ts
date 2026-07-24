@@ -319,12 +319,11 @@ function getRuntimeInfo() {
 async function checkTool(command: string, versionArgs = '--version') {
   try {
     const isWin = process.platform === 'win32';
-    const checkCmd = isWin ? `where.exe ${command}` : `command -v ${quoteShellArg(command)}`;
+    const checkCmd = isWin ? `where.exe ${command}` : `which ${command}`;
     const which = await runShellCommand(checkCmd, os.homedir(), getSecureEnv());
     let version = '';
     try {
-      const execName = isWin ? command : quoteShellArg(command);
-      const result = await runShellCommand(`${execName} ${versionArgs}`, os.homedir(), getSecureEnv());
+      const result = await runShellCommand(`${command} ${versionArgs}`, os.homedir(), getSecureEnv());
       version = (result.stdout || result.stderr).trim().split('\n')[0] || '';
     } catch (err: any) {
       version = err.message || '';
@@ -338,13 +337,55 @@ async function checkTool(command: string, versionArgs = '--version') {
 
 function runShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv, stdinPayload?: string) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    const child = exec(command, { cwd, env }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr || error.message));
+    const args: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < command.length; i++) {
+      const char = command[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ' ' && !inQuotes) {
+        if (current) {
+          args.push(current);
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    if (current) {
+      args.push(current);
+    }
+
+    if (args.length === 0) {
+      reject(new Error('Empty command'));
+      return;
+    }
+
+    const child = spawn(args[0], args.slice(1), { cwd, env });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `Process exited with code ${code}`));
       } else {
         resolve({ stdout, stderr });
       }
     });
+
     if (stdinPayload) {
       child.stdin?.write(stdinPayload);
       child.stdin?.end();

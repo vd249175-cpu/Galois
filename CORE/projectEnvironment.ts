@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 
 export interface PackageDeclaration {
   name: string;
@@ -37,9 +37,50 @@ function quoteShellArg(value: string): string {
 
 function run(command: string, cwd: string, env: NodeJS.ProcessEnv) {
   return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-    exec(command, { cwd, env }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr || error.message));
+    const args: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < command.length; i++) {
+      const char = command[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ' ' && !inQuotes) {
+        if (current) {
+          args.push(current);
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    if (current) {
+      args.push(current);
+    }
+
+    if (args.length === 0) {
+      reject(new Error('Empty command'));
+      return;
+    }
+
+    const child = spawn(args[0], args.slice(1), { cwd, env });
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', (err) => {
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `Process exited with code ${code}`));
       } else {
         resolve({ stdout, stderr });
       }
@@ -131,24 +172,30 @@ export function readProjectEnvironmentDeclaration(projectPath: string): ProjectE
   };
 }
 
-async function checkPackageInstalled(projectPath: string, env: NodeJS.ProcessEnv, pkg: PackageDeclaration) {
-  const script = `import importlib.util, sys; sys.exit(0 if importlib.util.find_spec(${JSON.stringify(pkg.importName)}) else 1)`;
-  try {
-    await run(`uv run python -c ${quoteShellArg(script)}`, projectPath, env);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
-
 export async function inspectProjectEnvironment(projectPath: string, env: NodeJS.ProcessEnv): Promise<ProjectEnvironmentStatus> {
   const declaration = readProjectEnvironmentDeclaration(projectPath);
-  const packages = await Promise.all(
-    declaration.packages.map(async (pkg) => ({
+  
+  let packages: PackageStatus[] = [];
+  if (declaration.packages.length > 0) {
+    const dictEntries = declaration.packages
+      .map((pkg) => `${JSON.stringify(pkg.importName)}: importlib.util.find_spec(${JSON.stringify(pkg.importName)}) is not None`)
+      .join(',\n    ');
+    const pythonScript = `import importlib.util, json; print(json.dumps({\n    ${dictEntries}\n}))`;
+
+    let statusMap: Record<string, boolean> = {};
+    try {
+      const result = await run(`uv run python -c ${quoteShellArg(pythonScript)}`, declaration.projectPath, env);
+      statusMap = JSON.parse(result.stdout);
+    } catch (_) {
+      // uv/python not available or run failed
+    }
+
+    packages = declaration.packages.map((pkg) => ({
       ...pkg,
-      installed: await checkPackageInstalled(declaration.projectPath, env, pkg),
-    }))
-  );
+      installed: Boolean(statusMap[pkg.importName]),
+    }));
+  }
+
   return {
     projectPath: declaration.projectPath,
     usesUv: true,
