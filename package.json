@@ -125,6 +125,28 @@
         }
       ]
     },
+    "win": {
+      "icon": "assets/app-icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Galois Workspace",
+      "installerIcon": "assets/app-icon.ico",
+      "uninstallerIcon": "assets/app-icon.ico",
+      "include": "scripts/installer.nsh",
+      "runAfterFinish": true
+    },
     "nativeRebuilder": "sequential"
   }
 }
