@@ -15,7 +15,11 @@ export function useProjectLifecycle(projectPath: string) {
         
         const scriptDir = `${projectPath}/script`;
         const scriptList = await (window as any).electronAPI.listDir(scriptDir);
-        const found = scriptList.find((f: any) => !f.isDir && f.name.startsWith(baseName + '.'));
+        const found = scriptList.find((f: any) => {
+          if (f.isDir) return false;
+          const name = f.name.toLowerCase();
+          return name.startsWith(baseName.toLowerCase() + '.') && !name.endsWith('.json');
+        });
         return found ? `${scriptDir}/${found.name}` : null;
       } catch (err) {
         return null;
