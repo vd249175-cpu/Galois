@@ -204,4 +204,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('window:maximizedChange', listener);
     return () => { ipcRenderer.removeListener('window:maximizedChange', listener); };
   },
+  onLauncherLog: (callback: (log: string) => void) => {
+    const listener = (_event: any, log: string) => callback(log);
+    ipcRenderer.on('launcher:log', listener);
+    return () => { ipcRenderer.removeListener('launcher:log', listener); };
+  },
 });

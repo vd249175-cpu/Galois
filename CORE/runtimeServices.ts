@@ -72,12 +72,22 @@ function shouldLaunchExternalWorkbench(): boolean {
   return app.isPackaged && process.env.GALOIS_USE_INTERNAL_APP !== '1';
 }
 
-function launchExternalWorkbench() {
+async function launchExternalWorkbench() {
   const isWin = process.platform === 'win32';
   const scriptName = isWin ? 'run-galois-workbench.bat' : 'run-galois-workbench.sh';
   const runScriptPath = path.join(path.dirname(getClassicCodeWorkspacePath()), scriptName);
   if (!fs.existsSync(runScriptPath)) {
     throw new Error(`External workbench launcher not found: ${runScriptPath}`);
+  }
+
+  // Check Node.js and npm availability before launching to show friendly GUI error box
+  const nodeStatus = await checkTool('node');
+  if (!nodeStatus.available) {
+    throw new Error('未检测到 Node.js 运行环境！\n\n🧬 DNOTE Bionic Workspace 需要 Node.js 才能运行。请先前往 https://nodejs.org/ 下载并安装 Node.js LTS 版本，然后再运行本软件。');
+  }
+  const npmStatus = await checkTool('npm');
+  if (!npmStatus.available) {
+    throw new Error('未检测到 npm 包管理器！\n\n请确保您的 Node.js 安装完整（包含 npm），然后重新运行本软件。');
   }
 
   const logPath = getGaloisLogPath('external-workbench.log');

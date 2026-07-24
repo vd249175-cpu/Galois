@@ -58,15 +58,18 @@ function releaseFileWatchesForSender(senderId: number) {
 function createLauncherStatusWindow(): BrowserWindow | null {
   try {
     const win = new BrowserWindow({
-      width: 440,
-      height: 260,
+      width: 550,
+      height: 380,
+      frame: false,
       resizable: false,
+      alwaysOnTop: true,
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
       title: 'Galois 正在启动',
       backgroundColor: '#f7f3ea',
       webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
       },
@@ -115,7 +118,7 @@ function createLauncherStatusWindow(): BrowserWindow | null {
     }
     p {
       margin: 0;
-      max-width: 330px;
+      max-width: 380px;
       color: rgba(38, 49, 47, 0.68);
       font-size: 12px;
       line-height: 1.7;
@@ -148,11 +151,37 @@ function createLauncherStatusWindow(): BrowserWindow | null {
     <h1>Galois 正在启动</h1>
     <p>正在准备可写工作台并启动编辑环境。首次启动或依赖修复时会稍久，但 App 已经收到点击。</p>
     <div class="bar"></div>
-    <p>如果长时间没有出现主窗口，可查看 ~/Documents/Galois/logs/external-workbench.log。</p>
+    <div id="log-container" style="width: 100%; height: 120px; background: rgba(38, 49, 47, 0.05); border: 1px solid rgba(38, 49, 47, 0.1); border-radius: 6px; padding: 8px; box-sizing: border-box; overflow-y: auto; text-align: left; font-family: Consolas, monospace; font-size: 10px; color: rgba(38, 49, 47, 0.85); white-space: pre-wrap; margin-top: 8px; user-select: text;">[等待日志输出...]</div>
   </div>
+  <script>
+    if (window.electronAPI && typeof window.electronAPI.onLauncherLog === 'function') {
+      const container = document.getElementById('log-container');
+      window.electronAPI.onLauncherLog((log) => {
+        container.textContent = log;
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  </script>
 </body>
 </html>`;
     win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+    // Tail log file to launcher status window
+    const logPath = path.join(getGaloisHomePath(), 'logs', 'external-workbench.log');
+    const tailInterval = setInterval(() => {
+      if (win.isDestroyed()) {
+        clearInterval(tailInterval);
+        return;
+      }
+      try {
+        if (fs.existsSync(logPath)) {
+          const content = fs.readFileSync(logPath, 'utf-8');
+          const lines = content.trim().split('\n').slice(-15).join('\n');
+          win.webContents.send('launcher:log', lines);
+        }
+      } catch (_) {}
+    }, 500);
+
     return win;
   } catch (err) {
     console.warn('[launcher] Failed to create status window:', err);

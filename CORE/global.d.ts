@@ -223,6 +223,7 @@ export interface ElectronAPI {
   setTitleBarOverlay: (color: string, symbolColor: string) => Promise<void>;
   isMaximized: () => Promise<boolean>;
   onMaximizedChange: (callback: (isMaximized: boolean) => void) => () => void;
+  onLauncherLog: (callback: (log: string) => void) => () => void;
 }
 
 declare global {

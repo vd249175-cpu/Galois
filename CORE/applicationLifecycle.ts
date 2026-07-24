@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from 'electron';
+import { app, BrowserWindow, protocol, dialog } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -107,11 +107,17 @@ app.whenReady().then(async () => {
     : null;
   await initUserData();
   if (shouldLaunchExternalWorkbench()) {
-    launchExternalWorkbench();
-    setTimeout(() => {
+    try {
+      await launchExternalWorkbench();
+      setTimeout(() => {
+        launcherStatusWindow?.close();
+        app.quit();
+      }, 30_000);
+    } catch (err: any) {
       launcherStatusWindow?.close();
+      dialog.showErrorBox('启动失败 / Launch Failed', err.message || String(err));
       app.quit();
-    }, 30_000);
+    }
     return;
   }
 
