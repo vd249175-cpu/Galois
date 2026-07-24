@@ -223,6 +223,25 @@ app.on('before-quit', () => {
   fileWatchEntries.clear();
   for (const child of mpvProcesses) child.kill();
   mpvProcesses.clear();
+
+  // Clean up external workbench processes on Windows upon quit
+  if (process.platform === 'win32') {
+    const pidPath = path.join(app.getPath('documents'), 'Galois', 'workbench', 'galois-workbench.pid');
+    if (fs.existsSync(pidPath)) {
+      try {
+        const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
+        if (pidStr) {
+          const pid = parseInt(pidStr, 10);
+          if (Number.isInteger(pid) && pid > 0) {
+            require('child_process').execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' });
+          }
+        }
+      } catch (_) {}
+      try {
+        fs.unlinkSync(pidPath);
+      } catch (_) {}
+    }
+  }
 });
 
 app.on('window-all-closed', () => {

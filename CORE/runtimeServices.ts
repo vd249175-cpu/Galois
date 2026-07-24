@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { exec, spawn } from 'child_process';
+import { exec, spawn, execSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -83,6 +83,26 @@ function shouldLaunchExternalWorkbench(): boolean {
 
 async function launchExternalWorkbench() {
   const isWin = process.platform === 'win32';
+  
+  // If there is an existing pid file on Windows, terminate it to release file locks and prevent duplicates
+  if (isWin) {
+    const pidPath = path.join(app.getPath('documents'), 'Galois', 'workbench', 'galois-workbench.pid');
+    if (fs.existsSync(pidPath)) {
+      try {
+        const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
+        if (pidStr) {
+          const pid = parseInt(pidStr, 10);
+          if (Number.isInteger(pid) && pid > 0) {
+            execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' });
+          }
+        }
+      } catch (_) {}
+      try {
+        fs.unlinkSync(pidPath);
+      } catch (_) {}
+    }
+  }
+
   const scriptName = isWin ? 'run-galois-workbench.bat' : 'run-galois-workbench.sh';
   const runScriptPath = path.join(path.dirname(getClassicCodeWorkspacePath()), scriptName);
   if (!fs.existsSync(runScriptPath)) {
