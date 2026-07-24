@@ -117,6 +117,18 @@ Validation rule:
 
 Use this when the user asks for a new panel, page, workspace view, or organ.
 
+For a new nontrivial organ, generate the executable reference structure instead
+of assembling the snippets below by memory:
+
+```bash
+npm run scaffold:plugin -- my-plugin \
+  --display-name "My Plugin" --short-name "Plugin"
+```
+
+The command refuses to overwrite an existing plugin. Its generated README and
+`.agents/skills/dnote-app-plugins/references/complete-plugin-walkthrough.md`
+contain the runtime acceptance path.
+
 Create or edit:
 
 ```text

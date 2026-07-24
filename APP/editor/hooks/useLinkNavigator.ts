@@ -30,7 +30,7 @@ export function useLinkNavigator({ projectPath, areaId, updateBloodKey }: UseLin
       } else {
         const create = confirm(`Note "${cleanTargetName}" does not exist. Create it?`);
         if (create) {
-          const defaultContent = `---\ntags:\n  - ${cleanTargetName}\n---\n# ${cleanTargetName}\n\n`;
+          const defaultContent = `---\ntags:\n---\n# ${cleanTargetName}\n\n`;
           await (window as any).electronAPI.writeFile(targetFilePath, defaultContent);
           updateBloodKey(BC.events.fileSaved(targetFilePath), Date.now());
           updateBloodKey(BC.events.openFile(areaId), targetFilePath);

@@ -47,6 +47,19 @@ Galois 当前由 `APP/editor/hooks/useRuntimeSync.ts` 维护一个防抖写入�
     "column":       4,
     "selectedText": "温顺"
   },
+  "shortcutRegistry": {
+    "generatedAt": 1782305164904,
+    "actions": [
+      {
+        "id": "editor.save",
+        "sourceType": "editor",
+        "isGlobal": false,
+        "defaultShortcut": "meta+s",
+        "activeShortcut": "meta+s",
+        "status": "default"
+      }
+    ]
+  },
   "timestamp": 1782305164904
 }
 ```
@@ -64,6 +77,7 @@ Galois 当前由 `APP/editor/hooks/useRuntimeSync.ts` 维护一个防抖写入�
 | `cursor.line` | `number` | 光标所在行号（当前 editor 运行时状态为 **1 indexed**） |
 | `cursor.column` | `number` | 光标所在列字符索引（当前 editor 运行时状态为 **1 indexed**） |
 | `cursor.selectedText` | `string` | 当前高亮选中的文本片段；无选区时为 `""` |
+| `shortcutRegistry` | `object` | 当前所有已注册 action 及其默认/生效快捷键的运行时快照 |
 | `timestamp` | `number` | 最后更新的 Unix 毫秒时间戳 |
 
 ---
@@ -127,10 +141,15 @@ const editorCursor = useBloodChannel(
 当用户要写笔记、改写文字、整理标签、插入媒体、解释当前段落、或基于当前位置生成内容时，进入 **Assist Mode**：
 
 1. **首先读取** `.dnote_runtime.json` 以了解用户当前正在编辑的文档和光标位置。
-2. 若 `cursor.selectedText` 非空，将其视为用户的**直接操作目标**或上下文引用。
-3. 对比 `timestamp` 确保数据是最新的（超过 30 秒未更新说明用户可能已切换工作区）。
-4. 通过 `activeFile` 的路径读取笔记内容，结合 `cursor.line` 定位用户关注的段落。
-5. 默认只处理当前笔记项目和当前文件；不要因为协助写笔记而修改 `APP/` 或 `CORE/`。
+2. 首次进入该项目时，使用 `dnote-project-overview` 生成一次有界项目地图，确认已有 Markdown、脚本、命令和配置布局；不要递归读取整个项目。
+3. 新建笔记必须直接写成 `{projectPath}/文件名.md`。当前文件树、标签解析和图谱
+   只发现项目根目录的 Markdown 直接子文件；不要把笔记写入 `docs/`、`script/`、
+   `media/`、`.dnote/` 或其他子目录。写完后确认它出现在文件树中。
+4. 若 `cursor.selectedText` 非空，将其视为用户的**直接操作目标**或上下文引用。
+5. 对比 `timestamp` 确保数据是最新的（超过 30 秒未更新说明用户可能已切换工作区）。
+6. 通过 `activeFile` 的路径读取笔记内容，结合 `cursor.line` 定位用户关注的段落。
+7. 新增项目快捷键前检查 `shortcutRegistry.actions`；全局 action 会与任意作用域冲突。
+8. 默认只处理当前笔记项目和当前文件；不要因为协助写笔记而修改 `APP/` 或 `CORE/`。
 
 Assist Mode 常见输出目标：
 
@@ -151,6 +170,45 @@ getPathForFile(file: File): string
 这些接口把文件复制到 `{projectPath}/media/` 并返回相对路径。Markdown 中
 使用 `![media](media/file.ext)`、`![audio](media/file.ext)` 或
 `![video](media/file.ext)`。
+
+媒体写入契约（必须遵守）：
+
+1. 图片使用 `![说明](media/file.png)`。
+2. 音频使用 `![audio](media/file.mp3)`；不要把 `[播放音频](media/file.mp3)`
+   作为新音频的写入格式，后者只是兼容旧笔记的普通链接形式。
+3. 视频使用 `![video](media/file.mp4)`；带时间段的视频剪辑使用
+   `@video[label](file.mp4?t=start,end)`。
+4. 写入 Markdown 后，将相对路径解析到 `{projectPath}`，确认目标文件存在、
+   位于当前笔记项目内且扩展名与标记类型一致。不要只检查 Markdown 文本。
+
+正确音频示例：
+
+```markdown
+![audio](media/audio/example.mp3)
+```
+
+禁止为新音频生成：
+
+```markdown
+[播放音频](media/audio/example.mp3)
+```
+
+视频与时间线是两种不同能力，不得混用路径：
+
+1. `![video](media/file.ext)` 是笔记中的完整视频播放器，路径相对于项目根目录，
+   通常指向 `{projectPath}/media/`。
+2. `@video[label](file.ext?t=start,end)` 是视频时间线产生的非破坏性片段引用。
+   `file.ext` 必须是 `{projectPath}/.dnote_assets/videos/` 内的文件名，不得写成
+   `media/file.ext`，也不得把普通媒体路径假定为时间线资产路径。
+3. 创建 `@video` 前先确认对应文件已由时间线导入并归档到
+   `.dnote_assets/videos/`。若只有 `media/` 文件，应使用完整视频语法，或先让用户
+   在时间线中导入；不要编造片段引用。
+4. 容器扩展名不等于可解码。写入完整视频或片段前可用 `ffprobe` 检查 codec。
+   当前 Electron 原生 `<video>` 后端可能无法解码 HEVC 10-bit 等素材。原生播放
+   失败时使用渲染出的 `使用 mpv 原格式播放` 后备；它打开同一个本地文件，时间线
+   片段还会传入 start/end，不得未经用户要求自动转码或替换原文件。
+5. 当前 mpv 后备使用原生播放窗口，并不是内嵌 DOM 渲染器。不要把“MOV 已识别”
+   或“已安装 mpv”描述成 Electron 原生 codec 已经改变。
 
 如果用户明确要求“新增应用页面、添加右栏按钮、实现应用快捷键、修改主题/设置、修改打包或终端机制”，切换到 Build Mode，并阅读 `AGENTS.md` 的构建模式规则。笔记项目脚本、标签计算、Slash content 命令和生命周期钩子仍属于协助模式。
 

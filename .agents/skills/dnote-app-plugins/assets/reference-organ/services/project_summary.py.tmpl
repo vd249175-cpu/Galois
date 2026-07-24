@@ -1,0 +1,23 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+
+import json
+import sys
+
+
+def main():
+    payload = json.loads(sys.stdin.read() or "{}")
+    resolved_tags = payload.get("resolvedTags", {})
+    unique_tags = sorted({tag for tags in resolved_tags.values() for tag in tags})
+    result = {
+        "noteCount": len(resolved_tags),
+        "tagCount": len(unique_tags),
+        "topTags": unique_tags[:8],
+    }
+    print(json.dumps(result, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

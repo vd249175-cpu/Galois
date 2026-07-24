@@ -10,13 +10,14 @@ import { BC } from './BloodChannels';
 
 export function TitleBar({ title = 'Galois Workspace' }: { title?: string }) {
   const isMac = typeof window !== 'undefined' && navigator.userAgent.includes('Mac');
+  const isWin = typeof window !== 'undefined' && navigator.platform.toLowerCase().includes('win');
   const hotStatus = useBloodChannel([BC.system.devHotUpdateStatus], () =>
     Blood.getValue<{ kind: string; label: string; timestamp: number } | null>(BC.system.devHotUpdateStatus, null)
   );
   const showHotStatus = Boolean(hotStatus && Date.now() - hotStatus.timestamp < 30_000);
 
   return (
-    <div className="window-titlebar" style={{ paddingLeft: isMac ? '80px' : '12px' }}>
+    <div className="window-titlebar" style={{ paddingLeft: isMac ? '80px' : '12px', paddingRight: isWin ? '140px' : '12px' }}>
       <span className="window-titlebar-title">{title}</span>
       {showHotStatus && (
         <span

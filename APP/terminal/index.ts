@@ -1,2 +1,2 @@
-export { TerminalComponent } from './Terminal';
+export { TerminalComponent } from './TerminalComponent';
 export { terminalActions } from './actions';

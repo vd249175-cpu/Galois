@@ -35,10 +35,10 @@ export function useProjectHistory(projectPath: string) {
     setHistoryList(parsed);
   }, []);
 
-  // Save projectPath to history and update dnote_last_project when it changes
+  // Save projectPath to the renderer-local history. Durable last-project state
+  // is owned by CORE/App so it does not depend on this panel being mounted.
   useEffect(() => {
     if (!projectPath) return;
-    localStorage.setItem('dnote_last_project', projectPath);
     setHistoryList((prev) => {
       const updated = [projectPath, ...prev.filter((p) => p !== projectPath)];
       const capped = updated.slice(0, 10);

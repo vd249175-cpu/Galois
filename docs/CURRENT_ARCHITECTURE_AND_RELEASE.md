@@ -62,15 +62,50 @@ editable files inside hidden application support folders.
   using classic-code recovery.
 - The default starter notebook lives under
   `~/Documents/Galois Projects/Getting Started`.
+- Discoverable notebook Markdown files are direct children of the selected
+  notebook root: `{projectPath}/note.md`. The current file tree, tag resolver,
+  and graph do not recursively discover Markdown under `docs/`, `script/`,
+  `media/`, `.dnote/`, or arbitrary subdirectories. Agents must create new
+  notes at the project root unless this storage contract is deliberately
+  migrated in source first.
 - Notebook media belongs to the notebook project. Dragged Markdown media is
   archived under `{projectPath}/media/`; generated video timeline assets live
   under `{projectPath}/.dnote_assets/`.
+- Full Markdown video embeds and timeline clips have distinct path contracts.
+  `![video](media/file.ext)` resolves from the notebook root, while
+  `@video[label](file.ext?t=start,end)` resolves the file name from
+  `{projectPath}/.dnote_assets/videos/`. A `media/...` path is not a timeline
+  asset reference.
+- The inline player first uses Electron/Chromium's native media backend.
+  Recognizing a container extension such as MOV does not guarantee that its
+  codec can be decoded. When native decoding fails, local media exposes an mpv
+  original-format fallback through the typed `media:playWithMpv` bridge. The
+  fallback opens mpv's native playback window, passes timeline start/end values,
+  and never creates a converted copy. `brew install mpv` supplies the current
+  development dependency. A future in-surface backend would still require a
+  native libmpv render context; DOM video elements cannot host libmpv directly.
+- Markdown math is rendered locally with KaTeX. Inline `$...$` and `\(...\)`
+  expressions plus multiline `$$...$$` and `\[...\]` display blocks use the same
+  `MarkdownPreview` path for ordinary notes and reactive/generated Markdown.
+  Fenced and inline code are protected before math parsing.
+- Safe inline HTML remains an explicit allowlist rather than unrestricted raw
+  HTML. `<kbd>...</kbd>` is supported by the shared inline renderer, including
+  table cells and reactive/generated Markdown.
+- Frontmatter `tags:` are manually managed tags. Body `#hashtags` are derived
+  tags and are never copied into Frontmatter during load or save. The top tag
+  toolbar may remove only manual tags; body tags are source-labelled and must be
+  changed in the Markdown body.
 - Runtime/cache files such as `.dnote_runtime.json` and `.dnote_cache/` remain
   project-local and should not be packaged into the starter template.
 - Editor undo/redo history is project-local too:
   `{projectPath}/.dnote_cache/editor-history.json` keeps per-file history across
   document switches, Live/Reading mode switches, and App restarts until the user
   removes the project cache.
+- The last selected notebook is stored in
+  `~/Documents/Galois/config/project-state.json` under
+  `__galoisApp.lastProjectPath`. Renderer `localStorage` is only a legacy
+  migration source, so changing renderer origins or rebuilding the UI does not
+  reset the selected notebook to the starter project.
 - The installed `.app` bundle and `Contents/Resources/APP/` are treated as
   read-only application assets.
 
@@ -117,6 +152,12 @@ Runtime development split:
 - CORE/main/preload, Electron IPC, launcher startup, package scripts, or native
   binary changes require rebuilding Electron and reopening the workbench with
   `npm run rebuild:reopen`.
+- A separate source checkout can replace the clean external runtime workbench
+  with `npm run sync:workbench`; add `-- --reopen` when Electron CORE/preload
+  must be rebuilt and the workbench reopened. The command refuses dirty managed
+  files and same-path source/target execution. Target-only `APP` plugin folders
+  may remain dirty: they are excluded from replacement and from the
+  managed-source rollback commit, so user plugins survive unchanged.
 
 At startup the app publishes runtime facts into Blood:
 
@@ -140,6 +181,26 @@ Assistant tasks must be routed by layer:
 - APP plugins, plugin manifests, and plugin-owned service scripts belong to the
   current source repository in source/developer mode, or to the external
   workbench's `APP/[plugin]/` directory in packaged mode.
+
+Assist Mode initialization is deliberately bounded. After reading the selected
+project's `.dnote_runtime.json`, an assistant should run the repository's
+`dnote-project-overview` skill once to obtain a capped map of Markdown paths,
+project commands, script/config structure, dependencies, and media counts. The
+map excludes note bodies, caches, dependency trees, and unbounded recursive
+listings. Reuse it during the task and refresh it only after a project switch or
+a material structure change.
+
+Complex end-to-end work uses `dnote-complete-project` as a coordinator before
+domain skills. Canonical executable references are kept in source control:
+
+- `.agents/skills/dnote-app-plugins/scripts/scaffold_plugin.py` generates a
+  complete non-overwriting APP organ with action, Blood, service, and error
+  handling boundaries.
+- `template-project/08_完整Markdown与程序生成验收.md` and
+  `script/render_showcase.py` exercise ordinary and program-generated Markdown
+  through the same interaction contract.
+- `.agents/skills/dnote-complete-project/scripts/validate_reference_examples.py`
+  checks both references deterministically so documentation drift is detected.
 
 ## Naming Protocol
 
@@ -266,12 +327,44 @@ should be treated as trusted project automation.
 Plugin service scripts use `runScript` because plugin-owned services and
 notebook project scripts intentionally have different environment ownership.
 
+## Graph Topology Baseline
+
+The graph-view concept-granularity slider controls only virtual concepts; real
+note nodes remain present. A value of `0` is a hard real-only boundary. The
+renderer clears its current virtual layer synchronously and applies only the
+latest asynchronous `lattice.py` result, so an older slider request cannot
+reintroduce virtual nodes after the user returns to zero.
+
+Graph navigation targets the editor, not the file browser. A single click on a
+real note node opens that node's backing Markdown through
+`events.openFile.{lastFocusedEditorId}`. Clicking a virtual concept creates a
+collision-safe temporary `概念-*.md` at the notebook root with Frontmatter tags
+and supporting WikiLinks, then opens it through the same editor path. A disk
+content change followed by save promotes the note and removes its temporary
+marker. If it remains equal to the generated template, leaving it, switching
+node/project, clicking graph whitespace, or unmounting graph-view deletes it
+and broadcasts `events.fileSaved.*`. Existing promoted files are never
+overwritten. `system.fileSearchQuery` may highlight graph nodes from an existing
+file-tree search, but graph clicks never write the file-tree query.
+
+Graph hover/selection focus is transitive in the outgoing lattice direction:
+the focused node, one direct parent layer, and every reachable descendant and
+edge remain visible through the deepest leaf layer. Unrelated branches dim, and
+canvas defocus restores the complete graph.
+
 ## Editor UX Baseline
 
 The editor now exposes two user-facing modes:
 
 - Live Preview: CodeMirror 6 editing with Markdown decorations/widgets.
 - Reading: rendered Markdown with local interactive editing affordances.
+
+Reactive expression values that contain block Markdown are passed through the
+same `MarkdownPreview` component as ordinary Reading mode content. Tables,
+links, media, block editing, drag/drop, and slash commands therefore share the
+normal page logic. Edits are written back to the expression's JSON key and
+pause interval refresh until the user manually reruns the expression; the edit
+control still opens the source expression line.
 
 Source mode remains an internal fallback and should not be presented as a
 primary user workflow.
@@ -285,6 +378,12 @@ modes.
 Reading mode table support is interactive: table cells are editable in place,
 and table hover controls can append rows or columns while preserving standard
 Markdown table syntax.
+
+The editor also publishes `shortcutRegistry` in `.dnote_runtime.json`. This is
+the agent-facing runtime inventory of registered actions, scopes, defaults,
+active bindings, overrides, and unbound actions. Agents should consult it before
+assigning shortcuts. `panel.splitVertical` intentionally has no default shortcut
+so project commands may use `meta+shift+d` without triggering panel split.
 
 ## macOS DMG Readiness
 

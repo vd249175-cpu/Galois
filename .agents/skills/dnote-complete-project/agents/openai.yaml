@@ -1,0 +1,4 @@
+interface:
+  display_name: "Galois 完整项目"
+  short_description: "端到端构建并验收 Galois 插件、脚本与笔记项目"
+  default_prompt: "使用 $dnote-complete-project 按真实运行契约完成端到端项目，并逐项执行功能矩阵验收。"

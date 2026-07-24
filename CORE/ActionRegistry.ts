@@ -13,8 +13,24 @@ export interface Action {
   defaultShortcut?: string; // Default hardcoded shortcut
   icon?: React.ReactNode;
   sourceType?: string;
+  sourceOwner?: 'component' | 'dynamic';
   isGlobal?: boolean;
   run: (context: ActionContext) => void;
+}
+
+export interface ShortcutActionSnapshot {
+  id: string;
+  label: string;
+  sourceType: string | null;
+  isGlobal: boolean;
+  defaultShortcut: string | null;
+  activeShortcut: string | null;
+  status: 'default' | 'overridden' | 'unbound';
+}
+
+export interface ShortcutRegistrySnapshot {
+  generatedAt: number;
+  actions: ShortcutActionSnapshot[];
 }
 
 interface FileShortcut {
@@ -38,6 +54,16 @@ class ActionRegistryClass {
   private shortcuts = new Map<string, Set<string>>(); // combo -> actionIds
   private actionShortcuts = new Map<string, string>(); // actionId -> combo
   private shortcutOverrides = new Map<string, string>(); // persisted/user shortcuts
+  private listeners = new Set<() => void>();
+
+  private notifyChanged() {
+    this.listeners.forEach((listener) => listener());
+  }
+
+  public subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
 
   public register(action: Action) {
     const existing = this.registry.get(action.id);
@@ -49,16 +75,19 @@ class ActionRegistryClass {
     if (override) {
       this.bindShortcut(override, action.id);
     }
+    this.notifyChanged();
   }
 
   public unregister(actionId: string) {
     this.removeShortcutBindingForAction(actionId);
     this.registry.delete(actionId);
+    this.notifyChanged();
   }
 
   public registerShortcut(combo: string, actionId: string) {
     this.shortcutOverrides.set(actionId, combo);
     this.bindShortcut(combo, actionId);
+    this.notifyChanged();
   }
 
   private bindShortcut(combo: string, actionId: string) {
@@ -114,6 +143,7 @@ class ActionRegistryClass {
   public removeShortcutForAction(actionId: string) {
     this.shortcutOverrides.delete(actionId);
     this.removeShortcutBindingForAction(actionId);
+    this.notifyChanged();
   }
 
   private removeShortcutBindingForAction(actionId: string) {
@@ -126,7 +156,7 @@ class ActionRegistryClass {
 
   public unregisterBySourceType(sourceType: string) {
     const ids = this.getAllActions()
-      .filter((action) => action.sourceType === sourceType)
+      .filter((action) => action.sourceType === sourceType && action.sourceOwner === 'component')
       .map((action) => action.id);
     ids.forEach((id) => this.unregister(id));
   }
@@ -147,6 +177,29 @@ class ActionRegistryClass {
 
   public getShortcutForAction(actionId: string): string | undefined {
     return this.actionShortcuts.get(actionId);
+  }
+
+  public getShortcutSnapshot(): ShortcutRegistrySnapshot {
+    const actions = this.getAllActions()
+      .map((action): ShortcutActionSnapshot => {
+        const activeShortcut = this.actionShortcuts.get(action.id) || null;
+        const defaultShortcut = action.defaultShortcut || null;
+        return {
+          id: action.id,
+          label: action.label,
+          sourceType: action.sourceType || null,
+          isGlobal: Boolean(action.isGlobal),
+          defaultShortcut,
+          activeShortcut,
+          status: !activeShortcut
+            ? 'unbound'
+            : this.shortcutOverrides.has(action.id)
+              ? 'overridden'
+              : 'default',
+        };
+      })
+      .sort((left, right) => left.id.localeCompare(right.id));
+    return { generatedAt: Date.now(), actions };
   }
 
   public getActionIdByShortcut(combo: string, focusedComponentType: string | null = null): string | undefined {
@@ -186,6 +239,7 @@ class ActionRegistryClass {
           }
         }
       }
+      this.notifyChanged();
     } catch (e) {
       console.error('[ActionRegistry] Failed to parse/load shortcuts:', e);
     }
@@ -235,7 +289,6 @@ ActionRegistry.register({
 ActionRegistry.register({
   id: 'panel.splitVertical',
   label: 'Split Vertically',
-  defaultShortcut: 'meta+shift+d',
   isGlobal: true,
   icon: React.createElement(
     'svg',

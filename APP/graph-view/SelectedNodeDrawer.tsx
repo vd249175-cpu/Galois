@@ -7,7 +7,7 @@ interface SelectedNodeDrawerProps {
   projectPath: string;
   getLevelColor: (level: number) => string;
   setSelectedNodeId: (id: string | null) => void;
-  handleNodeDoubleClick: (nodeId: string) => void;
+  handleNodeActivate: (nodeId: string) => void;
   svgRef: React.RefObject<SVGSVGElement | null>;
   zoom: number;
   setPan: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
@@ -20,7 +20,7 @@ export function SelectedNodeDrawer({
   projectPath,
   getLevelColor,
   setSelectedNodeId,
-  handleNodeDoubleClick,
+  handleNodeActivate,
   svgRef,
   zoom,
   setPan,
@@ -32,6 +32,14 @@ export function SelectedNodeDrawer({
   const connectedLinks = links.filter(l => l.source === node.id || l.target === node.id);
   const neighborIds = connectedLinks.map(l => l.source === node.id ? l.target : l.source);
   const neighbors = nodes.filter(n => neighborIds.includes(n.id));
+  const supportingNotes = node.isVirtual
+    ? nodes
+        .filter((candidate) => (
+          !candidate.isVirtual
+          && node.tags.every((tag) => candidate.tags.includes(tag))
+        ))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    : [];
 
   return (
     <div style={{
@@ -125,9 +133,9 @@ export function SelectedNodeDrawer({
         {/* Note / Path details for real node */}
         {!node.isVirtual && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)', fontWeight: 600 }}>笔记路径 (双击打开):</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)', fontWeight: 600 }}>笔记路径（点击在编辑器打开）:</div>
             <div
-              onClick={() => handleNodeDoubleClick(node.id)}
+              onClick={() => handleNodeActivate(node.id)}
               style={{
                 fontFamily: 'monospace',
                 fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 1.5px)',
@@ -142,6 +150,34 @@ export function SelectedNodeDrawer({
           </div>
         )}
 
+        {node.isVirtual && supportingNotes.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 2px)', fontWeight: 600 }}>关联笔记（点击在编辑器打开）:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {supportingNotes.map((supportingNote) => (
+                <span
+                  key={supportingNote.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNodeActivate(supportingNote.id);
+                  }}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    border: '1.2px solid var(--border-color)',
+                    fontSize: 'calc(var(--graph-drawer-font-size, 12px) - 1px)',
+                    color: 'var(--accent-color)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {supportingNote.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Neighbors list */}
         {neighbors.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -152,7 +188,7 @@ export function SelectedNodeDrawer({
                   key={neighbor.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setSelectedNodeId(neighbor.id);
+                    handleNodeActivate(neighbor.id);
                     // Center the view on neighbor
                     let cx = 300;
                     let cy = 250;

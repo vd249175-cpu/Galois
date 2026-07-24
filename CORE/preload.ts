@@ -14,14 +14,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('fs:listDir', dirPath),
   pathExists: (targetPath: string) =>
     ipcRenderer.invoke('fs:pathExists', targetPath),
+  watchFile: (filePath: string) =>
+    ipcRenderer.invoke('fs:watchFile', filePath),
+  unwatchFile: (filePath: string) =>
+    ipcRenderer.invoke('fs:unwatchFile', filePath),
+  onFileChanged: (callback: (payload: { path: string; exists: boolean; mtimeMs: number; size: number }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { path: string; exists: boolean; mtimeMs: number; size: number }) => callback(payload);
+    ipcRenderer.on('fs:fileChanged', listener);
+    return () => ipcRenderer.removeListener('fs:fileChanged', listener);
+  },
   openDirectory: () =>
     ipcRenderer.invoke('dialog:openDirectory'),
   archiveMedia: (srcPath: string, projectPath: string) =>
     ipcRenderer.invoke('fs:archiveMedia', { srcPath, projectPath }),
   archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) =>
     ipcRenderer.invoke('fs:archiveMediaData', { fileName, mimeType, data, projectPath }),
+  archiveVideo: (srcPath: string, projectPath: string) =>
+    ipcRenderer.invoke('fs:archiveVideo', { srcPath, projectPath }),
   getPathForFile: (file: File) =>
     webUtils.getPathForFile(file),
+  writeClipboardText: (text: string) =>
+    ipcRenderer.invoke('clipboard:writeText', text),
+  playMediaWithMpv: (request: { filePath: string; title?: string; start?: number; end?: number }) =>
+    ipcRenderer.invoke('media:playWithMpv', request),
 
   // ── Shell / Script execution ──────────────────────────────────────────────
   /** 执行任意 shell 命令（用于生命周期脚本等） */
@@ -171,9 +186,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('app:getProjectState', projectPath),
   setProjectState: (projectPath: string, state: any) =>
     ipcRenderer.invoke('app:setProjectState', projectPath, state),
+  getLastProjectPath: () =>
+    ipcRenderer.invoke('app:getLastProjectPath'),
+  setLastProjectPath: (projectPath: string) =>
+    ipcRenderer.invoke('app:setLastProjectPath', projectPath),
   onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => {
     const listener = (_event: any, payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => callback(payload);
     ipcRenderer.on('app:configFileChanged', listener);
     return () => { ipcRenderer.removeListener('app:configFileChanged', listener); };
+  },
+  setTitleBarOverlay: (color: string, symbolColor: string) =>
+    ipcRenderer.invoke('window:setTitleBarOverlay', { color, symbolColor }),
+  isMaximized: () =>
+    ipcRenderer.invoke('window:isMaximized'),
+  onMaximizedChange: (callback: (isMaximized: boolean) => void) => {
+    const listener = (_event: any, state: boolean) => callback(state);
+    ipcRenderer.on('window:maximizedChange', listener);
+    return () => { ipcRenderer.removeListener('window:maximizedChange', listener); };
+  },
+  onLauncherLog: (callback: (log: string) => void) => {
+    const listener = (_event: any, log: string) => callback(log);
+    ipcRenderer.on('launcher:log', listener);
+    return () => { ipcRenderer.removeListener('launcher:log', listener); };
   },
 });

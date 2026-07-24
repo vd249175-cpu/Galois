@@ -254,6 +254,7 @@ export function EnvironmentPanel() {
         <StatusRow label="Python" status={environmentStatus?.python} />
         <StatusRow label="Node.js" status={environmentStatus?.node} />
         <StatusRow label="Git" status={environmentStatus?.git} />
+        <StatusRow label="mpv 原格式视频后端" status={environmentStatus?.mpv} optional />
         <StatusRow label="命令行助手 agy" status={environmentStatus?.agy} optional />
       </section>
 
@@ -311,6 +312,7 @@ export function EnvironmentPanel() {
         <CommandHint label="或使用官方安装脚本" command="curl -LsSf https://astral.sh/uv/install.sh | sh" />
         <CommandHint label="推荐安装 Python" command="brew install python" />
         <CommandHint label="推荐安装 Git" command="brew install git" />
+        <CommandHint label="安装 mpv 原格式视频后端" command="brew install mpv" />
         <CommandHint label="可选安装 agy 命令行助手" command="curl -fsSL https://antigravity.google/cli/install.sh | bash" />
         <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
           `agy` 是外部可选命令行助手。缺少它不会影响笔记和脚本执行，只会影响终端助手自动接入。

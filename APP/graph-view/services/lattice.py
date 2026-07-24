@@ -120,6 +120,8 @@ def compute_virtual_nodes(real_nodes, vocab, real_masks, virtual_detail, max_vir
 
     detail = max(0.0, min(1.0, float(virtual_detail)))
     max_virtual_nodes = max(0, int(max_virtual_nodes))
+    if detail <= 0.0 or max_virtual_nodes <= 0:
+        return []
     real_count = len(real_nodes)
     real_frozensets = {frozenset(clean_tags(n)) for n in real_nodes}
     tag_doc_freq = Counter(tag for node in real_nodes for tag in clean_tags(node))
@@ -161,7 +163,7 @@ def compute_virtual_nodes(real_nodes, vocab, real_masks, virtual_detail, max_vir
             continue
         add_candidate(intersection)
 
-    if not candidates or max_virtual_nodes <= 0:
+    if not candidates:
         return []
 
     candidates = merge_candidates_by_support(candidates, real_nodes, real_masks, real_frozensets, vocab)

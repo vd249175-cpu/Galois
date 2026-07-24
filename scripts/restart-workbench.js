@@ -4,7 +4,9 @@ const { spawnSync } = require('child_process');
 
 const root = process.cwd();
 const launcherDir = path.dirname(root);
-const restartScript = path.join(launcherDir, 'restart-galois-workbench.sh');
+const isWin = process.platform === 'win32';
+const scriptName = isWin ? 'restart-galois-workbench.bat' : 'restart-galois-workbench.sh';
+const restartScript = path.join(launcherDir, scriptName);
 
 if (!fs.existsSync(restartScript)) {
   console.log('[restart:workbench] External workbench restart script was not found.');
@@ -13,7 +15,10 @@ if (!fs.existsSync(restartScript)) {
   process.exit(0);
 }
 
-const result = spawnSync('bash', [restartScript], {
+const spawnCmd = isWin ? 'cmd.exe' : 'bash';
+const spawnArgs = isWin ? ['/c', restartScript] : [restartScript];
+
+const result = spawnSync(spawnCmd, spawnArgs, {
   cwd: root,
   stdio: 'inherit',
   env: process.env,

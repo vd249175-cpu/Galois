@@ -23,6 +23,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 
 const launcherPackage = {
   name: packageJson.name,
   version: packageJson.version,
+  buildTime: Date.now(),
   description: packageJson.description || 'Galois launcher',
   main: packageJson.main,
   type: packageJson.type,

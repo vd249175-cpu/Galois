@@ -145,8 +145,9 @@ getThemeCss(themeId: string): Promise<string>
 - 避免常见系统/应用快捷键：`meta+s`、`meta+w`、`meta+q`、`meta+p`、
   `meta+shift+p`、`meta+shift+k`、`meta+shift+m`、`space`、方向键以及
   普通单字母。
-- 修改默认快捷键前必须检查已注册 action 默认值和
-  `~/Documents/Galois/config/shortcuts.json`。
+- 修改默认快捷键前必须优先检查当前项目
+  `.dnote_runtime.json.shortcutRegistry` 的完整运行时注册表；快照不可用时再联合检查
+  已注册 action 默认值和 `~/Documents/Galois/config/shortcuts.json`。
 - UI 文案必须和真实 combo 一致，例如 `meta+shift+k` 不能写成 `⌥+⇧+K`。
 
 ### 2.3 面板工作区布局 (`layout.json`)
@@ -218,11 +219,16 @@ getThemeCss(themeId: string): Promise<string>
 ```typescript
 getProjectState(projectPath: string): Promise<any>
 setProjectState(projectPath: string, state: any): Promise<boolean>
+getLastProjectPath(): Promise<string | null>
+setLastProjectPath(projectPath: string): Promise<boolean>
 ```
 
 该文件是全局配置状态的一部分，路径为：
 
 - **路径**：`~/Documents/Galois/config/project-state.json`
+
+最近打开的项目路径存放在该文件的 `__galoisApp.lastProjectPath`。启动时优先读取
+此持久化值；旧版本的 `localStorage('dnote_last_project')` 仅作为迁移兼容来源。
 
 ---
 
@@ -259,7 +265,8 @@ await window.electronAPI.setProjectState(projectPath, state);
 
 ## 4. 运行时配置启动顺序
 
-`CORE/App.tsx` 在主窗口初始化时（`initApp()`）按以下顺序加载配置：
+`CORE/useAppBootstrap.ts` 的 `useAppBootstrap()` 在主窗口初始化时按以下顺序加载配置；
+`CORE/App.tsx` 只组合并调用该 Hook：
 
 ```
 0. electronAPI.getRuntimeInfo() + electronAPI.getEnvironmentStatus()（并行）
@@ -271,7 +278,8 @@ await window.electronAPI.setProjectState(projectPath, state);
       （主题应用在 App 挂载时的独立 useEffect 中，监听 events.themeChanged 和 system.config）
 
 2. 项目路径恢复：
-   - 读取 localStorage('dnote_last_project')
+   - 读取 electronAPI.getLastProjectPath()
+   - 旧版本兼容读取 localStorage('dnote_last_project')
    - 调用 electronAPI.pathExists() 验证路径有效性
    - 若无效则 electronAPI.getDevDefaultProject()（开发/首次启动 fallback）
       → Blood: system.projectPath
@@ -299,7 +307,8 @@ await window.electronAPI.setProjectState(projectPath, state);
 
 ## 6. No-Reload 配置热更新
 
-Galois 内置 AGY/终端助手运行在软件窗口里，配置热更新不得刷新 renderer。
+Galois 的嵌入式终端与原生 Terminal 中启动的 AGY 会话都不应被配置热更新中断；
+配置热更新不得刷新 renderer。
 
 当前实现：
 

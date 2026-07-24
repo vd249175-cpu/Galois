@@ -17,7 +17,12 @@ DNOTE 目前处于**开发者工作区 / 内部试用**阶段。源码模式下�
 
 相关文档：
 
+- [Agent 能力、资料与验收纵览](docs/AGENT_CAPABILITY_OVERVIEW.md)
+- [APP 页面/按钮/快捷键开发场景](docs/APP_DEVELOPMENT_SCENARIOS.md)
 - [插件环境契约](docs/PLUGIN_ENVIRONMENT.md)
+- [完整 APP 插件可执行参考](.agents/skills/dnote-app-plugins/references/complete-plugin-walkthrough.md)
+- [Markdown 与程序生成渲染契约](.agents/skills/dnote-command-scripts/references/markdown-rendering-contract.md)
+- [端到端完整项目验收矩阵](.agents/skills/dnote-complete-project/references/end-to-end-acceptance.md)
 - [扩展工作区契约](docs/EXTENSION_WORKSPACE.md)
 - [五层架构分层](docs/ARCHITECTURE_LAYERS.md)
 - [macOS DMG 首次启动引导计划](docs/MACOS_DMG_ONBOARDING.md)
@@ -170,6 +175,8 @@ DNOTE 内置了**视频时间轴与无损拉片剪辑系统**，专为音视频�
 ---
 
 ## 📂 项目目录结构 (Directory Structure)
+
+> 下面的树保留了部分历史命名，用于介绍产品模块。当前源码的准确文件归属、迁移后的 Editor/MarkdownPreview 边界和验证要求，请以 [项目结构与迁移审计](docs/PROJECT_STRUCTURE_AND_MIGRATION_AUDIT.md) 及 [当前架构与发布基准](docs/CURRENT_ARCHITECTURE_AND_RELEASE.md) 为准。
 
 ```
 DNOTE/

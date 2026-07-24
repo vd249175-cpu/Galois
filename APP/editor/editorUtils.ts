@@ -29,11 +29,18 @@ export function getFrontmatterLineCount(content: string): number {
 }
 
 // Helper to replace or insert tags list in the YAML frontmatter of full content
+export function normalizeManualTags(tags: string[]): string[] {
+  return Array.from(new Set(tags
+    .map((tag) => tag.trim().replace(/^#+/, '').trim())
+    .filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right));
+}
+
 export function updateYamlFrontmatterTags(content: string, newTags: string[]): string {
   const yamlRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;
   const match = content.match(yamlRegex);
-  
-  const cleanTags = Array.from(new Set(newTags.map((t) => t.trim()).filter(Boolean))).sort();
+
+  const cleanTags = normalizeManualTags(newTags);
   const tagsYamlLines = ['tags:'];
   cleanTags.forEach((t) => {
     tagsYamlLines.push(`  - ${t}`);
@@ -43,43 +50,48 @@ export function updateYamlFrontmatterTags(content: string, newTags: string[]): s
     const yamlText = match[1];
     const bodyText = match[2];
     
-    const lines = yamlText.split('\n');
+    const lines = yamlText.split(/\r?\n/);
     let tagsStartIndex = -1;
     let tagsEndIndex = -1;
-    let inTagsList = false;
-    
+
     for (let i = 0; i < lines.length; i++) {
-      const trimLine = lines[i].trim();
-      if (trimLine.startsWith('tags:')) {
-        tagsStartIndex = i;
-        const inlineValue = trimLine.substring(5).trim();
-        if (inlineValue && inlineValue !== '-') {
-          tagsEndIndex = i;
-        } else {
-          inTagsList = true;
+      if (!/^\s*tags\s*:/.test(lines[i])) continue;
+      tagsStartIndex = i;
+      tagsEndIndex = i;
+      const fieldIndent = lines[i].match(/^\s*/)?.[0].length || 0;
+      const inlineValue = lines[i].replace(/^\s*tags\s*:/, '').trim();
+      if (inlineValue) break;
+      for (let j = i + 1; j < lines.length; j++) {
+        const trimmed = lines[j].trim();
+        if (!trimmed) {
+          tagsEndIndex = j;
+          continue;
         }
-      } else if (inTagsList) {
-        if (trimLine.startsWith('-')) {
-          tagsEndIndex = i;
-        } else if (trimLine === '') {
-          // ignore
-        } else if (lines[i].includes(':')) {
-          inTagsList = false;
+        const indent = lines[j].match(/^\s*/)?.[0].length || 0;
+        if (indent > fieldIndent && trimmed.startsWith('-')) {
+          tagsEndIndex = j;
+          continue;
         }
+        break;
       }
+      break;
     }
-    
+
     let newYamlText = '';
     if (tagsStartIndex !== -1) {
       const beforeTags = lines.slice(0, tagsStartIndex);
       const afterTags = lines.slice(tagsEndIndex + 1);
-      newYamlText = [...beforeTags, ...tagsYamlLines, ...afterTags].join('\n');
+      newYamlText = [...beforeTags, ...(cleanTags.length ? tagsYamlLines : []), ...afterTags].join('\n');
+    } else if (cleanTags.length > 0) {
+      newYamlText = [...lines, ...tagsYamlLines].join('\n');
     } else {
-      newYamlText = yamlText + '\n' + tagsYamlLines.join('\n');
+      return content;
     }
-    
-    return `---\n${newYamlText.trim()}\n---\n${bodyText}`;
+
+    const cleanYaml = newYamlText.trim();
+    return cleanYaml ? `---\n${cleanYaml}\n---\n${bodyText}` : bodyText;
   } else {
+    if (cleanTags.length === 0) return content;
     let yaml = '---\n';
     yaml += 'tags:\n';
     cleanTags.forEach((t) => {
@@ -144,4 +156,17 @@ export function getNestedValue(obj: any, keyPath: string): any {
     current = current[part];
   }
   return current;
+}
+
+export function setNestedValue(obj: any, keyPath: string, value: any): any {
+  const clone = obj && typeof obj === 'object' ? structuredClone(obj) : {};
+  const parts = keyPath.split('.').filter(Boolean);
+  if (parts.length === 0) return clone;
+  let current = clone;
+  for (const part of parts.slice(0, -1)) {
+    if (!current[part] || typeof current[part] !== 'object') current[part] = {};
+    current = current[part];
+  }
+  current[parts[parts.length - 1]] = value;
+  return clone;
 }

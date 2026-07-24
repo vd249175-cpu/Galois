@@ -16,6 +16,11 @@ For plugin-owned runtimes, also read `docs/PLUGIN_ENVIRONMENT.md`.
 For common page/button/shortcut tasks, also read
 `docs/APP_DEVELOPMENT_SCENARIOS.md`.
 
+When creating a new plugin or an end-to-end organ, read
+`references/complete-plugin-walkthrough.md` and start from the executable asset
+with `scripts/scaffold_plugin.py`. Do not assemble a complex plugin from the
+small snippets in this file alone.
+
 ## 0. Mode Scope
 
 Use this skill after choosing **Source Development Mode** or **Build Mode** for
@@ -82,7 +87,8 @@ The packaged `.app` bundle is only a launcher, classic seed, and recovery
 source. Do not create separate agent-doc or plugin-development directories as
 the default answer.
 
-Every plugin under `APP/` should follow this layout:
+New APP plugins should use this layout when the capability needs actions,
+services, or package/interpreter metadata:
 
 ```text
 APP/[plugin-name]/
@@ -96,6 +102,11 @@ APP/[plugin-name]/
 └── plugin.json
 ```
 
+`index.ts` is the only registration requirement. `plugin.json` is required for
+plugin-owned services or declared runtime metadata, but some existing built-in
+renderer-only organs predate manifests and are still valid. Do not add an empty
+manifest merely to imitate an older directory tree.
+
 The main view file lives directly in the plugin root. Do not create a
 `components/` folder unless a future refactor establishes that convention.
 
@@ -105,6 +116,17 @@ into the external workbench and can be resolved through
 `electronAPI.getServiceScriptPath(pluginFolder, scriptName)`. Packaged Galois
 resolves the external workbench first, then falls back to the classic seed
 bundled inside the app.
+
+Create a complete safe starting point from the active Galois root with:
+
+```bash
+npm run scaffold:plugin -- my-plugin \
+  --display-name "My Plugin" --short-name "Plugin"
+```
+
+The scaffold demonstrates discovery, a toolbar action, Blood subscriptions,
+manifest alignment, plugin-owned Python execution, stale-response rejection,
+and error signaling. It refuses to overwrite an existing plugin.
 
 ## 2. Registration Entry
 
@@ -214,7 +236,9 @@ Shortcut quality:
   `meta+shift+m`, `space`, arrow keys, and bare letters outside dedicated media
   or timeline views.
 - Check existing action defaults and
-  `~/Documents/Galois/config/shortcuts.json` before choosing a chord.
+  the active project's `.dnote_runtime.json.shortcutRegistry` before choosing a
+  chord. Fall back to source defaults plus
+  `~/Documents/Galois/config/shortcuts.json` only when no runtime snapshot exists.
 - The visible help text must exactly match the actual combo. Do not show
   Option/Alt in the UI if the action uses Command/Meta.
 - Prefer low-risk, user-overridable chords such as `control+alt+h` for a
@@ -304,6 +328,27 @@ In source developer mode, the native AGY terminal can work directly inside the
 current source repository. It may create and edit plugins under `APP/`, update
 docs, and run checks.
 
+When the user explicitly wants a validated source checkout to replace the
+packaged runtime workbench, run this from the separate source checkout:
+
+```bash
+npm run sync:workbench
+```
+
+For changes to `CORE/main.ts`, `CORE/preload.ts`, Electron IPC, or when an
+immediate external-workbench restart is requested, use:
+
+```bash
+npm run sync:workbench -- --reopen
+```
+
+The sync command refuses dirty managed files and refuses to run when source and
+target resolve to the same directory. Dirty target-only `APP/[plugin]/`
+directories are allowed: they are excluded from replacement and from the
+managed-source rollback commit. After replacement the command creates a Git
+rollback checkpoint for managed changes. Do not use it from Build Mode inside
+the external workbench itself.
+
 In packaged DMG mode, opening the app hands off to the external runtime
 workbench. The assistant should edit:
 
@@ -350,7 +395,8 @@ Current no-reload behavior:
 
 - Vite/React HMR updates existing renderer modules in place.
 - `ComponentRegistry.register()` replaces existing components by `typeId`,
-  clears old source actions, and re-injects toolbar actions.
+  clears old component-owned source actions, and re-injects toolbar actions.
+  Dynamic project/custom actions are ownership-marked and survive HMR replacement.
 - `ActionRegistry` preserves user shortcut overrides while source actions are
   replaced.
 - Shell/sidebar components listen to `events.registryChanged` and re-render
@@ -361,5 +407,6 @@ Current no-reload behavior:
 ## 8. File Size and Modularity
 
 The project rule remains: TS/TSX files should generally stay under 400 lines.
-Several legacy files exceed this today. Do not make them larger when adding
-features. Extract hooks or services when touching those areas.
+Current audited APP/CORE files stay below 500 lines; a cohesive file around 400
+lines may remain intact. Do not grow a focused file substantially past that
+boundary—extract hooks, services, or rendering surfaces by responsibility.

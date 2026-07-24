@@ -1,0 +1,4 @@
+interface:
+  display_name: "Galois Project Overview"
+  short_description: "Inspect the opened notebook with a bounded project map."
+  default_prompt: "Use $dnote-project-overview to inspect the opened notebook before making changes."

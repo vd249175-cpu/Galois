@@ -3,7 +3,10 @@ const path = require('path');
 const asar = require('@electron/asar');
 
 exports.default = async function afterPack(context) {
-  const resourcesDir = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources');
+  const isWin = process.platform === 'win32';
+  const resourcesDir = isWin
+    ? path.join(context.appOutDir, 'resources')
+    : path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, 'Contents', 'Resources');
   const asarPath = path.join(resourcesDir, 'app.asar');
   const packagePath = path.join(context.packager.projectDir, '.launcher-app', 'package.json');
 

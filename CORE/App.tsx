@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { LayoutEngine } from './LayoutEngine';
 import { AreaLayout } from './AreaLayout';
 import { AreaShell } from './AreaShell';
-import { ComponentRegistry } from './ComponentRegistry';
 import { ActionRegistry } from './ActionRegistry';
 import { RightSidebar } from './RightSidebar';
 import { SettingsModal } from './SettingsModal';
@@ -13,7 +12,8 @@ import { BC } from './BloodChannels';
 import { LeftActivityBar } from './LeftActivityBar';
 import { TitleBar } from './TitleBar';
 import { defaultLayout } from './defaultLayout';
-import { applyTheme } from './themes';
+import { useAppConfigSync } from './useAppConfigSync';
+import { useAppBootstrap } from './useAppBootstrap';
 import './index.css';
 
 import { ServiceCollection, InstantiationService, InstantiationProvider } from './instantiation';
@@ -61,160 +61,9 @@ export function App() {
   const isPopped = getQueryParam('popped') === 'true';
   const poppedAreaId = getQueryParam('areaId');
   const poppedType = getQueryParam('type');
+  const [layout, setLayout] = useState<AreaLayout>(defaultLayout);
 
-  // Load theme and appearance configuration on startup for all windows
-  useEffect(() => {
-    const applyConfigVars = (config: any) => {
-      if (!config) return;
-      const root = document.documentElement;
-      
-      const sidebarIconSize = config.appearance?.sidebarIconSize ?? 14;
-      const uiFontSize = config.appearance?.uiFontSize ?? 12;
-      const panelTitleSize = config.appearance?.panelTitleSize ?? 11;
-      const sidebarLabelSize = config.appearance?.sidebarLabelSize ?? 11;
-      const fileTreeTitleSize = config.appearance?.fileTreeTitleSize ?? 11;
-      const fileTreeTagSize = config.appearance?.fileTreeTagSize ?? 8.5;
-      const slashMenuTitleSize = config.appearance?.slashMenuTitleSize ?? 11;
-      const slashMenuDescriptionSize = config.appearance?.slashMenuDescriptionSize ?? 9;
-      const timelineFontSize = config.appearance?.timelineFontSize ?? 11;
-      const editorFontSize = config.editor?.fontSize ?? 14;
-      const editorFontFamily = config.editor?.fontFamily || 'Fira Code';
-      const editorLineHeight = config.editor?.lineHeight ?? 1.6;
-      const graphNodeFontSize = config.graph?.nodeFontSize ?? 9;
-      const graphControlFontSize = config.graph?.controlFontSize ?? 11;
-      const graphDrawerFontSize = config.graph?.drawerFontSize ?? 12;
-      const terminalFontSize = config.terminal?.fontSize ?? 13;
-      
-      root.style.setProperty('--sidebar-icon-size', `${sidebarIconSize}px`);
-      root.style.setProperty('--ui-font-size', `${uiFontSize}px`);
-      root.style.setProperty('--panel-title-size', `${panelTitleSize}px`);
-      root.style.setProperty('--sidebar-label-size', `${sidebarLabelSize}px`);
-      root.style.setProperty('--file-tree-title-size', `${fileTreeTitleSize}px`);
-      root.style.setProperty('--file-tree-tag-size', `${fileTreeTagSize}px`);
-      root.style.setProperty('--slash-menu-title-size', `${slashMenuTitleSize}px`);
-      root.style.setProperty('--slash-menu-description-size', `${slashMenuDescriptionSize}px`);
-      root.style.setProperty('--video-timeline-font-size', `${timelineFontSize}px`);
-      root.style.setProperty('--editor-font-size', `${editorFontSize}px`);
-      root.style.setProperty('--editor-font-family', editorFontFamily);
-      root.style.setProperty('--editor-line-height', String(editorLineHeight));
-      root.style.setProperty('--graph-node-font-size', `${graphNodeFontSize}px`);
-      root.style.setProperty('--graph-control-font-size', `${graphControlFontSize}px`);
-      root.style.setProperty('--graph-drawer-font-size', `${graphDrawerFontSize}px`);
-      root.style.setProperty('--terminal-font-size', `${terminalFontSize}px`);
-    };
-
-    const applyLiveConfig = async (kind: 'config' | 'shortcuts' | 'themes', label?: string) => {
-      if (kind === 'shortcuts') {
-        const shortcuts = await window.electronAPI.getShortcuts();
-        ActionRegistry.loadShortcuts(shortcuts);
-        Blood.updateKey(BC.events.shortcutsChanged, Date.now());
-        Blood.updateKey(BC.system.devHotUpdateStatus, {
-          kind: 'shortcuts',
-          label: label || 'shortcuts.json',
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      const config = await window.electronAPI.getConfig();
-      Blood.updateKey(BC.system.config, config);
-      applyConfigVars(config);
-      const themeId = config?.theme || 'default-light';
-      await applyTheme(themeId);
-      Blood.updateKey(BC.events.themeChanged, themeId);
-      Blood.updateKey(BC.system.devHotUpdateStatus, {
-        kind,
-        label: label || (kind === 'themes' ? themeId : 'galois.config.json'),
-        timestamp: Date.now(),
-      });
-    };
-
-    const loadConfig = async () => {
-      try {
-        const config = await window.electronAPI.getConfig();
-        if (config) {
-          if (config.theme) {
-            applyTheme(config.theme);
-          } else {
-            applyTheme('default-light');
-          }
-          applyConfigVars(config);
-        } else {
-          applyTheme('default-light');
-        }
-      } catch (_) {
-        applyTheme('default-light');
-      }
-    };
-    loadConfig();
-
-    const unsubscribeConfigFiles = window.electronAPI.onConfigFileChanged?.(async (payload) => {
-      try {
-        await applyLiveConfig(payload.kind, payload.kind === 'shortcuts' ? 'shortcuts.json' : undefined);
-      } catch (err) {
-        console.warn('[App] Failed to apply live config change:', err);
-      }
-    });
-
-    let disposed = false;
-    let pollInFlight = false;
-    let configSignature = '';
-    let shortcutsSignature = '';
-    let themeCssSignature = '';
-
-    const pollConfigFiles = async () => {
-      if (disposed || pollInFlight) return;
-      pollInFlight = true;
-      try {
-        const config = await window.electronAPI.getConfig();
-        const nextConfigSignature = JSON.stringify(config || {});
-        const themeId = config?.theme || 'default-light';
-        const themeCss = await window.electronAPI.getThemeCss?.(themeId);
-        const nextThemeCssSignature = `${themeId}:${themeCss || ''}`;
-        const shortcuts = await window.electronAPI.getShortcuts();
-        const nextShortcutsSignature = JSON.stringify(shortcuts || {});
-
-        if (configSignature && nextConfigSignature !== configSignature) {
-          await applyLiveConfig('config', 'galois.config.json');
-        } else if (themeCssSignature && nextThemeCssSignature !== themeCssSignature) {
-          await applyLiveConfig('themes', themeId);
-        }
-
-        if (shortcutsSignature && nextShortcutsSignature !== shortcutsSignature) {
-          await applyLiveConfig('shortcuts', 'shortcuts.json');
-        }
-
-        configSignature = nextConfigSignature;
-        themeCssSignature = nextThemeCssSignature;
-        shortcutsSignature = nextShortcutsSignature;
-      } catch (err) {
-        console.warn('[App] Failed to poll live config change:', err);
-      } finally {
-        pollInFlight = false;
-      }
-    };
-
-    pollConfigFiles();
-    const pollTimer = window.setInterval(pollConfigFiles, 2500);
-
-    // Listen for config and theme changes via Blood state sync
-    const unsubscribe = Blood.subscribe((changedKeys) => {
-      if (changedKeys.has('events.themeChanged')) {
-        const newTheme = Blood.getValue<string>('events.themeChanged', 'default-light');
-        applyTheme(newTheme);
-      }
-      if (changedKeys.has('system.config')) {
-        const config = Blood.getValue<any>('system.config', null);
-        applyConfigVars(config);
-      }
-    });
-    return () => {
-      disposed = true;
-      window.clearInterval(pollTimer);
-      unsubscribe();
-      unsubscribeConfigFiles?.();
-    };
-  }, []);
+  useAppConfigSync();
 
   interface ScriptErrorToast {
     id: string;
@@ -262,168 +111,7 @@ export function App() {
     return unsubscribe;
   }, [isPopped]);
 
-  useEffect(() => {
-    if (isPopped) return;
-
-    // Focus the default area on startup
-    Blood.updateKey(BC.system.focusedAreaId, 'editor-root');
-
-    const initApp = async () => {
-      let runtimeInfoSnapshot: Awaited<ReturnType<typeof window.electronAPI.getRuntimeInfo>> | null = null;
-
-      // 0. Bootstrap runtime facts used by terminal, settings, and extension tooling.
-      try {
-        const [runtimeInfo, environmentStatus] = await Promise.all([
-          window.electronAPI.getRuntimeInfo(),
-          window.electronAPI.getEnvironmentStatus(),
-        ]);
-        runtimeInfoSnapshot = runtimeInfo;
-        Blood.updateKey(BC.system.runtimeMode, runtimeInfo.mode);
-        Blood.updateKey(BC.system.extensionPath, runtimeInfo.extensionPath);
-        Blood.updateKey(BC.system.sourcePluginPath, runtimeInfo.sourcePluginPath);
-        Blood.updateKey(BC.system.canWriteSourcePlugins, runtimeInfo.canWriteSourcePlugins);
-        Blood.updateKey(BC.system.agentWorkspace, runtimeInfo.agentWorkspace);
-        Blood.updateKey(BC.system.environmentStatus, environmentStatus);
-      } catch (err: any) {
-        Blood.updateKey(BC.system.environmentStatus, {
-          error: err?.message || 'Failed to inspect runtime environment',
-        });
-      }
-
-      // 1. Load global config and put it in Blood
-      try {
-        const config = await window.electronAPI.getConfig();
-        if (config) {
-          Blood.updateKey(BC.system.config, config);
-        }
-      } catch (_) {}
-
-      // 2. Restore a valid user project, falling back to the Documents starter project.
-      const saved = localStorage.getItem('dnote_last_project');
-      const pointsAtPackagedTemplate = Boolean(
-        saved &&
-        runtimeInfoSnapshot?.isPackaged &&
-        saved.includes('/Contents/Resources/template-project')
-      );
-      const savedExists = saved && !pointsAtPackagedTemplate
-        ? await window.electronAPI.pathExists(saved)
-        : false;
-
-      if (saved && savedExists) {
-        Blood.updateKey(BC.system.projectPath, saved);
-      } else {
-        try {
-          const devDefault = await window.electronAPI.getDevDefaultProject();
-          if (devDefault) {
-            Blood.updateKey(BC.system.projectPath, devDefault);
-            localStorage.setItem('dnote_last_project', devDefault);
-          }
-        } catch (_) {}
-      }
-
-      // 2. Load custom shortcuts from the user-visible Galois home.
-      try {
-        const shortcuts = await window.electronAPI.getShortcuts();
-        if (shortcuts) {
-          ActionRegistry.loadShortcuts(shortcuts);
-          console.log('[App] Custom shortcuts loaded from Galois home.');
-        }
-      } catch (_) {}
-
-      // 3. Load layout state from the user-visible Galois home.
-      try {
-        const savedLayout = await window.electronAPI.getLayout();
-        const normalizeLayout = (node: AreaLayout): AreaLayout => {
-          if (node.type === 'area') {
-            const componentType = node.componentType === 'linkGraph'
-              ? 'graphView'
-              : ComponentRegistry.getComponent(node.componentType)
-                ? node.componentType
-                : 'editor';
-            return { ...node, componentType };
-          }
-          return {
-            ...node,
-            first: normalizeLayout(node.first),
-            second: normalizeLayout(node.second),
-          };
-        };
-        // Guard: only restore a layout that actually contains at least one area node.
-        // An empty/null layout (from a prior session where all panels were closed)
-        // would leave the user with a blank screen, so fall back to defaultLayout.
-        const hasAnyArea = (node: any): boolean => {
-          if (!node) return false;
-          if (node.type === 'area') return true;
-          return hasAnyArea(node.first) || hasAnyArea(node.second);
-        };
-        if (savedLayout && hasAnyArea(savedLayout)) {
-          setLayout(normalizeLayout(savedLayout));
-          console.log('[App] Layout loaded from Galois home.');
-        } else if (savedLayout) {
-          console.warn('[App] Saved layout has no area nodes — falling back to defaultLayout.');
-        }
-      } catch (_) {}
-    };
-
-    initApp();
-
-    let restoreTimer: ReturnType<typeof setTimeout> | null = null;
-    const restoreProjectState = async (projectPath: string) => {
-      if (!projectPath) return;
-      try {
-        const projectState = await window.electronAPI.getProjectState(projectPath);
-        if (!projectState) return;
-
-        const openFiles = projectState.openFiles || {};
-        Object.entries(openFiles).forEach(([editorId, filePath]) => {
-          if (typeof filePath === 'string' && filePath) {
-            Blood.updateKey(BC.events.openFile(editorId), filePath);
-          }
-        });
-
-        if (Object.keys(openFiles).length === 0 && projectState.activeFile) {
-          Blood.updateKey(BC.events.openFile(projectState.activeEditorId || 'editor-root'), projectState.activeFile);
-        }
-
-        const cursors = projectState.cursors || {};
-        Object.entries(cursors).forEach(([editorId, cursor]) => {
-          if (cursor && typeof cursor === 'object') {
-            Blood.updateKey(BC.system.editorCursor(editorId), cursor);
-          }
-        });
-
-        if (projectState.activeEditorId) {
-          Blood.updateKey(BC.system.lastFocusedEditorId, projectState.activeEditorId);
-          Blood.updateKey(BC.system.focusedAreaId, projectState.activeEditorId);
-        }
-      } catch (err) {
-        console.warn('[App] Failed to restore project state:', err);
-      }
-    };
-
-    const unsubscribeProjectRestore = Blood.subscribe((changedKeys) => {
-      if (!changedKeys.has(BC.system.projectPath)) return;
-      const nextProjectPath = Blood.getValue<string>(BC.system.projectPath, '');
-      if (restoreTimer) clearTimeout(restoreTimer);
-      restoreTimer = setTimeout(() => restoreProjectState(nextProjectPath), 150);
-    });
-
-    // Validate plugin dependency graph on startup (dev only)
-    if (process.env.NODE_ENV === 'development') {
-      const issues = ComponentRegistry.validateDependencies();
-      if (issues.length > 0) {
-        console.warn('[App] Plugin dependency issues:', issues);
-      } else {
-        console.log('[App] All plugin dependencies satisfied.');
-      }
-    }
-
-    return () => {
-      if (restoreTimer) clearTimeout(restoreTimer);
-      unsubscribeProjectRestore();
-    };
-  }, [isPopped]);
-
+  useAppBootstrap({ isPopped, setLayout });
   // Listen for popped-out secondary windows closing to restore them in the main window layout grid
   useEffect(() => {
     if (isPopped) return;
@@ -444,8 +132,16 @@ export function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const keys: string[] = [];
-      if (e.metaKey) keys.push('meta');
-      if (e.ctrlKey) keys.push('control');
+      const isWin = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('win');
+      
+      if (isWin) {
+        // On Windows, translate e.ctrlKey to 'meta' to match meta+s, meta+k, etc. default configs
+        if (e.ctrlKey) keys.push('meta');
+        if (e.metaKey) keys.push('control');
+      } else {
+        if (e.metaKey) keys.push('meta');
+        if (e.ctrlKey) keys.push('control');
+      }
       if (e.altKey) keys.push('alt');
       if (e.shiftKey) keys.push('shift');
 
@@ -485,8 +181,6 @@ export function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'shortcuts'>('general');
   const [showFirstRunSetup, setShowFirstRunSetup] = useState(() => !isPopped && shouldShowFirstRunSetup());
 
-  // Initial layout tree
-  const [layout, setLayout] = useState<AreaLayout>(defaultLayout);
   const [isAllClosed, setIsAllClosed] = useState(false);
 
   const handleLayoutChange = (newLayout: AreaLayout) => {

@@ -10,6 +10,7 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 - `meta+e`（`editor.toggleMode`）在 **Live Preview** ↔ **Reading** 之间切换
 - 模式状态持久化到 `localStorage dnote_editor_mode`，旧的 Source/编辑模式配置会迁移到 Live Preview
 - **Live Preview**：CodeMirror 6 编辑态预览，`#` 标题、`**bold**`、`*italic*`、`` `code` ``、`[link](url)`、`[[WikiLink]]`、任务 checkbox、`{{ reactive }}`、`![media](path)`、`@video[](...)` 在光标离开时渲染为 widget/decoration，光标进入时显示原始 Markdown
+- **本地音频**：推荐写作 `![audio](media/file.mp3)`；为兼容 Agent 生成的旧内容，指向 `mp3/wav/aac/m4a/ogg/flac` 的普通链接 `[播放音频](...)` 在 Live 与 Reading 模式也会自动显示播放器
 - Live Preview 中任务 checkbox 可直接点击切换完成状态，保持 Markdown 源码为唯一真实数据
 - **Reading**：阅读渲染 + 局部交互式编辑，继续使用 `MarkdownPreview` 展示 WikiLink、媒体、代码块、反应式表达式等内容
 - Reading 中点击普通块会进入局部 textarea 编辑；在行首或空格后输入 `/` 可唤起与 Live Preview 共用的 slash commands
@@ -29,6 +30,16 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 
 ### 4. 📂 多媒体 / CLIP 拖入与自动归档系统
 将图片/音频/视频文件或视频时间线 CLIP 片段拖入编辑器区域时：
+- 完整视频使用 `![video](media/file.ext)`，读取项目 `media/` 资源。
+- 时间线片段使用 `@video[label](file.ext?t=start,end)`，其中只写
+  `.dnote_assets/videos/` 内的文件名，不写 `media/` 前缀。
+- 当前内嵌视频先尝试 Electron 原生解码；扩展名可识别不代表 codec 可播放。
+  原生失败时保留原文件并显示 `使用 mpv 原格式播放`。CORE 使用参数数组启动
+  mpv，时间线片段同时传入 start/end，不生成转码副本。当前后备使用 mpv 原生
+  播放窗口；在 Electron DOM 内直接渲染 libmpv 仍需要独立的原生渲染上下文。
+- 数学公式由本地 KaTeX 渲染。支持行内 `$E = mc^2$`、`\(...\)` 与跨行
+  `$$...$$`、`\[...\]`；代码块和反引号行内代码不会被当成公式。普通笔记与反应式生成的
+  Markdown 共用同一个 `MarkdownPreview`，因此公式行为一致。
 - 利用 `electronAPI.getPathForFile(file)` 安全获取本地绝对路径（绕过 Chromium 沙箱限制）
 - 调用 `electronAPI.archiveMedia(srcPath, projectPath)` 自动复制到 `{projectPath}/media/`（重名加时间戳后缀）
 - **Live Preview**：通过 CodeMirror `posAtCoords` 按鼠标落点插入独立 Markdown 块
@@ -43,6 +54,10 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 
 ### 6. ⚡ 斜线指令菜单（Slash Commands）
 在 Live Preview 或 Reading 块编辑器中，行首或空格后输入 `/`，唤起三类指令插值菜单（键盘上下键导航）：
+
+项目 `command/commands.json` 由 editor APP 每秒轻量检查，并在窗口重新聚焦时
+立即读取。外部 Agent 新增或修改 content 指令后，不需要重启或手动保存其他文件；
+解析成功后会同步更新 ActionRegistry、运行时快捷键快照和已打开的 `/` 菜单。
 
 | 类型 | 来源 | 说明 |
 |------|------|------|

@@ -5,10 +5,21 @@ export interface ElectronAPI {
   renameFile: (oldPath: string, newPath: string) => Promise<boolean>;
   listDir: (dirPath: string) => Promise<Array<{ name: string; path: string; isDir: boolean; size: number }>>;
   pathExists: (targetPath: string) => Promise<boolean>;
+  watchFile: (filePath: string) => Promise<string>;
+  unwatchFile: (filePath: string) => Promise<boolean>;
+  onFileChanged: (callback: (payload: { path: string; exists: boolean; mtimeMs: number; size: number }) => void) => () => void;
   openDirectory: () => Promise<string | null>;
   archiveMedia: (srcPath: string, projectPath: string) => Promise<string>;
   archiveMediaData: (fileName: string, mimeType: string, data: ArrayBuffer, projectPath: string) => Promise<string>;
+  archiveVideo: (srcPath: string, projectPath: string) => Promise<string>;
   getPathForFile: (file: File) => string;
+  writeClipboardText: (text: string) => Promise<boolean>;
+  playMediaWithMpv: (request: {
+    filePath: string;
+    title?: string;
+    start?: number;
+    end?: number;
+  }) => Promise<{ started: true; pid: number | null; executable: string; version: string }>;
 
   execCommand: (command: string, cwd: string) => Promise<{ stdout: string; stderr: string }>;
   openTerminal: (dirPath: string) => Promise<boolean>;
@@ -206,7 +217,13 @@ export interface ElectronAPI {
   setLayout: (layout: any) => Promise<boolean>;
   getProjectState: (projectPath: string) => Promise<any>;
   setProjectState: (projectPath: string, state: any) => Promise<boolean>;
+  getLastProjectPath: () => Promise<string | null>;
+  setLastProjectPath: (projectPath: string) => Promise<boolean>;
   onConfigFileChanged: (callback: (payload: { kind: 'config' | 'shortcuts' | 'themes'; path: string; timestamp: number }) => void) => () => void;
+  setTitleBarOverlay: (color: string, symbolColor: string) => Promise<void>;
+  isMaximized: () => Promise<boolean>;
+  onMaximizedChange: (callback: (isMaximized: boolean) => void) => () => void;
+  onLauncherLog: (callback: (log: string) => void) => () => void;
 }
 
 declare global {

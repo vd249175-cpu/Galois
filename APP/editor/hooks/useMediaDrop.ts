@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { getMarkdownMediaKind } from '../mediaUtils';
 
 interface UseMediaDropOptions {
   projectPath: string;
@@ -47,16 +48,16 @@ export function useMediaDrop({
   };
 
   const buildMediaMarkup = (relativePath: string): string => {
-    const ext = relativePath.split('.').pop()?.toLowerCase() || '';
-    if (['mp4', 'webm'].includes(ext)) return `![video](${relativePath})`;
-    if (['mp3', 'wav', 'aac', 'm4a'].includes(ext)) return `![audio](${relativePath})`;
+    const kind = getMarkdownMediaKind(relativePath);
+    if (kind === 'video') return `![video](${relativePath})`;
+    if (kind === 'audio') return `![audio](${relativePath})`;
     return `![media](${relativePath})`;
   };
 
   const isSupportedMediaFile = (file: File): boolean => {
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
     return (
-      ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'mp4', 'webm', 'ogg'].includes(ext) ||
+      ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac', 'mp4', 'webm', 'mov', 'm4v'].includes(ext) ||
       file.type.startsWith('image/') ||
       file.type.startsWith('audio/') ||
       file.type.startsWith('video/')

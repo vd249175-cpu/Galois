@@ -15,7 +15,14 @@ description: "Use when assisting with or building Galois note tags: frontmatter 
 
 不要把 APP 插件服务脚本当成笔记项目标签脚本。笔记项目标签脚本属于 `script/`，通过 `electronAPI.runProjectScript` 执行。
 
-正文 `#标签` 会被解析为标签，并在保存时补入文件开头的 Frontmatter `tags:`，以保证文件卡片和标签展示直观。
+正文 `#标签` 会被解析为派生标签，但不会在保存或加载时自动复制进
+Frontmatter。编辑器顶部标签栏只增删手动 YAML 标签；正文标签以“正文”来源显示，
+必须在正文中修改。这样删除手动标签不会被同名正文标签立刻写回 YAML，也不会因
+点击顶部关闭按钮而意外改写笔记正文。
+
+如果任务同时要演示 Frontmatter、正文标签和程序生成 Markdown，读取
+`../dnote-command-scripts/references/markdown-rendering-contract.md`，并以
+`template-project/08_完整Markdown与程序生成验收.md` 为可执行基准。
 
 ---
 
@@ -40,11 +47,14 @@ tags:
 
 ## 2. 静态标签（Static Tags）
 
-直接写在 `tags:` 列表中的纯文本标签：
+直接写在 `tags:` 列表中的纯文本标签是手动标签：
 
 - **格式**：任意字符串（支持中文、emoji 等 Unicode）
 - **索引时机**：文件保存后由 `tagResolver.ts` 同步解析
 - **匹配行为**：在搜索中通过子字符串或精确匹配
+
+正文 hashtag 与手动标签是两个来源；`resolveTagsSync` 会把二者合并到
+`system.resolvedTags`，而 `system.staticTags` 只保留 Frontmatter 原始标签。
 
 ```yaml
 tags:

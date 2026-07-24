@@ -83,11 +83,27 @@ export const stepForwardAction: OrganAction = {
   )
 };
 
+export const copyFrameReferenceAction: OrganAction = {
+  id: 'videoTimeline.copyFrameReference',
+  label: '复制当前帧引用 (Ctrl+Alt+F)',
+  defaultShortcut: 'control+alt+f',
+  isToolbar: true,
+  icon: React.createElement(
+    'svg',
+    { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 },
+    React.createElement('rect', { x: 4.5, y: 4.5, width: 8.5, height: 9, rx: 1.5 }),
+    React.createElement('path', { d: 'M3.5 11.5H3A1.5 1.5 0 0 1 1.5 10V3A1.5 1.5 0 0 1 3 1.5h7A1.5 1.5 0 0 1 11.5 3v.5' }),
+    React.createElement('circle', { cx: 7.2, cy: 7.3, r: 1 }),
+    React.createElement('path', { d: 'm5.5 12 2.2-2.2 1.5 1.4 1.2-1.1 2.1 1.9' })
+  )
+};
+
 export const videoTimelineActions = [
   playPauseAction,
   splitAction,
   jumpBackwardAction,
   jumpForwardAction,
   stepBackwardAction,
-  stepForwardAction
+  stepForwardAction,
+  copyFrameReferenceAction
 ];

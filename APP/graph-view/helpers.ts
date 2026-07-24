@@ -71,3 +71,41 @@ export function getPillWidth(label: string, fs: number): number {
   }
   return Math.max(36, len * (fs * 0.58) + 12);
 }
+
+export function getDownstreamFocusPath(
+  focusNodeId: string | null,
+  links: Link[],
+): { visibleNodeIds: Set<string>; highlightedLinkIds: Set<string> } {
+  const visibleNodeIds = new Set<string>();
+  const highlightedLinkIds = new Set<string>();
+  if (!focusNodeId) return { visibleNodeIds, highlightedLinkIds };
+
+  const outgoing = new Map<string, Link[]>();
+  links.forEach((link) => {
+    const bucket = outgoing.get(link.source) || [];
+    bucket.push(link);
+    outgoing.set(link.source, bucket);
+  });
+
+  visibleNodeIds.add(focusNodeId);
+  const queue = [focusNodeId];
+  while (queue.length > 0) {
+    const source = queue.shift()!;
+    for (const link of outgoing.get(source) || []) {
+      highlightedLinkIds.add(`${link.source}\u0000${link.target}`);
+      if (visibleNodeIds.has(link.target)) continue;
+      visibleNodeIds.add(link.target);
+      queue.push(link.target);
+    }
+  }
+
+  // Keep one direct parent layer as context while the complete child chain is
+  // shown through the deepest reachable level.
+  links.forEach((link) => {
+    if (link.target !== focusNodeId) return;
+    visibleNodeIds.add(link.source);
+    highlightedLinkIds.add(`${link.source}\u0000${link.target}`);
+  });
+
+  return { visibleNodeIds, highlightedLinkIds };
+}

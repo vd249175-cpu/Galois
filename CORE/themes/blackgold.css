@@ -5,7 +5,7 @@
 
   --bg-main: var(--clr-charcoal);
   --bg-panel: rgba(14, 14, 18, 0.50);
-  --bg-header: rgba(10, 10, 14, 0.88);
+  --bg-header: var(--clr-charcoal);
   --bg-input: rgba(255, 255, 255, 0.04);
   --bg-terminal: rgba(6, 6, 10, 0.70);
   --border-color: rgba(255, 223, 0, 0.2);
