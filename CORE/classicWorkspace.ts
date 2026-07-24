@@ -275,7 +275,7 @@ exit /b 1
 
 :ENVIRONMENT
 where.exe node >nul 2>nul
-if %ERRORLEVEL% neq 0 (
+if %ERRORLEVEL% NEQ 0 (
   echo Node.js is required to run the editable Galois workbench.
   echo Install it from https://nodejs.org/
   del "%PID_FILE%"
@@ -283,14 +283,14 @@ if %ERRORLEVEL% neq 0 (
 )
 
 where.exe npm >nul 2>nul
-if %ERRORLEVEL% neq 0 (
+if %ERRORLEVEL% NEQ 0 (
   echo npm is required to install Galois workbench dependencies.
   del "%PID_FILE%"
   exit /b 1
 )
 
 where.exe git >nul 2>nul
-if %ERRORLEVEL% eq 0 (
+if %ERRORLEVEL% EQU 0 (
   if not exist .git (
     git init >nul
     git config user.name "Galois Workbench"
@@ -308,7 +308,7 @@ if not exist node_modules (
 )
 
 findstr /C:"fix:native" package.json >nul 2>nul
-if %ERRORLEVEL% eq 0 (
+if %ERRORLEVEL% EQU 0 (
   call npm run fix:native
 )
 
@@ -374,7 +374,7 @@ set ERRORLEVEL=0
 
 cd /d "%TARGET%"
 where.exe git >nul 2>nul
-if %ERRORLEVEL% eq 0 (
+if %ERRORLEVEL% EQU 0 (
   git init >nul
   git config user.name "Galois Workbench"
   git config user.email "galois-workbench@local"
