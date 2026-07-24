@@ -21,51 +21,70 @@ def _rounded_rect(draw: ImageDraw.ImageDraw, box, radius, fill, outline=None, wi
 
 
 def _make_base(size: int = 1024) -> Image.Image:
+    # 1. Create base transparent image
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    # Deep blue-to-slate background with a soft vignette.
+    
+    # 2. Create the rounded rectangle mask for the background
+    mask = Image.new("L", (size, size), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    _rounded_rect(
+        mask_draw,
+        (size * 0.09, size * 0.09, size * 0.91, size * 0.91),
+        radius=int(size * 0.17),
+        fill=255
+    )
+    
+    # 3. Create background gradient
+    bg_img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    bg_draw = ImageDraw.Draw(bg_img)
+    # Slate blue to dark violet gradient
     for y in range(size):
         t = y / max(1, size - 1)
-        r = int(9 + (21 - 9) * t)
-        g = int(16 + (36 - 16) * t)
-        b = int(28 + (55 - 28) * t)
-        draw.line((0, y, size, y), fill=(r, g, b, 255))
-
+        r = int(30 + (15 - 30) * t)
+        g = int(41 + (23 - 41) * t)
+        b = int(59 + (42 - 59) * t)
+        bg_draw.line((0, y, size, y), fill=(r, g, b, 255))
+    
+    # Apply the rounded-rect mask to the gradient
+    bg_img.putalpha(mask)
+    img.alpha_composite(bg_img)
+    
+    # 4. Add subtle inner glow
     glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow)
-    glow_draw.ellipse((size * 0.08, size * 0.08, size * 0.92, size * 0.92), fill=(46, 204, 182, 42))
+    glow_draw.ellipse((size * 0.08, size * 0.08, size * 0.92, size * 0.92), fill=(46, 204, 182, 35))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=size * 0.08))
     img.alpha_composite(glow)
-
+    
+    # 5. Draw the shell border (without fill, only outline, since the gradient is the fill!)
     shell = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     shell_draw = ImageDraw.Draw(shell)
     _rounded_rect(
         shell_draw,
         (size * 0.09, size * 0.09, size * 0.91, size * 0.91),
         radius=int(size * 0.17),
-        fill=(15, 24, 38, 245),
-        outline=(63, 156, 255, 88),
-        width=max(2, size // 220),
+        fill=(0, 0, 0, 0), # transparent fill
+        outline=(56, 189, 248, 140), # beautiful sky-blue outline
+        width=max(4, size // 150),
     )
-
-    # Inner card.
+    
+    # 6. Inner card.
     card_box = (size * 0.19, size * 0.17, size * 0.81, size * 0.83)
-    _rounded_rect(shell_draw, card_box, radius=int(size * 0.08), fill=(244, 247, 251, 250))
-
+    _rounded_rect(shell_draw, card_box, radius=int(size * 0.08), fill=(248, 250, 252, 252))
+    
     # Folded corner.
     fold = [
         (size * 0.70, size * 0.17),
         (size * 0.81, size * 0.17),
         (size * 0.81, size * 0.28),
     ]
-    shell_draw.polygon(fold, fill=(225, 233, 242, 255))
+    shell_draw.polygon(fold, fill=(226, 232, 240, 255))
     shell_draw.line(
         [(size * 0.70, size * 0.17), (size * 0.81, size * 0.28)],
-        fill=(180, 192, 205, 255),
+        fill=(148, 163, 184, 255),
         width=max(2, size // 220),
     )
-
+    
     # Stylized note graph.
     graph = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     graph_draw = ImageDraw.Draw(graph)
@@ -77,35 +96,36 @@ def _make_base(size: int = 1024) -> Image.Image:
     ]
     edges = [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)]
     for a, b in edges:
-        graph_draw.line([nodes[a], nodes[b]], fill=(31, 119, 204, 255), width=max(6, size // 96))
+        graph_draw.line([nodes[a], nodes[b]], fill=(14, 165, 233, 255), width=max(6, size // 96)) # Sky blue lines
     for idx, (x, y) in enumerate(nodes):
         radius = size * (0.026 if idx != 1 else 0.034)
-        graph_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(16, 163, 127, 255))
-
+        # Deep emerald/teal nodes
+        graph_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(20, 184, 166, 255))
+        
     # Vertical spine and text-like lines.
     graph_draw.rounded_rectangle(
         (size * 0.29, size * 0.26, size * 0.35, size * 0.59),
         radius=int(size * 0.03),
-        fill=(43, 98, 171, 255),
+        fill=(2, 132, 199, 255), # Sky-600 spine
     )
     for i, w in enumerate((0.46, 0.50, 0.44)):
         y = size * (0.25 + i * 0.07)
         graph_draw.rounded_rectangle(
             (size * 0.39, y, size * (w + 0.18), y + size * 0.028),
             radius=int(size * 0.014),
-            fill=(120, 140, 160, 175),
+            fill=(100, 116, 139, 175), # Slate lines
         )
-
+        
     graph = graph.filter(ImageFilter.GaussianBlur(radius=size * 0.0015))
     shell.alpha_composite(graph)
-
+    
     # Small command prompt dot.
     prompt = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     prompt_draw = ImageDraw.Draw(prompt)
     prompt_draw.rounded_rectangle(
         (size * 0.58, size * 0.63, size * 0.72, size * 0.69),
         radius=int(size * 0.02),
-        fill=(25, 195, 180, 255),
+        fill=(45, 212, 191, 255), # Teal prompt
     )
     prompt_draw.polygon(
         [
@@ -113,19 +133,19 @@ def _make_base(size: int = 1024) -> Image.Image:
             (size * 0.62, size * 0.65),
             (size * 0.59, size * 0.665),
         ],
-        fill=(245, 249, 252, 255),
+        fill=(255, 255, 255, 255),
     )
     shell.alpha_composite(prompt)
-
+    
     img.alpha_composite(shell)
-
+    
     # Subtle outer shadow.
     shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow)
     shadow_draw.rounded_rectangle(
         (size * 0.11, size * 0.11, size * 0.89, size * 0.89),
         radius=int(size * 0.16),
-        fill=(0, 0, 0, 50),
+        fill=(0, 0, 0, 40),
     )
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=size * 0.02))
     img = Image.alpha_composite(shadow, img)
