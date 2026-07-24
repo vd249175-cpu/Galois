@@ -11,6 +11,7 @@ ipcMain.handle('fs:readFile', async (_, filePath: string) => {
   try {
     return fs.readFileSync(filePath, 'utf-8');
   } catch (err: any) {
+    if (err.code === 'ENOENT') return null;
     throw new Error(`Failed to read file: ${err.message}`);
   }
 });

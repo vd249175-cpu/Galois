@@ -349,6 +349,11 @@ if exist "%PID_FILE%" (
   del "%PID_FILE%"
 )
 
+REM Kill anything on port 5173 (Vite dev server)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173 " 2^>nul') do (
+  if not "%%a"=="" taskkill /f /pid %%a >nul 2>nul
+)
+
 cd /d "%WORKSPACE_ROOT%"
 echo Starting Galois workbench with HMR...
 start "" /b cmd /c "%LAUNCHER_DIR%\\run-galois-workbench.bat" <nul >> "%LOG_DIR%\\external-workbench.log" 2>&1

@@ -81,27 +81,37 @@ function shouldLaunchExternalWorkbench(): boolean {
   return app.isPackaged && process.env.GALOIS_USE_INTERNAL_APP !== '1';
 }
 
+// Track the spawned workbench process so we can kill it reliably on exit
+let _workbenchChild: ReturnType<typeof spawn> | null = null;
+
+function killWorkbenchProcess() {
+  if (!_workbenchChild) return;
+  const pid = _workbenchChild.pid;
+  _workbenchChild = null;
+  if (pid && Number.isInteger(pid) && pid > 0) {
+    try { execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' }); } catch (_) {}
+  }
+  // Also kill by port 5173 (Vite) as belt-and-suspenders
+  try {
+    const out = execSync('netstat -ano', { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf-8' }) as string;
+    const pids = new Set<string>();
+    for (const line of out.split('\n')) {
+      if (!line.includes(':5173 ') && !line.includes(':5173\t')) continue;
+      const parts = line.trim().split(/\s+/);
+      const p = parts[parts.length - 1];
+      if (p && /^\d+$/.test(p) && p !== '0') pids.add(p);
+    }
+    for (const p of pids) {
+      try { execSync(`taskkill /f /t /pid ${p}`, { stdio: 'ignore' }); } catch (_) {}
+    }
+  } catch (_) {}
+}
+
 async function launchExternalWorkbench() {
   const isWin = process.platform === 'win32';
-  
-  // If there is an existing pid file on Windows, terminate it to release file locks and prevent duplicates
-  if (isWin) {
-    const pidPath = path.join(app.getPath('documents'), 'Galois', 'workbench', 'galois-workbench.pid');
-    if (fs.existsSync(pidPath)) {
-      try {
-        const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
-        if (pidStr) {
-          const pid = parseInt(pidStr, 10);
-          if (Number.isInteger(pid) && pid > 0) {
-            execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' });
-          }
-        }
-      } catch (_) {}
-      try {
-        fs.unlinkSync(pidPath);
-      } catch (_) {}
-    }
-  }
+
+  // Kill any previously tracked workbench process first
+  killWorkbenchProcess();
 
   const scriptName = isWin ? 'run-galois-workbench.bat' : 'run-galois-workbench.sh';
   const runScriptPath = path.join(path.dirname(getClassicCodeWorkspacePath()), scriptName);
@@ -112,7 +122,7 @@ async function launchExternalWorkbench() {
   // Check Node.js and npm availability before launching to show friendly GUI error box
   const nodeStatus = await checkTool('node');
   if (!nodeStatus.available) {
-    throw new Error('未检测到 Node.js 运行环境！\n\n🧬 DNOTE Bionic Workspace 需要 Node.js 才能运行。请先前往 https://nodejs.org/ 下载并安装 Node.js LTS 版本，然后再运行本软件。');
+    throw new Error('未检测到 Node.js 运行环境！\n\n请先前往 https://nodejs.org/ 下载并安装 Node.js LTS 版本，然后再运行本软件。');
   }
   const npmStatus = await checkTool('npm');
   if (!npmStatus.available) {
@@ -121,17 +131,27 @@ async function launchExternalWorkbench() {
 
   const logPath = getGaloisLogPath('external-workbench.log');
   ensureParentDir(logPath);
-  const logFd = fs.openSync(logPath, 'a');
-  
+  // Truncate log on each fresh launch so the loader shows only current session
+  const logFd = fs.openSync(logPath, 'w');
+
   const spawnCmd = isWin ? 'cmd.exe' : runScriptPath;
   const spawnArgs = isWin ? ['/c', runScriptPath] : [];
 
   const child = spawn(spawnCmd, spawnArgs, {
     cwd: path.dirname(getClassicCodeWorkspacePath()),
     detached: true,
+    windowsHide: true,   // ← CRITICAL: prevents CMD window from appearing on screen
     env: getSecureEnv(),
     stdio: ['ignore', logFd, logFd],
   });
+
+  // Save reference for clean shutdown; write pid file for bat-level cleanup too
+  _workbenchChild = child;
+  if (isWin && child.pid) {
+    const pidPath = path.join(path.dirname(getClassicCodeWorkspacePath()), 'galois-workbench.pid');
+    try { fs.writeFileSync(pidPath, String(child.pid), 'utf-8'); } catch (_) {}
+  }
+
   child.unref();
 }
 
@@ -397,7 +417,7 @@ function runShellCommand(command: string, cwd: string, env: NodeJS.ProcessEnv, s
   return {
     assertWritableTarget, canWriteDirectory, checkTool, getExtensionDevPaths,
     getRuntimeInfo, getSourcePluginPath, getUserExtensionsPath, getSecureEnv,
-    isInsidePath, launchExternalWorkbench, listExtensionsFromDevPath,
+    isInsidePath, killWorkbenchProcess, launchExternalWorkbench, listExtensionsFromDevPath,
     listUserExtensions, quoteAppleScriptString, quoteCmdArg, quoteShellArg,
     readUserConfig, repairProjectEnvironment: undefined, resolveExtensionRoot,
     runShellCommand, setExtensionDevPaths, shouldLaunchExternalWorkbench,

@@ -6,7 +6,7 @@ export function registerApplicationLifecycle(deps: any) {
   const {
     createLauncherStatusWindow, disposeUserConfigWatchers, ensureParentDir,
     fileWatchEntries, getGaloisWindowStatePath, initUserData,
-    launchExternalWorkbench, mpvProcesses, secondaryWindows, setMainWindow,
+    killWorkbenchProcess, launchExternalWorkbench, mpvProcesses, secondaryWindows, setMainWindow,
     setupUserConfigWatchers, shouldLaunchExternalWorkbench,
   } = deps;
 function createMainWindow() {
@@ -240,39 +240,8 @@ app.on('before-quit', () => {
   fileWatchEntries.clear();
   for (const child of mpvProcesses) child.kill();
   mpvProcesses.clear();
-
-  // Kill all workbench processes on Windows upon quit
-  // Strategy: kill by PID file first, then kill by port 5173 as fallback
-  if (process.platform === 'win32') {
-    const execSync = require('child_process').execSync;
-    // 1. Kill by PID file
-    const pidPath = path.join(app.getPath('documents'), 'Galois', 'workbench', 'galois-workbench.pid');
-    if (fs.existsSync(pidPath)) {
-      try {
-        const pidStr = fs.readFileSync(pidPath, 'utf-8').trim();
-        if (pidStr) {
-          const pid = parseInt(pidStr, 10);
-          if (Number.isInteger(pid) && pid > 0) {
-            execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' });
-          }
-        }
-      } catch (_) {}
-      try { fs.unlinkSync(pidPath); } catch (_) {}
-    }
-    // 2. Always kill by port 5173 (catches Vite even if PID file was missing)
-    try {
-      const out = execSync('netstat -ano | findstr ":5173 "', { stdio: ['ignore', 'pipe', 'ignore'], encoding: 'utf-8' }) as string;
-      const pids = new Set<string>();
-      for (const line of out.split('\n')) {
-        const parts = line.trim().split(/\s+/);
-        const pid = parts[parts.length - 1];
-        if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
-      }
-      for (const pid of pids) {
-        try { execSync(`taskkill /f /t /pid ${pid}`, { stdio: 'ignore' }); } catch (_) {}
-      }
-    } catch (_) {}
-  }
+  // Kill external workbench and Vite processes
+  if (process.platform === 'win32') killWorkbenchProcess();
 });
 
 app.on('window-all-closed', () => {
