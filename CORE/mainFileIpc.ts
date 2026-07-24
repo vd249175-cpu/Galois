@@ -5,7 +5,7 @@ import * as path from 'path';
 export function registerFileIpcHandlers(deps: any) {
   const {
     assertWritableTarget, fileWatchEntries, fileWatchSenderCleanup, isInsidePath,
-    mainWindow, releaseFileWatchesForSender, stopWatchingFileIfUnused,
+    getMainWindow, releaseFileWatchesForSender, stopWatchingFileIfUnused,
   } = deps;
 ipcMain.handle('fs:readFile', async (_, filePath: string) => {
   try {
@@ -136,8 +136,9 @@ ipcMain.handle('fs:pathExists', async (_, targetPath: string) => {
 
 // Native folder opener dialog IPC handler
 ipcMain.handle('dialog:openDirectory', async () => {
-  if (!mainWindow) return null;
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const mainWindowInstance = getMainWindow();
+  if (!mainWindowInstance) return null;
+  const result = await dialog.showOpenDialog(mainWindowInstance, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Select Project Directory',
   });

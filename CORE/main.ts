@@ -261,7 +261,7 @@ registerFileIpcHandlers({
   fileWatchEntries,
   fileWatchSenderCleanup,
   isInsidePath,
-  mainWindow,
+  getMainWindow: () => mainWindow,
   releaseFileWatchesForSender,
   stopWatchingFileIfUnused,
 });
