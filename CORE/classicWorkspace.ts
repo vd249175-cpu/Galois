@@ -428,15 +428,34 @@ function syncClassicCodeWorkspace(overwrite = false) {
     }
   } catch (_) {}
 
-  // If in production packaged app and workspace matches current version, skip copying
+  // Check if version matches
+  let versionMatches = false;
   if (app.isPackaged && !overwrite && fs.existsSync(versionMarkerPath)) {
     try {
       const savedVersion = fs.readFileSync(versionMarkerPath, 'utf-8').trim();
-      if (savedVersion === currentVersion) {
-        console.log('[classic-code] Workspace is up-to-date, skipping sync');
-        return { sourcePath: sourceRoot, workspacePath: workspaceRoot, copied: false };
-      }
+      versionMatches = savedVersion === currentVersion;
     } catch (_) {}
+  }
+
+  // Even when version matches, always re-sync CORE/, APP/, scripts/ and bat files
+  // because these contain launcher/process management code that must stay current.
+  const alwaysSyncItems = ['CORE', 'APP', 'scripts'];
+
+  if (versionMatches) {
+    // Fast path: only sync the always-overwrite items
+    console.log('[classic-code] Version matches — fast syncing CORE/APP/scripts only');
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    alwaysSyncItems.forEach((item) => {
+      copyClassicCodeItemSync(
+        path.join(sourceRoot, item),
+        path.join(workspaceRoot, item),
+        item,
+        true  // always overwrite
+      );
+    });
+    // Also rewrite bat scripts
+    writeClassicWorkspaceScripts(sourceRoot, workspaceRoot);
+    return { sourcePath: sourceRoot, workspacePath: workspaceRoot, copied: true };
   }
 
   if (overwrite) {
