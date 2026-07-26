@@ -423,6 +423,10 @@ before and after image loading changes its height. Clipboard image-file
 archiving returns the generated Markdown as part of its insertion result and
 uses the same blur/rebuild/end-alignment transaction after the async work
 finishes.
+The Reading reveal step first compares the insertion-tail block bounds with the
+editor viewport. It preserves scroll position while the complete tail remains
+visible and aligns the tail to the viewport end only after insertion or image
+loading places it outside the visible bounds.
 Reading media delete controls are owned by each rendered media instance. They
 remove only that exact Markdown token occurrence and preserve sibling text and
 media on the same source line; the source line itself is removed only when no

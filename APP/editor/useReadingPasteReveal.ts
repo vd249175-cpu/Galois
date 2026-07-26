@@ -20,6 +20,12 @@ function targetLineForInsertion(content: string, caretIndex: number, insertedTex
   return content.slice(0, targetIndex).split('\n').length - 1;
 }
 
+function isFullyVisibleWithin(container: HTMLElement, target: HTMLElement): boolean {
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  return targetRect.top >= containerRect.top && targetRect.bottom <= containerRect.bottom;
+}
+
 export function useReadingPasteReveal({
   content,
   onContentChange,
@@ -53,11 +59,15 @@ export function useReadingPasteReveal({
         });
         if (!wrapper) return;
 
-        const reveal = () => wrapper.scrollIntoView({ block: 'end', inline: 'nearest' });
+        const revealIfNeeded = () => {
+          if (!isFullyVisibleWithin(container, wrapper)) {
+            wrapper.scrollIntoView({ block: 'end', inline: 'nearest' });
+          }
+        };
         container.focus({ preventScroll: true });
-        reveal();
+        revealIfNeeded();
         wrapper.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
-          if (!image.complete) image.addEventListener('load', reveal, { once: true });
+          if (!image.complete) image.addEventListener('load', revealIfNeeded, { once: true });
         });
         pendingLineRef.current = null;
       });
