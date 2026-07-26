@@ -427,6 +427,10 @@ Reading media delete controls are owned by each rendered media instance. They
 remove only that exact Markdown token occurrence and preserve sibling text and
 media on the same source line; the source line itself is removed only when no
 content remains.
+Reading image-only lines use equal responsive flex columns. Image elements fill
+their assigned column while preserving aspect ratio; columns wrap when their
+minimum useful width no longer fits, and a wrapped single column expands to the
+available row width.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

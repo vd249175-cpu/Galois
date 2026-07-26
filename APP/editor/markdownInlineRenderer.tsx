@@ -258,7 +258,7 @@ export function createInlineRenderer(options: any) {
             alt={alt}
             draggable={false}
             style={{
-              width: 'auto',
+              width: '100%',
               maxWidth: '100%',
               height: 'auto',
               maxHeight: 'min(62vh, 620px)',

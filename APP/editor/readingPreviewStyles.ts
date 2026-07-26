@@ -153,9 +153,16 @@ export const readingPreviewStyles = `
   margin: 10px 0;
 }
 .reading-image-row > .reading-media-image {
-  flex: 1 1 220px;
-  min-width: min(180px, 100%);
-  max-height: min(62vh, 620px);
+  flex: 1 1 0;
+  min-width: min(220px, 100%);
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+}
+.reading-image-row > .reading-media-image > img {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
 }
 .reading-media-item {
   position: relative;

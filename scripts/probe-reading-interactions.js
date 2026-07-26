@@ -108,6 +108,9 @@ assert.match(readingInteractionSource, /selectedMediaSourceRange/);
 assert.match(readingInteractionSource, /intersectsNode\(media\)/);
 assert.match(readingStyles, /\.markdown-preview-container \[data-dnote-block-content\] \*/);
 assert.match(readingStyles, /-webkit-user-select: text/);
+assert.match(readingStyles, /\.reading-image-row > \.reading-media-image[\s\S]*?flex: 1 1 0/);
+assert.match(readingStyles, /\.reading-image-row > \.reading-media-image > img[\s\S]*?width: 100%/);
+assert.match(inlineRenderer, /width: '100%',[\s\S]*?maxHeight: 'min\(62vh, 620px\)'/);
 assert.doesNotMatch(readingStyles, /\.preview-block-wrapper:active \{ cursor: grabbing; \}/);
 
 const preview = read('APP', 'editor', 'MarkdownPreview.tsx');
