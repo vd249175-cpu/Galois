@@ -92,7 +92,11 @@ assert.doesNotMatch(readingHook, /else if \(!target\.closest\('\[data-dnote-medi
 assert.match(readingHook, /event\.currentTarget\.contains\(selection\.anchorNode\)/);
 assert.match(readingHook, /getMarkdownSourceRangeFromSelection/);
 assert.match(readingHook, /replaceNativeSelection/);
+assert.match(readingHook, /content\.slice\(range\.start, range\.end\)/);
 assert.match(readingHook, /gesture\.moved && gesture\.blockCandidate/);
+const readingInteractionSource = read('APP', 'editor', 'readingInteraction.ts');
+assert.match(readingInteractionSource, /selectedMediaSourceRange/);
+assert.match(readingInteractionSource, /intersectsNode\(media\)/);
 assert.match(readingStyles, /\.markdown-preview-container \[data-dnote-block-content\] \*/);
 assert.match(readingStyles, /-webkit-user-select: text/);
 assert.doesNotMatch(readingStyles, /\.preview-block-wrapper:active \{ cursor: grabbing; \}/);

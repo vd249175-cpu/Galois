@@ -175,11 +175,16 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   const onCopy = (event: React.ClipboardEvent<HTMLDivElement>) => {
     const selection = window.getSelection();
     if (
-      selection && !selection.isCollapsed && selection.toString() &&
+      selection && !selection.isCollapsed &&
       selection.anchorNode && selection.focusNode &&
       event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode)
     ) {
-      return;
+      const range = getMarkdownSourceRangeFromSelection(event.currentTarget, selection, content, blocks);
+      if (range) {
+        copyText(event, content.slice(range.start, range.end));
+        return;
+      }
+      if (selection.toString()) return;
     }
     if (selectedMedia) {
       copyText(event, selectedMedia.markdown);
@@ -214,8 +219,11 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   };
 
   const onCut = (event: React.ClipboardEvent<HTMLDivElement>) => {
-    const selectedText = window.getSelection()?.toString() || '';
-    if (!selectedText || !replaceNativeSelection(event.currentTarget, '')) return;
+    const selection = window.getSelection();
+    const range = getMarkdownSourceRangeFromSelection(event.currentTarget, selection, content, blocks);
+    if (!range) return;
+    const selectedText = content.slice(range.start, range.end);
+    if (!replaceNativeSelection(event.currentTarget, '')) return;
     event.preventDefault();
     event.stopPropagation();
     event.clipboardData.setData('text/plain', selectedText);

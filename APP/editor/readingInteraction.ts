@@ -122,17 +122,56 @@ function sourceOffsetForSelectionEndpoint(
   const line = Number(wrapper.dataset.dnoteBlockStart);
   const block = blocks.find((candidate) => candidate.startLine === line);
   if (!block) return null;
-  const sourceLines = content.split('\n');
-  let blockStart = 0;
-  for (let index = 0; index < block.startLine; index += 1) {
-    blockStart += (sourceLines[index]?.length || 0) + 1;
-  }
+  const blockStart = sourceStartForLine(content, block.startLine);
   const localOffset = mapRenderedOffsetToMarkdown(
     block.rawText,
     contentRoot.textContent || '',
     renderedOffset
   );
   return blockStart + localOffset;
+}
+
+function sourceStartForLine(content: string, line: number): number {
+  return content.split('\n').slice(0, line).reduce((total, value) => total + value.length + 1, 0);
+}
+
+function selectedMediaSourceRange(
+  container: HTMLElement,
+  selection: Selection,
+  content: string,
+  blocks: ParsedBlock[]
+): ReadingSourceRange | null {
+  let start = Number.POSITIVE_INFINITY;
+  let end = -1;
+  const mediaElements = Array.from(container.querySelectorAll<HTMLElement>('[data-dnote-media-token]'));
+  for (const media of mediaElements) {
+    let intersects = false;
+    for (let index = 0; index < selection.rangeCount; index += 1) {
+      try { intersects ||= selection.getRangeAt(index).intersectsNode(media); } catch { /* detached node */ }
+    }
+    if (!intersects) continue;
+    const token = media.dataset.dnoteMediaToken;
+    const wrapper = media.closest<HTMLElement>('[data-dnote-block-start]');
+    const contentRoot = wrapper?.querySelector<HTMLElement>('[data-dnote-block-content]');
+    const line = Number(wrapper?.dataset.dnoteBlockStart);
+    const block = blocks.find((candidate) => candidate.startLine === line);
+    if (!token || !wrapper || !contentRoot || !block) continue;
+    const peers = Array.from(contentRoot.querySelectorAll<HTMLElement>('[data-dnote-media-token]'));
+    const peerIndex = peers.indexOf(media);
+    const duplicateIndex = peers.slice(0, peerIndex).filter((peer) => peer.dataset.dnoteMediaToken === token).length;
+    let localStart = -1;
+    let searchFrom = 0;
+    for (let occurrence = 0; occurrence <= duplicateIndex; occurrence += 1) {
+      localStart = block.rawText.indexOf(token, searchFrom);
+      if (localStart < 0) break;
+      searchFrom = localStart + token.length;
+    }
+    if (localStart < 0) continue;
+    const absoluteStart = sourceStartForLine(content, block.startLine) + localStart;
+    start = Math.min(start, absoluteStart);
+    end = Math.max(end, absoluteStart + token.length);
+  }
+  return Number.isFinite(start) && end > start ? { start, end } : null;
 }
 
 export function getMarkdownSourceRangeFromSelection(
@@ -148,8 +187,12 @@ export function getMarkdownSourceRangeFromSelection(
   const focus = sourceOffsetForSelectionEndpoint(
     container, selection.focusNode, selection.focusOffset, content, blocks
   );
-  if (anchor === null || focus === null || anchor === focus) return null;
-  return { start: Math.min(anchor, focus), end: Math.max(anchor, focus) };
+  const media = selectedMediaSourceRange(container, selection, content, blocks);
+  const offsets = [anchor, focus, media?.start, media?.end].filter((value): value is number => value !== null && value !== undefined);
+  if (offsets.length < 2) return null;
+  const start = Math.min(...offsets);
+  const end = Math.max(...offsets);
+  return end > start ? { start, end } : null;
 }
 
 export function getVerticalNavigationTarget(
