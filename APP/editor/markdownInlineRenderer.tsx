@@ -11,6 +11,10 @@ export function createInlineRenderer(options: any) {
     areaId, beginEditingLine, currentFile, getShortcutDisplay, handleLinkClick,
     isMediaSelected, onMediaDragStart, onMediaSelect, projectPath, slashCommands, state, updateBloodKey,
   } = options;
+  const hasActiveTextSelection = () => {
+    const selection = window.getSelection();
+    return Boolean(selection && !selection.isCollapsed && selection.toString());
+  };
   const renderInline = (
     text: string,
     lineIndex: number,
@@ -171,6 +175,7 @@ export function createInlineRenderer(options: any) {
           key={stableKey}
           onClick={(e) => {
             e.stopPropagation();
+            if (hasActiveTextSelection()) return;
             handleLinkClick(target);
           }}
           className="wiki-link"
@@ -287,6 +292,7 @@ export function createInlineRenderer(options: any) {
           key={stableKey}
           onClick={(e) => {
             e.stopPropagation();
+            if (hasActiveTextSelection()) return;
             if (isMd) {
               handleLinkClick(url.replace('.md', ''));
             } else {

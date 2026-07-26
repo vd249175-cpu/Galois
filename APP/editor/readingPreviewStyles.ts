@@ -20,6 +20,21 @@ export const readingPreviewStyles = `
   line-height: var(--editor-line-height, 1.6);
   font-family: var(--editor-font-family, var(--font-sans));
 }
+.markdown-preview-container,
+.markdown-preview-container [data-dnote-block-content],
+.markdown-preview-container [data-dnote-block-content] * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+.markdown-preview-container button,
+.markdown-preview-container input,
+.markdown-preview-container video,
+.markdown-preview-container audio,
+.markdown-preview-container img,
+.markdown-preview-container .drag-handle {
+  user-select: none;
+  -webkit-user-select: none;
+}
 .galois-math-inline {
   display: inline-block;
   max-width: 100%;
@@ -33,7 +48,7 @@ export const readingPreviewStyles = `
   text-align: center;
 }
 .galois-math-display > .katex-display { margin: 0.45em 0; }
-.preview-block-wrapper:active { cursor: grabbing; }
+.drag-handle:active { cursor: grabbing; }
 .preview-block-wrapper:hover .drag-handle { opacity: 0.5 !important; }
 .drag-handle:hover {
   opacity: 1 !important;

@@ -391,9 +391,12 @@ Reading mode table support is interactive: table cells are editable in place,
 and table hover controls can append rows or columns while preserving standard
 Markdown table syntax.
 
-Reading text uses two distinct selection paths. Dragging across glyphs keeps the
-browser's native text selection in either direction; a true click opens the
-source line and maps the clicked rendered glyph back to its Markdown caret.
+Reading text uses two distinct selection paths. The first direct drag across
+rendered glyphs keeps the browser's native text selection in either direction,
+without a preparatory click or entering the textarea; selection may cross
+paragraph, heading, list, quote, code, and other Markdown block boundaries. A
+true click opens the source line and maps the clicked rendered glyph back to its
+Markdown caret.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

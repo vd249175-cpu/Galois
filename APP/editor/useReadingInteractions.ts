@@ -97,9 +97,6 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
       window.getSelection()?.removeAllRanges();
       setSelectedMedia(null);
       setSelectedBlockRange({ anchorLine: line, focusLine: line });
-    } else if (!target.closest('[data-dnote-media-token]')) {
-      setSelectedBlockRange(null);
-      setSelectedMedia(null);
     }
   };
 
@@ -115,8 +112,14 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   };
 
   const onPointerUpCapture = (event: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = gestureRef.current;
+    const moved = gesture.moved || Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (!gesture.blockMode && moved && window.getSelection()?.toString()) {
+      setSelectedBlockRange(null);
+      setSelectedMedia(null);
     }
     window.setTimeout(() => {
       gestureRef.current = emptyGesture();
@@ -149,6 +152,14 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   };
 
   const onCopy = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const selection = window.getSelection();
+    if (
+      selection && !selection.isCollapsed && selection.toString() &&
+      selection.anchorNode && selection.focusNode &&
+      event.currentTarget.contains(selection.anchorNode) && event.currentTarget.contains(selection.focusNode)
+    ) {
+      return;
+    }
     if (selectedMedia) {
       copyText(event, selectedMedia.markdown);
       return;
