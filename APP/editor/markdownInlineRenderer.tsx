@@ -9,7 +9,7 @@ import { getMarkdownMediaKind, resolveMarkdownMediaPath, toDnoteMediaUrl } from 
 export function createInlineRenderer(options: any) {
   const {
     areaId, beginEditingLine, currentFile, getShortcutDisplay, handleLinkClick,
-    projectPath, slashCommands, state, updateBloodKey,
+    isMediaSelected, onMediaDragStart, onMediaSelect, projectPath, slashCommands, state, updateBloodKey,
   } = options;
   const renderInline = (
     text: string,
@@ -63,14 +63,21 @@ export function createInlineRenderer(options: any) {
       const start = parseFloat(match[3]);
       const end = parseFloat(match[4]);
       return (
-        <InlineClipPlayer
+        <span
           key={`clip_${fileName}_${start}_${idx}`}
-          label={label}
-          fileName={fileName}
-          start={start}
-          end={end}
-          projectPath={projectPath}
-        />
+          className={`reading-media-item${isMediaSelected?.(lineIndex, idx, match[0]) ? ' is-selected' : ''}`}
+          data-dnote-media-token={match[0]}
+          data-dnote-media-token-index={idx}
+          onClick={(event) => { event.stopPropagation(); onMediaSelect?.(lineIndex, idx, match[0]); }}
+        >
+          <InlineClipPlayer
+            label={label}
+            fileName={fileName}
+            start={start}
+            end={end}
+            projectPath={projectPath}
+          />
+        </span>
       );
     });
 
@@ -186,29 +193,44 @@ export function createInlineRenderer(options: any) {
       
       const finalSrc = toDnoteMediaUrl(url, projectPath);
       const mediaKind = getMarkdownMediaKind(url);
+      const mediaClassName = `reading-media-item reading-media-${mediaKind}${isMediaSelected?.(lineIndex, idx, match[0]) ? ' is-selected' : ''}`;
 
       if (mediaKind === 'video') {
         return (
-          <UniversalVideoPlayer
+          <span
             key={`video_${url}_${idx}`}
-            src={finalSrc}
-            filePath={resolveMarkdownMediaPath(url, projectPath)}
-            title={alt || url.split('/').pop()}
-          />
+            className={mediaClassName}
+            data-dnote-media-token={match[0]}
+            data-dnote-media-token-index={idx}
+            onClick={() => onMediaSelect?.(lineIndex, idx, match[0])}
+          >
+            <UniversalVideoPlayer
+              src={finalSrc}
+              filePath={resolveMarkdownMediaPath(url, projectPath)}
+              title={alt || url.split('/').pop()}
+            />
+          </span>
         );
       }
       if (mediaKind === 'audio') {
         return (
-          <audio
+          <span
             key={`audio_${url}_${idx}`}
-            src={finalSrc}
-            controls
-            draggable={false}
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onDragStart={(e) => e.preventDefault()}
-            style={{ width: '100%', margin: '8px 0', display: 'block' }}
-          />
+            className={mediaClassName}
+            data-dnote-media-token={match[0]}
+            data-dnote-media-token-index={idx}
+            onClick={() => onMediaSelect?.(lineIndex, idx, match[0])}
+          >
+            <audio
+              src={finalSrc}
+              controls
+              draggable={false}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onDragStart={(e) => e.preventDefault()}
+              style={{ width: '100%', display: 'block' }}
+            />
+          </span>
         );
       }
 
@@ -217,15 +239,20 @@ export function createInlineRenderer(options: any) {
           key={`img_${url}_${idx}`}
           src={finalSrc}
           alt={alt}
-          onClick={(e) => e.stopPropagation()}
+          className={mediaClassName}
+          data-dnote-media-token={match[0]}
+          data-dnote-media-token-index={idx}
+          draggable
+          onDragStart={(event) => onMediaDragStart?.(event, lineIndex, idx, match[0])}
+          onClick={(event) => { event.stopPropagation(); onMediaSelect?.(lineIndex, idx, match[0]); }}
           style={{
-            width: '100%',
+            width: 'auto',
             maxWidth: '100%',
             height: 'auto',
             borderRadius: '8px',
             border: '1px solid var(--border-color)',
             display: 'block',
-            margin: '10px 0',
+            margin: 0,
             objectFit: 'contain',
           }}
         />

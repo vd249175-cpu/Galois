@@ -15,6 +15,9 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 - **Reading**：阅读渲染 + 局部交互式编辑，继续使用 `MarkdownPreview` 展示 WikiLink、媒体、代码块、反应式表达式等内容
 - Live Preview 与 Reading 的媒体叉号都会直接删除正文中的 Markdown 媒体引用并保存；指针事件不会先展开或聚焦媒体源码行
 - Reading 中点击普通块会进入局部 textarea 编辑；在行首或空格后输入 `/` 可唤起与 Live Preview 共用的 slash commands
+- Reading 中拖动文字保留浏览器原生跨行选择（从左向右、从右向左均可）；只有没有发生拖动的单击才进入编辑，并把光标映射到点击文字的位置
+- Reading 局部编辑器中的 ↑/↓ 先在段内换行间移动，到首行/末行后保存当前草稿并进入相邻 Markdown 区块，同时尽量保持横向列位置
+- 从区块左侧手柄区或正文右侧空白反向拖动可选择整段区块；复制时写入对应的原始 Markdown，编辑态和区块选中态均有独立高亮
 - Reading 中 Markdown 表格支持直接编辑单元格，鼠标悬停表格时显示 `+ 行` / `+ 列` 工具条，并写回标准 Markdown 表格
 - Source 源码编辑路径保留为内部保底能力，不作为普通用户的主切换模式
 - Markdown 语言支持按需异步加载，Live Preview 通过 decorations/widgets 渲染，不额外维护第二份文档模型
@@ -46,6 +49,8 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 - **Live Preview**：通过 CodeMirror `posAtCoords` 按鼠标落点插入独立 Markdown 块
 - **Reading**：行级拖拽感受体 — 拖入文件或 CLIP 时各段落行亮起玻璃态微动光环，松手后插入到悬停行下方
 - 支持一次拖入多个媒体文件，按顺序归档并插入多行 Markdown
+- Reading 中把图片拖到另一张图片上会把两者保存成同一 Markdown 行；同一行的图片自动横向排列，并可继续单张拖动排序
+- 单击同一行中的任意图片可独立选中并复制该图片 Markdown；悬浮媒体区块的复制按钮复制整行，音频、视频和图片均保留可复制入口
 
 ### 5. 🎬 特权媒体播放协议（`dnote-file://` Scheme）
 本地媒体文件通过 Electron 注册的特权协议流式传输，完整支持：
@@ -164,8 +169,14 @@ dependsOn:  ['fileTree']
 ```
 APP/editor/
 ├── index.ts                  # 导出 EditorComponent + editorActions
-├── Editor.tsx                # 主组件（2000+ 行，核心功能全部在此）
-├── MarkdownPreview.tsx       # 预览模式渲染器（WikiLink、媒体、代码高亮）
+├── EditorCanvas.tsx          # 编辑器状态与领域 hooks 的组合入口
+├── EditorSurface.tsx         # Live / Reading 两种主界面的展示组合
+├── MarkdownPreview.tsx       # Reading 契约适配器
+├── MarkdownPreviewSurface.tsx # Markdown 区块分派与交互表面
+├── useMarkdownPreviewEditing.tsx # 局部编辑、上下行导航和保存
+├── useReadingInteractions.ts # 原生拖选、区块选择、点击光标和复制
+├── readingInteraction.ts     # 可测试的选择、光标和图片行纯逻辑
+├── readingPreviewStyles.ts   # Reading 交互与媒体布局样式
 ├── ReactiveExpression.tsx    # {{ }} 反应式脚本绑定组件
 ├── TagToolbar.tsx            # YAML 标签编辑工具栏
 ├── editorUtils.ts            # YAML 序列化、frontmatter 解析、表达式解析

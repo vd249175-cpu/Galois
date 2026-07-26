@@ -47,6 +47,11 @@ installed `.app` bundle.
 | Organ | Current responsibility | Detailed material |
 | --- | --- | --- |
 | Editor | Live Preview, Reading mode, Markdown editing/rendering, commands, tags, media, reactive JSON | `APP/editor/README.md`, `dnote-command-scripts` |
+
+Reading mode preserves native bidirectional text selection and source-aware
+block/media copying. A horizontal image row must be authored as multiple image
+tokens on one Markdown line; dragging images in Reading mode updates and saves
+that line. See `APP/editor/README.md` before generating a media-heavy note.
 | File Tree | Files, search, tag resolution, icons, project state | `APP/file-tree/README.md`, `dnote-search`, `dnote-tags` |
 | Graph View | Tag topology, deep descendant focus paths, temporary editable concept notes, file-search highlighting, editor navigation | `APP/graph-view/README.md`, `dnote-graph-view` |
 | Video Timeline | Timeline assets and clip references | `APP/video-timeline/`, architecture media contract |

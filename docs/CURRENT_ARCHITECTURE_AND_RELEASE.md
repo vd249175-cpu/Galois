@@ -390,6 +390,21 @@ Reading mode table support is interactive: table cells are editable in place,
 and table hover controls can append rows or columns while preserving standard
 Markdown table syntax.
 
+Reading text uses two distinct selection paths. Dragging across glyphs keeps the
+browser's native text selection in either direction; a true click opens the
+source line and maps the clicked rendered glyph back to its Markdown caret.
+Arrow Up/Down stays inside multiline textarea content until its first/last row,
+then commits the draft and enters the adjacent Markdown block at the preserved
+column. Dragging from the block gutter or blank space to the right creates a
+Notion-style block range; copying that range writes the exact source Markdown.
+
+Horizontal image layout is persisted as multiple image tokens on one Markdown
+line, for example `![a](media/a.png) ![b](media/b.png)`. Dragging one image onto
+another line merges or reorders tokens and saves the source immediately. Each
+image remains independently selectable/copyable; the block copy control copies
+the complete media line. This contract also applies when Markdown is supplied
+by a reactive expression because both surfaces use `MarkdownPreview`.
+
 The editor also publishes `shortcutRegistry` in `.dnote_runtime.json`. This is
 the agent-facing runtime inventory of registered actions, scopes, defaults,
 active bindings, overrides, and unbound actions. Agents should consult it before

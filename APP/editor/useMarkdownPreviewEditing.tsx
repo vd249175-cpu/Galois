@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { ParsedBlock } from './markdownBlockParser';
+import { parseMarkdownIntoBlocks, type ParsedBlock } from './markdownBlockParser';
 import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } from './tableEditing';
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
+import { getVerticalNavigationTarget, type ReadingBlockRange } from './readingInteraction';
 
 export function useMarkdownPreviewEditing(props: any) {
   const { content, currentFile, handlePasteAtIndex, onContentChange, onExecuteSlashCommand, projectPath, slashCommands } = props;
@@ -10,6 +11,8 @@ export function useMarkdownPreviewEditing(props: any) {
 const [editingLineIdx, setEditingLineIdx] = useState<number | null>(null);
 const [activeCell, setActiveCell] = useState<{ lineIdx: number; colIdx: number } | null>(null);
 const [draggedBlockKey, setDraggedBlockKey] = useState<string | null>(null);
+const [selectedBlockRange, setSelectedBlockRange] = useState<ReadingBlockRange | null>(null);
+const [selectedMedia, setSelectedMedia] = useState<{ lineIdx: number; tokenIndex: number; markdown: string } | null>(null);
 const [isDraggingOverBottom, setIsDraggingOverBottom] = useState(false);
 const [previewSlashMenu, setPreviewSlashMenu] = useState<{
   show: boolean;
@@ -79,11 +82,45 @@ const commitEditingDraft = (clearEditing = true) => {
   if (clearEditing) setEditingLineIdx(null);
 };
 
-const beginEditingLine = (lineIdx: number) => {
+const beginEditingLine = (lineIdx: number, caretPosition?: number | null) => {
   if (editingDraftRef.current?.lineIdx !== lineIdx) {
     commitEditingDraft(false);
   }
+  if (caretPosition !== undefined) pendingCaretPosRef.current = caretPosition;
+  setSelectedBlockRange(null);
+  setSelectedMedia(null);
   setEditingLineIdx(lineIdx);
+};
+
+const moveEditingToAdjacentBlock = (
+  lineIdx: number,
+  value: string,
+  direction: -1 | 1,
+  preferredColumn: number
+) => {
+  const lines = content.split('\n');
+  const replacementLines = value.split('\n');
+  lines.splice(lineIdx, 1, ...replacementLines);
+  let nextContent = lines.join('\n');
+  let blocks = parseMarkdownIntoBlocks(nextContent);
+  let targetBlock = direction < 0
+    ? [...blocks].reverse().find((block) => block.endLine < lineIdx)
+    : blocks.find((block) => block.startLine >= lineIdx + replacementLines.length);
+
+  if (!targetBlock && direction === 1) {
+    nextContent = `${nextContent}${nextContent.endsWith('\n') ? '' : '\n'}`;
+    blocks = parseMarkdownIntoBlocks(nextContent);
+    targetBlock = blocks[blocks.length - 1];
+  }
+  if (!targetBlock) return;
+
+  const targetLine = direction < 0 ? targetBlock.endLine : targetBlock.startLine;
+  const targetValue = nextContent.split('\n')[targetLine] || '';
+  editingDraftRef.current = null;
+  isJumpingToNextLineRef.current = true;
+  pendingCaretPosRef.current = Math.min(preferredColumn, targetValue.length);
+  onContentChange(nextContent);
+  setEditingLineIdx(targetBlock.startLine);
 };
 
 const getAbsoluteIndex = (lineIdx: number, offset: number) => {
@@ -267,6 +304,25 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
       }
     }
 
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      const verticalTarget = getVerticalNavigationTarget(
+        e.currentTarget.value,
+        e.currentTarget.selectionStart ?? 0,
+        e.currentTarget.selectionEnd ?? 0,
+        e.key
+      );
+      if (verticalTarget) {
+        e.preventDefault();
+        moveEditingToAdjacentBlock(
+          lineIdx,
+          e.currentTarget.value,
+          verticalTarget.direction,
+          verticalTarget.column
+        );
+        return;
+      }
+    }
+
     if (e.key === 'Enter') {
       if (e.shiftKey) {
         // Allow Shift+Enter for single line breaks
@@ -393,8 +449,9 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
         fontSize: 'inherit',
         lineHeight: 'inherit',
         color: 'var(--text-main)',
-        background: 'rgba(255,255,255,0.04)',
-        border: '1.2px dashed var(--accent-color, #7000ff)',
+        background: 'color-mix(in srgb, var(--accent-color, #7000ff) 9%, transparent)',
+        border: '1.2px solid color-mix(in srgb, var(--accent-color, #7000ff) 55%, transparent)',
+        borderLeft: '3px solid var(--accent-color, #7000ff)',
         outline: 'none',
         padding: '6px 10px',
         borderRadius: '4px',
@@ -429,6 +486,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
 
   return {
     editingLineIdx, setEditingLineIdx, activeCell, setActiveCell, draggedBlockKey, setDraggedBlockKey,
+    selectedBlockRange, setSelectedBlockRange, selectedMedia, setSelectedMedia,
     isDraggingOverBottom, setIsDraggingOverBottom, previewSlashMenu, setPreviewSlashMenu,
     previewContainerRef, suppressClickAfterDragRef, persistReadingScroll, updateMarkdownLines,
     toggleTaskCheckbox, beginEditingLine, getAbsoluteIndex, handleAddTableRow, handleAddTableColumn,

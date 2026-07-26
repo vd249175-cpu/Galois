@@ -5,6 +5,8 @@ import { createInlineRenderer } from './markdownInlineRenderer';
 import { MarkdownTableBlock } from './MarkdownTableBlock';
 import { MarkdownCodeMathBlock } from './MarkdownCodeMathBlock';
 import { MarkdownTextBlock } from './MarkdownTextBlock';
+import { useReadingInteractions } from './useReadingInteractions';
+import { readingPreviewStyles } from './readingPreviewStyles';
 
 export function MarkdownPreviewSurface(props: any) {
   const {
@@ -18,9 +20,20 @@ export function MarkdownPreviewSurface(props: any) {
     setIsDraggingOverBottom, setPreviewSlashMenu, slashCommands, state,
     suppressClickAfterDragRef, toggleTaskCheckbox, updateBloodKey, updateMarkdownLines,
     draggedBlockKey, filteredPreviewCommands, onContentChange, setEditingLineIdx,
+    selectedBlockRange, setSelectedBlockRange, selectedMedia, setSelectedMedia,
   } = props;
 
 const blocks = parseMarkdownIntoBlocks(content);
+const readingInteractions = useReadingInteractions({
+  beginEditingLine,
+  blocks,
+  content,
+  onContentChange,
+  selectedBlockRange,
+  selectedMedia,
+  setSelectedBlockRange,
+  setSelectedMedia,
+});
 
 const handleDeleteBlock = (block: ParsedBlock) => {
   const allLines = content.split('\n');
@@ -46,7 +59,7 @@ const finishBlockDrag = () => {
   }, 180);
 };
 
-const beginEditingLineFromClick = (e: React.MouseEvent, lineIdx: number) => {
+const beginEditingLineFromClick = (e: React.MouseEvent, lineIdx: number, rawText = content.split('\n')[lineIdx] || '') => {
   const target = e.target as HTMLElement | null;
   if (
     suppressClickAfterDragRef.current ||
@@ -55,7 +68,28 @@ const beginEditingLineFromClick = (e: React.MouseEvent, lineIdx: number) => {
     e.stopPropagation();
     return;
   }
-  beginEditingLine(lineIdx);
+  readingInteractions.beginEditingLineFromClick(e, lineIdx, rawText);
+};
+
+const handleMediaSelect = (lineIdx: number, tokenIndex: number, markdown: string) => {
+  setSelectedBlockRange(null);
+  setSelectedMedia({ lineIdx, tokenIndex, markdown });
+  previewContainerRef.current?.focus({ preventScroll: true });
+};
+
+const handleMediaDragStart = (
+  e: React.DragEvent,
+  lineIdx: number,
+  tokenIndex: number,
+  markdown: string
+) => {
+  e.stopPropagation();
+  setDraggedBlockKey(`media:${lineIdx}:${tokenIndex}`);
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/x-dnote-media-token', markdown);
+  e.dataTransfer.setData('text/x-dnote-media-source-line', String(lineIdx));
+  e.dataTransfer.setData('text/x-dnote-media-source-index', String(tokenIndex));
+  e.dataTransfer.setData('text/plain', markdown);
 };
 
 const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
@@ -85,6 +119,10 @@ const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
     <div
       key={block.key}
       className="preview-block-wrapper"
+      data-dnote-block-start={block.startLine}
+      data-dnote-block-end={block.endLine}
+      data-dnote-block-selected={readingInteractions.isBlockSelected(block) ? 'true' : undefined}
+      data-dnote-block-editing={editingLineIdx === block.startLine ? 'true' : undefined}
       draggable={isMedia}
       onDragStart={startBlockDrag}
       onDragEnd={finishBlockDrag}
@@ -129,9 +167,24 @@ const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
       >
         ⣿
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div data-dnote-block-content style={{ flex: 1, minWidth: 0 }}>
         {element}
       </div>
+      {isMedia && (
+        <button
+          type="button"
+          draggable={false}
+          className="media-copy-btn"
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            void window.electronAPI?.writeClipboardText?.(block.rawText);
+          }}
+          title="复制此媒体的 Markdown"
+        >
+          ⧉
+        </button>
+      )}
       {isDeletable && (
         <button type="button" draggable={false}
           className="media-delete-btn"
@@ -259,6 +312,11 @@ const renderInline = createInlineRenderer({
   getShortcutDisplay,
   handleLinkClick,
   projectPath,
+  isMediaSelected: (lineIdx: number, tokenIndex: number, markdown: string) => (
+    selectedMedia?.lineIdx === lineIdx && selectedMedia.tokenIndex === tokenIndex && selectedMedia.markdown === markdown
+  ),
+  onMediaDragStart: handleMediaDragStart,
+  onMediaSelect: handleMediaSelect,
   slashCommands,
   state,
   updateBloodKey,
@@ -267,6 +325,12 @@ return (
   <div
     ref={previewContainerRef}
     className="markdown-preview-container"
+    tabIndex={0}
+    onCopy={readingInteractions.onCopy}
+    onKeyDown={readingInteractions.onKeyDown}
+    onPointerDownCapture={readingInteractions.onPointerDownCapture}
+    onPointerMoveCapture={readingInteractions.onPointerMoveCapture}
+    onPointerUpCapture={readingInteractions.onPointerUpCapture}
     onScroll={persistReadingScroll}
     onDragOver={(e) => {
       e.preventDefault();
@@ -327,109 +391,7 @@ return (
       boxSizing: 'border-box',
     }}
   >
-    <style dangerouslySetInnerHTML={{ __html: `
-      .preview-block-wrapper {
-        position: relative;
-        width: 100%;
-        padding-left: 20px;
-        margin-left: -20px;
-        cursor: grab;
-      }
-      .markdown-preview-container {
-        font-size: var(--editor-font-size, 14px);
-        line-height: var(--editor-line-height, 1.6);
-        font-family: var(--editor-font-family, var(--font-sans));
-      }
-      .galois-math-inline {
-        display: inline-block;
-        max-width: 100%;
-        vertical-align: middle;
-      }
-      .galois-math-display {
-        display: block;
-        width: 100%;
-        overflow-x: auto;
-        overflow-y: hidden;
-        text-align: center;
-      }
-      .galois-math-display > .katex-display {
-        margin: 0.45em 0;
-      }
-      .preview-block-wrapper:active {
-        cursor: grabbing;
-      }
-      .preview-block-wrapper:hover .drag-handle {
-        opacity: 0.5 !important;
-      }
-      .drag-handle:hover {
-        opacity: 1 !important;
-        color: var(--accent-color, #7000ff) !important;
-      }
-      .drag-handle {
-        user-select: none;
-        -webkit-user-drag: element;
-      }
-      .wiki-link:hover {
-        opacity: 0.8;
-      }
-      .media-delete-btn {
-        position: absolute;
-        top: 16px;
-        right: 16px;
-        width: 26px;
-        height: 26px;
-        border-radius: 50%;
-        background: rgba(255, 59, 48, 0.12);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 59, 48, 0.25);
-        color: #ff3b30;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        opacity: 0;
-        transform: scale(0.9);
-        transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s, color 0.2s, box-shadow 0.2s;
-        z-index: 100;
-      }
-      .preview-block-wrapper:hover .media-delete-btn {
-        opacity: 1;
-        transform: scale(1);
-      }
-      .media-delete-btn:hover {
-        background: #ff3b30;
-        color: #ffffff;
-        border-color: transparent;
-        box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
-      }
-      .reading-table-shell:hover .reading-table-toolbar {
-        opacity: 1 !important;
-      }
-      .reading-table-toolbar button:hover {
-        color: var(--accent-color, #7000ff) !important;
-        border-color: var(--accent-color, #7000ff) !important;
-        background: var(--highlight-color, rgba(112, 0, 255, 0.08)) !important;
-      }
-      .reading-buffer-row {
-        min-height: 34px;
-        margin: 4px 0;
-        border-radius: 8px;
-        border: 1px dashed transparent;
-        display: flex;
-        align-items: center;
-        padding: 0 12px;
-        opacity: 0.38;
-        cursor: text;
-        transition: border-color 0.14s ease, background-color 0.14s ease, opacity 0.14s ease;
-      }
-      .reading-buffer-row:hover,
-      .reading-buffer-row.is-over {
-        opacity: 1;
-        border-color: var(--accent-color, #7000ff);
-        background: rgba(112, 0, 255, 0.06);
-      }
-    ` }} />
+    <style dangerouslySetInnerHTML={{ __html: readingPreviewStyles }} />
     {content ? (
       blocks.map((block, idx) => renderParsedBlock(block, idx))
     ) : (

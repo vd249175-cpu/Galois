@@ -123,6 +123,8 @@ export function MarkdownTableBlock(props: any) {
                         e.stopPropagation();
                         const target = e.target as HTMLElement;
                         if (target.closest('a, audio, video, button, input, select')) return;
+                        const selection = window.getSelection();
+                        if (selection && !selection.isCollapsed && selection.toString()) return;
                         if (!isCellActive) {
                           setActiveCell({ lineIdx: block.startLine, colIdx });
                           focusTableCell(block.key, cellOrder);
@@ -205,6 +207,8 @@ export function MarkdownTableBlock(props: any) {
                           e.stopPropagation();
                           const target = e.target as HTMLElement;
                           if (target.closest('a, audio, video, button, input, select')) return;
+                          const selection = window.getSelection();
+                          if (selection && !selection.isCollapsed && selection.toString()) return;
                           if (!isCellActive) {
                             setActiveCell({ lineIdx: cellLineIndex, colIdx });
                             focusTableCell(block.key, cellOrder);

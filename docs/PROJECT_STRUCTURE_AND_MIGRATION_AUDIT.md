@@ -66,9 +66,11 @@ the rendering surface.
 
 | Concern | Owner |
 | --- | --- |
-| Reading-mode state, editable block textarea, IME, smart Enter/Tab/Backspace, table-cell editing, task toggles, preview slash command state and reading scroll | `useMarkdownPreviewEditing.tsx` |
-| Markdown block dispatch, code/math/table/text components, media block drag/delete, reading buffer rows and SlashMenu presentation | `MarkdownPreviewSurface.tsx` |
+| Reading-mode state, editable block textarea, IME, smart Enter/Tab/Backspace, cross-block Arrow navigation, table-cell editing, task toggles, preview slash command state and reading scroll | `useMarkdownPreviewEditing.tsx` |
+| native text drag selection, right/left block-range selection, click-to-source caret mapping and source-aware copy | `useReadingInteractions.ts`, `readingInteraction.ts` |
+| Markdown block dispatch, code/math/table/text components, media block drag/delete/copy, reading buffer rows and SlashMenu presentation | `MarkdownPreviewSurface.tsx`, `readingPreviewStyles.ts` |
 | parsing, inline media/math/link rendering and focused specialized blocks | `markdownBlockParser.ts`, `markdownInlineRenderer.tsx`, `MarkdownCodeMathBlock.tsx`, `MarkdownTableBlock.tsx`, `MarkdownTextBlock.tsx` |
+| persisted horizontal image rows and per-image reorder/merge | `hooks/useMediaDrop.ts`, `readingInteraction.ts` |
 
 ## Last Unified-File Audit
 
@@ -88,6 +90,11 @@ media drop/link navigation, focused-editor Blood keys, slash-command recency,
 nested task checkboxes, smart Enter/Tab, clip/block drag payloads, reading-scroll
 persistence, image paste, table mutations, code/math/table/text block rendering,
 inline renderer, IME protection and preview slash state.
+
+The later Reading interaction migration adds deterministic sentinels in
+`scripts/probe-reading-interactions.js` for caret mapping, vertical navigation,
+source-range copy, and persisted multi-image token insertion/removal. It is part
+of `npm run validate:interactions`.
 
 This is a structural and static-equivalence audit. It does not replace manual
 interaction testing of browser/media decoding or OS permission dialogs; those

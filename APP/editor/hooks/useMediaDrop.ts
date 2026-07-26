@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react';
 import { getMarkdownMediaKind } from '../mediaUtils';
+import {
+  isImageOnlyMarkdownLine,
+  mergeMarkdownImageLines,
+  moveMarkdownImageToken,
+} from '../readingInteraction';
 
 interface UseMediaDropOptions {
   projectPath: string;
@@ -222,6 +227,33 @@ export function useMediaDrop({
     e.stopPropagation();
     setHoveredLineIndex(null);
 
+    const targetElement = e.target instanceof Element
+      ? e.target.closest<HTMLElement>('[data-dnote-media-token]')
+      : null;
+    const targetTokenIndex = targetElement ? Number(targetElement.dataset.dnoteMediaTokenIndex) : null;
+    const targetRect = targetElement?.getBoundingClientRect();
+    const insertAfterTarget = targetRect ? e.clientX >= targetRect.left + targetRect.width / 2 : true;
+    // Priority 0: a single image from a persisted horizontal image row.
+    const mediaToken = e.dataTransfer.getData('text/x-dnote-media-token');
+    const mediaSourceLineText = e.dataTransfer.getData('text/x-dnote-media-source-line');
+    const mediaSourceIndexText = e.dataTransfer.getData('text/x-dnote-media-source-index');
+    if (mediaToken && mediaSourceLineText !== '' && mediaSourceIndexText !== '') {
+      const sourceLine = Number(mediaSourceLineText);
+      const sourceTokenIndex = Number(mediaSourceIndexText);
+      const lines = contentRef.current.split('\n');
+      if (Number.isInteger(sourceLine) && Number.isInteger(sourceTokenIndex) && lines[sourceLine] !== undefined) {
+        const movedLines = moveMarkdownImageToken(
+          lines, sourceLine, sourceTokenIndex, lineIdx, targetTokenIndex, insertAfterTarget
+        );
+        if (!movedLines) return;
+        const nextContent = movedLines.join('\n');
+        setContent(nextContent);
+        saveNodeFile(nextContent);
+        setStatusMessage('图片排布已保存');
+        return;
+      }
+    }
+
     // Priority 1: Block line drag (moving blocks)
     const sourceLineStr = e.dataTransfer.getData('text/x-dnote-block-line');
     if (sourceLineStr !== '') {
@@ -230,6 +262,16 @@ export function useMediaDrop({
         const allLines = contentRef.current.split('\n');
         const lineText = allLines[sourceLineIdx];
         if (lineText !== undefined) {
+          const targetLineText = allLines[lineIdx];
+          if (isImageOnlyMarkdownLine(lineText) && targetLineText !== undefined && isImageOnlyMarkdownLine(targetLineText)) {
+            const mergedLines = mergeMarkdownImageLines(allLines, sourceLineIdx, lineIdx, insertAfterTarget);
+            if (!mergedLines) return;
+            const nextContent = mergedLines.join('\n');
+            setContent(nextContent);
+            saveNodeFile(nextContent);
+            setStatusMessage('图片已合并到同一行');
+            return;
+          }
           let insertIdx = lineIdx + 1;
           if (sourceLineIdx < insertIdx) insertIdx -= 1;
           allLines.splice(sourceLineIdx, 1);

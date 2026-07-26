@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ParsedBlock } from './markdownBlockParser';
+import { getMarkdownImageTokens, stripMarkdownImageTokens } from './readingInteraction';
 
 interface MarkdownTextBlockProps {
   beginEditingLineFromClick: any;
@@ -226,6 +227,8 @@ if (block.type === 'empty') {
 
 // Default paragraph (p)
 const isMediaParagraph = shouldTreatBlockAsMedia(block.rawText);
+const imageTokens = getMarkdownImageTokens(block.rawText);
+const isImageRow = imageTokens.length > 0 && stripMarkdownImageTokens(block.rawText).trim() === '';
 const isReactiveMarkdownBlock = /^\s*\{\{[\s\S]+\}\}\s*$/.test(contentVal);
 const blockEl = isEditing ? (
   renderBlockEditor(block.startLine, contentVal)
@@ -240,6 +243,7 @@ const blockEl = isEditing ? (
 ) : (
   <p
     key={idx}
+    className={isImageRow ? 'reading-image-row' : undefined}
     onClick={(e) => {
       if (isMediaParagraph) {
         e.stopPropagation();
@@ -254,4 +258,3 @@ const blockEl = isEditing ? (
 );
 return wrapBlock(blockEl, block);
 }
-
