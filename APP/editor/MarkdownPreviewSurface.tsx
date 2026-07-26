@@ -7,6 +7,7 @@ import { MarkdownCodeMathBlock } from './MarkdownCodeMathBlock';
 import { MarkdownTextBlock } from './MarkdownTextBlock';
 import { useReadingInteractions } from './useReadingInteractions';
 import { readingPreviewStyles } from './readingPreviewStyles';
+import { removeMarkdownMediaToken } from './markdownMediaToken';
 
 export function MarkdownPreviewSurface(props: any) {
   const {
@@ -42,6 +43,18 @@ const handleDeleteBlock = (block: ParsedBlock) => {
   const allLines = content.split('\n');
   allLines.splice(block.startLine, block.endLine - block.startLine + 1);
   onContentChange(allLines.join('\n'));
+};
+
+const handleMediaDelete = (lineIdx: number, markdown: string, occurrence: number) => {
+  const lines = content.split('\n');
+  const currentLine = lines[lineIdx];
+  if (currentLine === undefined) return;
+  const nextLine = removeMarkdownMediaToken(currentLine, markdown, occurrence);
+  if (nextLine === currentLine) return;
+  if (nextLine) lines[lineIdx] = nextLine;
+  else lines.splice(lineIdx, 1);
+  setSelectedMedia(null);
+  onContentChange(lines.join('\n'));
 };
 
 const shouldTreatBlockAsMedia = (rawText: string) => {
@@ -101,7 +114,7 @@ const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
   const isCurrentlyDragged = draggedBlockKey === block.key;
 
   const isMedia = shouldTreatBlockAsMedia(block.rawText);
-  const isDeletable = isMedia || block.type === 'code';
+  const isDeletable = block.type === 'code';
   const startBlockDrag = (e: React.DragEvent) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest('button, input, textarea, select, a, video, audio, .inline-clip-player, [contenteditable="true"]')) {
@@ -204,7 +217,7 @@ const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
             e.preventDefault();
             e.stopPropagation();
           }}
-          title={block.type === 'table' ? "删除此表格" : block.type === 'code' ? "删除此代码块" : "清除此媒体文件"}
+          title="删除此代码块"
         >
           ✕
         </button>
@@ -327,6 +340,7 @@ const renderInline = createInlineRenderer({
     selectedMedia?.lineIdx === lineIdx && selectedMedia.tokenIndex === tokenIndex && selectedMedia.markdown === markdown
   ),
   onMediaDragStart: handleMediaDragStart,
+  onMediaDelete: handleMediaDelete,
   onMediaSelect: handleMediaSelect,
   slashCommands,
   state,

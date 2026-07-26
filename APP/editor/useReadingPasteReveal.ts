@@ -7,11 +7,10 @@ interface ReadingPasteRevealOptions {
   setEditingLineIdx: (line: number | null) => void;
 }
 
-const mediaTokenPattern = /!\[[^\]]*\]\([^)]+\)|@video\[[^\]]*\]\([^)]+\)/g;
+const mediaTokenPattern = /!\[[^\]]*\]\([^)]+\)|@video\[[^\]]*\]\([^)]+\)/;
 
-export function isMediaMarkdownPaste(value: string): boolean {
-  const trimmed = value.trim();
-  return trimmed.length > 0 && trimmed.replace(mediaTokenPattern, '').trim().length === 0;
+export function containsMediaMarkdown(value: string): boolean {
+  return mediaTokenPattern.test(value);
 }
 
 function targetLineForInsertion(content: string, caretIndex: number, insertedText: string): number {
@@ -31,7 +30,7 @@ export function useReadingPasteReveal({
   const [revealRequest, setRevealRequest] = useState(0);
 
   const revealPastedMedia = useCallback((nextContent: string, caretIndex: number, insertedText: string) => {
-    if (!isMediaMarkdownPaste(insertedText)) return false;
+    if (!containsMediaMarkdown(insertedText)) return false;
     pendingLineRef.current = targetLineForInsertion(nextContent, caretIndex, insertedText);
     setEditingLineIdx(null);
     setRevealRequest((request) => request + 1);
@@ -75,7 +74,7 @@ export function useReadingPasteReveal({
     textarea: HTMLTextAreaElement
   ) => {
     const insertedText = event.clipboardData.getData('text/plain');
-    if (!isMediaMarkdownPaste(insertedText)) return false;
+    if (!containsMediaMarkdown(insertedText)) return false;
 
     event.preventDefault();
     event.stopPropagation();

@@ -8,6 +8,8 @@ const appSource = read('CORE', 'App.tsx');
 const poppedTypeSource = read('CORE', 'usePoppedAreaType.ts');
 const liveWidgetsSource = read('APP', 'editor', 'livePreviewWidgets.ts');
 const readingSurfaceSource = read('APP', 'editor', 'MarkdownPreviewSurface.tsx');
+const readingMediaDeleteSource = read('APP', 'editor', 'ReadingMediaDeleteButton.tsx');
+const markdownMediaTokenSource = read('APP', 'editor', 'markdownMediaToken.ts');
 
 assert.match(appSource, /usePoppedAreaType\([\s\S]*?poppedComponentType/);
 assert.match(appSource, /AreaShell areaId=\{poppedAreaId\} componentType=\{poppedComponentType\}/);
@@ -25,9 +27,10 @@ assert.match(mediaWidget, /selection: \{ anchor: this\.from \}/);
 assert.match(mediaWidget, /removeButton\.onmousedown = preserveMediaWidget/);
 assert.match(mediaWidget, /ignoreEvent\(\)\s*\{[\s\S]*?return true/);
 
-const readingDeleteButton = readingSurfaceSource.match(/<button\s+type="button"[\s\S]*?className="media-delete-btn"[\s\S]*?<\/button>/)?.[0] || '';
-assert.match(readingDeleteButton, /draggable=\{false\}/);
-assert.match(readingDeleteButton, /onPointerDown=\{\(e\)[\s\S]*?e\.button === 0\) handleDeleteBlock\(block\)/);
-assert.match(readingDeleteButton, /onContextMenu=\{\(e\)[\s\S]*?e\.preventDefault\(\)/);
+assert.match(readingMediaDeleteSource, /className="media-token-delete-btn"/);
+assert.match(readingMediaDeleteSource, /onPointerDown=\{removeToken\}/);
+assert.match(readingMediaDeleteSource, /onDelete\(lineIndex, markdown, occurrence\)/);
+assert.match(markdownMediaTokenSource, /source\.slice\(start \+ markdown\.length\)/);
+assert.match(readingSurfaceSource, /const isDeletable = block\.type === 'code'/);
 
 console.log('window and media controls validated: popped type switching + direct media deletion');

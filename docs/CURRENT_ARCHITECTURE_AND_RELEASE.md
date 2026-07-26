@@ -416,12 +416,17 @@ replacement boundaries, so reaching either edge of a media widget while
 dragging forward or backward also reveals its raw Markdown immediately; delete
 and playback controls retain their own events. Text and asynchronous media paste paths reveal the resulting caret or
 inserted block instead of restoring the pre-paste viewport. Reading-mode paste
-recognizes clipboard payloads made only of media Markdown, commits them as
-source, exits the temporary textarea, and reveals the rebuilt media block both
+recognizes clipboard payloads containing media Markdown, including mixed text
+and media payloads, commits them as source, exits the temporary textarea, and
+reveals the rebuilt insertion tail both
 before and after image loading changes its height. Clipboard image-file
 archiving returns the generated Markdown as part of its insertion result and
 uses the same blur/rebuild/end-alignment transaction after the async work
 finishes.
+Reading media delete controls are owned by each rendered media instance. They
+remove only that exact Markdown token occurrence and preserve sibling text and
+media on the same source line; the source line itself is removed only when no
+content remains.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

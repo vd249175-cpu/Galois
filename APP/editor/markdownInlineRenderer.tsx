@@ -3,13 +3,14 @@ import { InlineClipPlayer } from './InlineClipPlayer';
 import { MathRenderer } from './MathRenderer';
 import { ReactiveExpression } from './ReactiveExpression';
 import { UniversalVideoPlayer } from './UniversalVideoPlayer';
+import { ReadingMediaDeleteButton } from './ReadingMediaDeleteButton';
 import { parseMarkdownEmphasis, type MarkdownEmphasisSegment } from './markdownEmphasis';
 import { getMarkdownMediaKind, resolveMarkdownMediaPath, toDnoteMediaUrl } from './mediaUtils';
 
 export function createInlineRenderer(options: any) {
   const {
     areaId, beginEditingLine, currentFile, getShortcutDisplay, handleLinkClick,
-    isMediaSelected, onMediaDragStart, onMediaSelect, projectPath, slashCommands, state, updateBloodKey,
+    isMediaSelected, onMediaDelete, onMediaDragStart, onMediaSelect, projectPath, slashCommands, state, updateBloodKey,
   } = options;
   const hasActiveTextSelection = () => {
     const selection = window.getSelection();
@@ -81,6 +82,7 @@ export function createInlineRenderer(options: any) {
             end={end}
             projectPath={projectPath}
           />
+          <ReadingMediaDeleteButton lineIndex={lineIndex} markdown={match[0]} onDelete={onMediaDelete} />
         </span>
       );
     });
@@ -214,6 +216,7 @@ export function createInlineRenderer(options: any) {
               filePath={resolveMarkdownMediaPath(url, projectPath)}
               title={alt || url.split('/').pop()}
             />
+            <ReadingMediaDeleteButton lineIndex={lineIndex} markdown={match[0]} onDelete={onMediaDelete} />
           </span>
         );
       }
@@ -235,32 +238,39 @@ export function createInlineRenderer(options: any) {
               onDragStart={(e) => e.preventDefault()}
               style={{ width: '100%', display: 'block' }}
             />
+            <ReadingMediaDeleteButton lineIndex={lineIndex} markdown={match[0]} onDelete={onMediaDelete} />
           </span>
         );
       }
 
       return (
-        <img
+        <span
           key={`img_${url}_${idx}`}
-          src={finalSrc}
-          alt={alt}
           className={mediaClassName}
           data-dnote-media-token={match[0]}
           data-dnote-media-token-index={idx}
           draggable
           onDragStart={(event) => onMediaDragStart?.(event, lineIndex, idx, match[0])}
           onClick={(event) => { event.stopPropagation(); onMediaSelect?.(lineIndex, idx, match[0]); }}
-          style={{
-            width: 'auto',
-            maxWidth: '100%',
-            height: 'auto',
-            borderRadius: '8px',
-            border: '1px solid var(--border-color)',
-            display: 'block',
-            margin: 0,
-            objectFit: 'contain',
-          }}
-        />
+        >
+          <img
+            src={finalSrc}
+            alt={alt}
+            draggable={false}
+            style={{
+              width: 'auto',
+              maxWidth: '100%',
+              height: 'auto',
+              maxHeight: 'min(62vh, 620px)',
+              borderRadius: '8px',
+              border: '1px solid var(--border-color)',
+              display: 'block',
+              margin: 0,
+              objectFit: 'contain',
+            }}
+          />
+          <ReadingMediaDeleteButton lineIndex={lineIndex} markdown={match[0]} onDelete={onMediaDelete} />
+        </span>
       );
     });
 

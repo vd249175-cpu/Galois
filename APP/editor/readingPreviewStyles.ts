@@ -105,6 +105,27 @@ export const readingPreviewStyles = `
   border-color: transparent;
   box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4);
 }
+.media-token-delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 59, 48, 0.28);
+  background: color-mix(in srgb, var(--bg-main) 82%, transparent);
+  color: #ff3b30;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 110;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.reading-media-item:hover > .media-token-delete-btn,
+.reading-media-item.is-selected > .media-token-delete-btn { opacity: 1; }
+.media-token-delete-btn:hover { background: #ff3b30; color: #fff; }
 .reading-table-shell:hover .reading-table-toolbar { opacity: 1 !important; }
 .reading-table-toolbar button:hover {
   color: var(--accent-color, #7000ff) !important;

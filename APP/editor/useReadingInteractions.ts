@@ -8,9 +8,9 @@ import {
   mapRenderedOffsetToMarkdown,
   markdownForBlockRange,
   normalizedBlockRange,
-  removeMarkdownImageToken,
   type ReadingBlockRange,
 } from './readingInteraction';
+import { removeMarkdownMediaToken } from './markdownMediaToken';
 
 interface SelectedMedia {
   lineIdx: number;
@@ -289,7 +289,7 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   const removeSelectedMedia = () => {
     if (!selectedMedia) return;
     const lines = content.split('\n');
-    const nextLine = removeMarkdownImageToken(lines[selectedMedia.lineIdx] || '', selectedMedia.tokenIndex);
+    const nextLine = removeMarkdownMediaToken(lines[selectedMedia.lineIdx] || '', selectedMedia.markdown);
     if (nextLine) lines[selectedMedia.lineIdx] = nextLine;
     else lines.splice(selectedMedia.lineIdx, 1);
     setSelectedMedia(null);

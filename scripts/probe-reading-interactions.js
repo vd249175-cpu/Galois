@@ -76,6 +76,8 @@ const readingStyles = read('APP', 'editor', 'readingPreviewStyles.ts');
 const liveEditor = read('APP', 'editor', 'LiveMarkdownEditor.tsx');
 const mediaDropSource = read('APP', 'editor', 'hooks', 'useMediaDrop.ts');
 const readingPasteReveal = read('APP', 'editor', 'useReadingPasteReveal.ts');
+const mediaTokenSource = read('APP', 'editor', 'markdownMediaToken.ts');
+const mediaDeleteButton = read('APP', 'editor', 'ReadingMediaDeleteButton.tsx');
 
 assert.match(surface, /onPointerDownCapture=\{readingInteractions\.onPointerDownCapture\}/);
 assert.match(surface, /onCopy=\{readingInteractions\.onCopy\}/);
@@ -119,10 +121,14 @@ assert.match(editorHook, /border: 0/);
 assert.match(liveEditor, /EditorView\.scrollIntoView\(head, \{ y: 'nearest' \}\)/);
 assert.match(mediaDropSource, /caretIndex/);
 assert.match(mediaDropSource, /insertedMarkdown: blockText/);
-assert.match(readingPasteReveal, /isMediaMarkdownPaste/);
+assert.match(readingPasteReveal, /containsMediaMarkdown/);
 assert.match(readingPasteReveal, /setEditingLineIdx\(null\)/);
 assert.match(readingPasteReveal, /setRevealRequest/);
 assert.match(readingPasteReveal, /container\.focus\(\{ preventScroll: true \}\)/);
 assert.match(readingPasteReveal, /image\.addEventListener\('load', reveal/);
+assert.match(mediaTokenSource, /source\.slice\(0, start\)/);
+assert.match(mediaDeleteButton, /data-dnote-media-token/);
+assert.match(mediaDeleteButton, /onDelete\(lineIndex, markdown, occurrence\)/);
+assert.match(surface, /onMediaDelete: handleMediaDelete/);
 
 console.log('reading interaction probe: ok');
