@@ -133,8 +133,9 @@ const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
         {element}
       </div>
       {isDeletable && (
-        <button
+        <button type="button" draggable={false}
           className="media-delete-btn"
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onClick={(e) => {
             e.stopPropagation();
             handleDeleteBlock(block);

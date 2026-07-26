@@ -38,6 +38,9 @@ installed `.app` bundle.
   and media bridges exposed through preload.
 - Native project-directory selection resolves the current main window at click
   time; validate this boundary with `npm run validate:project-opening`.
+- Popped areas accept activity-bar type changes over Blood, and Live/Reading
+  media crosses intercept editor pointer handling before deleting the Markdown
+  reference. Validate both with `npm run validate:window-media-controls`.
 
 ### Built-in organs
 

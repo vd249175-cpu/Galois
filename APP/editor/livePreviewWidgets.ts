@@ -89,6 +89,12 @@ class MediaWidget extends WidgetType {
     removeButton.type = 'button';
     removeButton.textContent = '×';
     removeButton.title = '从正文移除此媒体引用';
+    const preserveMediaWidget = (event: Event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    removeButton.onpointerdown = preserveMediaWidget;
+    removeButton.onmousedown = preserveMediaWidget;
     removeButton.onclick = (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -139,7 +145,10 @@ class MediaWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    // Media controls own their pointer events. Letting CodeMirror handle the
+    // initial pointerdown reveals the source range and destroys the button
+    // before its click handler can remove the Markdown reference.
+    return true;
   }
 }
 

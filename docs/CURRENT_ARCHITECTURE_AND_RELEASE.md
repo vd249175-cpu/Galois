@@ -110,6 +110,13 @@ editable files inside hidden application support folders.
   directory picker owned by the live main window. Main-process IPC must resolve
   that window when the action runs; it must not capture the pre-startup `null`
   window value while handlers are registered.
+- A popped-out area includes its own activity bar, keeps its `areaId`, and subscribes to
+  `layout.changeAreaType.{areaId}` through cross-window Blood sync. Selecting an
+  organ in the main window's activity bar therefore changes the floating
+  window in place and updates `layout.poppedAreas.{areaId}` for later merging.
+- Media remove controls own their pointer events in both Live Preview and
+  Reading mode. Activating the cross removes the Markdown reference and saves
+  the note instead of first exposing/focusing the media source line.
 - The installed `.app` bundle and `Contents/Resources/APP/` are treated as
   read-only application assets.
 

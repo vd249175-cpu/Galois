@@ -14,6 +14,7 @@ import { TitleBar } from './TitleBar';
 import { defaultLayout } from './defaultLayout';
 import { useAppConfigSync } from './useAppConfigSync';
 import { useAppBootstrap } from './useAppBootstrap';
+import { usePoppedAreaType } from './usePoppedAreaType';
 import './index.css';
 
 import { ServiceCollection, InstantiationService, InstantiationProvider } from './instantiation';
@@ -61,6 +62,11 @@ export function App() {
   const isPopped = getQueryParam('popped') === 'true';
   const poppedAreaId = getQueryParam('areaId');
   const poppedType = getQueryParam('type');
+  const poppedComponentType = usePoppedAreaType({
+    areaId: poppedAreaId,
+    initialType: poppedType,
+    isPopped,
+  });
   const [layout, setLayout] = useState<AreaLayout>(defaultLayout);
 
   useAppConfigSync();
@@ -209,14 +215,17 @@ export function App() {
       terminal: '终端控制台',
       videoTimeline: '视频时间轴'
     };
-    const title = poppedTitleMap[poppedType] || '工作区窗格';
+    const title = poppedTitleMap[poppedComponentType] || '工作区窗格';
 
     return (
       <InstantiationProvider value={globalInstantiationService}>
         <div className="popped-window-root" style={{ display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'var(--bg-main)' }}>
           <TitleBar title={title} />
-          <div style={{ flexGrow: 1, overflow: 'hidden' }}>
-            <AreaShell areaId={poppedAreaId} componentType={poppedType} isPopped={true} />
+          <div style={{ display: 'flex', flexGrow: 1, minHeight: 0, overflow: 'hidden' }}>
+            <LeftActivityBar />
+            <div style={{ flexGrow: 1, minWidth: 0, overflow: 'hidden' }}>
+              <AreaShell areaId={poppedAreaId} componentType={poppedComponentType} isPopped={true} />
+            </div>
           </div>
         </div>
       </InstantiationProvider>
