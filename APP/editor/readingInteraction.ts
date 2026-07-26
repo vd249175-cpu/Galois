@@ -19,6 +19,11 @@ export interface VerticalNavigationTarget {
   column: number;
 }
 
+export interface ReadingSourceRange {
+  start: number;
+  end: number;
+}
+
 const isComparableWhitespace = (value: string) => /\s/.test(value);
 
 /**
@@ -79,11 +84,72 @@ export function getRenderedCaretOffset(root: HTMLElement, clientX: number, clien
       offset = caretRange.startOffset;
     }
   }
-  if (!node || !root.contains(node)) return null;
+  if (!node) return null;
+  return getRenderedOffsetForDomPosition(root, node, offset);
+}
+
+export function getRenderedOffsetForDomPosition(
+  root: HTMLElement,
+  node: Node,
+  offset: number
+): number | null {
+  if (node !== root && !root.contains(node)) return null;
+  const doc = root.ownerDocument;
   const prefix = doc.createRange();
   prefix.selectNodeContents(root);
-  prefix.setEnd(node, offset);
-  return prefix.toString().length;
+  try {
+    prefix.setEnd(node, offset);
+    return prefix.toString().length;
+  } catch {
+    return null;
+  }
+}
+
+function sourceOffsetForSelectionEndpoint(
+  container: HTMLElement,
+  node: Node,
+  offset: number,
+  content: string,
+  blocks: ParsedBlock[]
+): number | null {
+  const element = node instanceof Element ? node : node.parentElement;
+  const wrapper = element?.closest<HTMLElement>('[data-dnote-block-start]');
+  if (!wrapper || !container.contains(wrapper)) return null;
+  const contentRoot = wrapper.querySelector<HTMLElement>('[data-dnote-block-content]');
+  if (!contentRoot) return null;
+  const renderedOffset = getRenderedOffsetForDomPosition(contentRoot, node, offset);
+  if (renderedOffset === null) return null;
+  const line = Number(wrapper.dataset.dnoteBlockStart);
+  const block = blocks.find((candidate) => candidate.startLine === line);
+  if (!block) return null;
+  const sourceLines = content.split('\n');
+  let blockStart = 0;
+  for (let index = 0; index < block.startLine; index += 1) {
+    blockStart += (sourceLines[index]?.length || 0) + 1;
+  }
+  const localOffset = mapRenderedOffsetToMarkdown(
+    block.rawText,
+    contentRoot.textContent || '',
+    renderedOffset
+  );
+  return blockStart + localOffset;
+}
+
+export function getMarkdownSourceRangeFromSelection(
+  container: HTMLElement,
+  selection: Selection | null,
+  content: string,
+  blocks: ParsedBlock[]
+): ReadingSourceRange | null {
+  if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode) return null;
+  const anchor = sourceOffsetForSelectionEndpoint(
+    container, selection.anchorNode, selection.anchorOffset, content, blocks
+  );
+  const focus = sourceOffsetForSelectionEndpoint(
+    container, selection.focusNode, selection.focusOffset, content, blocks
+  );
+  if (anchor === null || focus === null || anchor === focus) return null;
+  return { start: Math.min(anchor, focus), end: Math.max(anchor, focus) };
 }
 
 export function getVerticalNavigationTarget(

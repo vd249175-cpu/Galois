@@ -335,7 +335,9 @@ return (
     className="markdown-preview-container"
     tabIndex={0}
     onCopy={readingInteractions.onCopy}
+    onCut={readingInteractions.onCut}
     onKeyDown={readingInteractions.onKeyDown}
+    onPaste={readingInteractions.onPaste}
     onPointerDownCapture={readingInteractions.onPointerDownCapture}
     onPointerMoveCapture={readingInteractions.onPointerMoveCapture}
     onPointerUpCapture={readingInteractions.onPointerUpCapture}

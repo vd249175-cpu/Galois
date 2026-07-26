@@ -47,6 +47,7 @@ export function MarkdownPreview({
   return <MarkdownPreviewSurface
     {...editing}
     areaId={areaId} content={content} currentFile={currentFile} embedded={embedded}
+    onContentChange={onContentChange}
     getShortcutDisplay={getShortcutDisplay} handleDropAtIndex={handleDropAtIndex}
     handleLineDrop={handleLineDrop} handleLinkClick={handleLinkClick} handlePasteAtIndex={handlePasteAtIndex}
     hoveredLineIndex={hoveredLineIndex} isPreviewMode={isPreviewMode} projectPath={projectPath}

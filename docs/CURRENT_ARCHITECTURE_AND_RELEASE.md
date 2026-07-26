@@ -396,7 +396,11 @@ rendered glyphs keeps the browser's native text selection in either direction,
 without a preparatory click or entering the textarea; selection may cross
 paragraph, heading, list, quote, code, and other Markdown block boundaries. A
 true click opens the source line and maps the clicked rendered glyph back to its
-Markdown caret.
+Markdown caret. A native rendered selection is mapped back to absolute Markdown
+source offsets, so Delete/Backspace, cut, paste, Enter, and direct character
+replacement mutate and save the source rather than remaining copy-only. A click
+in blank space after a line maps to its source tail; right-blank block selection
+does not activate until the pointer actually moves past the drag threshold.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

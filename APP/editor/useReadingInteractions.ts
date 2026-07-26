@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import type { ParsedBlock } from './markdownBlockParser';
 import {
   getRenderedCaretOffset,
+  getMarkdownSourceRangeFromSelection,
   getRenderedTextBounds,
   mapRenderedOffsetToMarkdown,
   markdownForBlockRange,
@@ -32,10 +33,18 @@ interface PointerGesture {
   startY: number;
   moved: boolean;
   blockMode: boolean;
+  blockCandidate: boolean;
   anchorLine: number | null;
 }
 
-const emptyGesture = (): PointerGesture => ({ startX: 0, startY: 0, moved: false, blockMode: false, anchorLine: null });
+const emptyGesture = (): PointerGesture => ({
+  startX: 0,
+  startY: 0,
+  moved: false,
+  blockMode: false,
+  blockCandidate: false,
+  anchorLine: null,
+});
 
 function blockLineFromTarget(target: EventTarget | null): number | null {
   const element = target instanceof Element ? target : null;
@@ -80,14 +89,18 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     const wrapperRect = wrapper?.getBoundingClientRect();
     const startsInGutter = Boolean(wrapperRect && event.clientX <= wrapperRect.left + 20);
     const startsAfterContent = Boolean(bounds && event.clientX >= bounds.right + 8);
-    const blockMode = line !== null && !target.closest('button, input, textarea, select, a, video, audio, .drag-handle, [contenteditable="true"]')
-      && (startsInGutter || startsAfterContent);
+    const canSelectBlock = line !== null && !target.closest(
+      'button, input, textarea, select, a, video, audio, .drag-handle, [contenteditable="true"]'
+    );
+    const blockMode = canSelectBlock && startsInGutter;
+    const blockCandidate = canSelectBlock && startsAfterContent;
 
     gestureRef.current = {
       startX: event.clientX,
       startY: event.clientY,
       moved: false,
       blockMode,
+      blockCandidate,
       anchorLine: line,
     };
     if (blockMode && line !== null) {
@@ -104,6 +117,14 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     const gesture = gestureRef.current;
     if ((event.buttons & 1) === 0) return;
     if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4) gesture.moved = true;
+    if (gesture.moved && gesture.blockCandidate && !gesture.blockMode && gesture.anchorLine !== null) {
+      gesture.blockMode = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.focus({ preventScroll: true });
+      window.getSelection()?.removeAllRanges();
+      setSelectedMedia(null);
+      setSelectedBlockRange({ anchorLine: gesture.anchorLine, focusLine: gesture.anchorLine });
+    }
     if (!gesture.blockMode || gesture.anchorLine === null) return;
     event.preventDefault();
     window.getSelection()?.removeAllRanges();
@@ -170,6 +191,37 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     }
   };
 
+  const replaceNativeSelection = (container: HTMLDivElement, replacement: string) => {
+    const selection = window.getSelection();
+    const range = getMarkdownSourceRangeFromSelection(container, selection, content, blocks);
+    if (!range) return false;
+    const nextContent = `${content.slice(0, range.start)}${replacement}${content.slice(range.end)}`;
+    const nextCaret = range.start + replacement.length;
+    const beforeCaret = nextContent.slice(0, nextCaret);
+    const lineIdx = beforeCaret.split('\n').length - 1;
+    const lineStart = beforeCaret.lastIndexOf('\n') + 1;
+    selection?.removeAllRanges();
+    onContentChange(nextContent);
+    beginEditingLine(lineIdx, nextCaret - lineStart);
+    return true;
+  };
+
+  const onPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const replacement = event.clipboardData.getData('text/plain');
+    if (!replaceNativeSelection(event.currentTarget, replacement)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const onCut = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const selectedText = window.getSelection()?.toString() || '';
+    if (!selectedText || !replaceNativeSelection(event.currentTarget, '')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.clipboardData.setData('text/plain', selectedText);
+    void window.electronAPI?.writeClipboardText?.(selectedText);
+  };
+
   const removeSelectedMedia = () => {
     if (!selectedMedia) return;
     const lines = content.split('\n');
@@ -181,6 +233,22 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const nativeRange = getMarkdownSourceRangeFromSelection(
+      event.currentTarget, window.getSelection(), content, blocks
+    );
+    if (nativeRange) {
+      const replacement = event.key === 'Enter'
+        ? '\n'
+        : event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey
+          ? event.key
+          : '';
+      if (event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Enter' || replacement) {
+        event.preventDefault();
+        event.stopPropagation();
+        replaceNativeSelection(event.currentTarget, replacement);
+        return;
+      }
+    }
     if (selectedMedia && (event.key === 'Backspace' || event.key === 'Delete')) {
       event.preventDefault();
       removeSelectedMedia();
@@ -210,7 +278,9 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     beginEditingLineFromClick,
     isBlockSelected,
     onCopy,
+    onCut,
     onKeyDown,
+    onPaste,
     onPointerDownCapture,
     onPointerMoveCapture,
     onPointerUpCapture,

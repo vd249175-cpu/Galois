@@ -76,6 +76,8 @@ const readingStyles = read('APP', 'editor', 'readingPreviewStyles.ts');
 
 assert.match(surface, /onPointerDownCapture=\{readingInteractions\.onPointerDownCapture\}/);
 assert.match(surface, /onCopy=\{readingInteractions\.onCopy\}/);
+assert.match(surface, /onCut=\{readingInteractions\.onCut\}/);
+assert.match(surface, /onPaste=\{readingInteractions\.onPaste\}/);
 assert.match(surface, /data-dnote-block-selected/);
 assert.match(inlineRenderer, /data-dnote-media-token-index=\{idx\}/);
 assert.match(inlineRenderer, /onMediaDragStart\?\.\(event, lineIndex, idx, match\[0\]\)/);
@@ -88,9 +90,15 @@ assert.match(readingHook, /setPointerCapture\(event\.pointerId\)/);
 assert.match(readingHook, /blockLineFromPoint\(event\.currentTarget, event\.clientY\)/);
 assert.doesNotMatch(readingHook, /else if \(!target\.closest\('\[data-dnote-media-token\]'\)\)/);
 assert.match(readingHook, /event\.currentTarget\.contains\(selection\.anchorNode\)/);
+assert.match(readingHook, /getMarkdownSourceRangeFromSelection/);
+assert.match(readingHook, /replaceNativeSelection/);
+assert.match(readingHook, /gesture\.moved && gesture\.blockCandidate/);
 assert.match(readingStyles, /\.markdown-preview-container \[data-dnote-block-content\] \*/);
 assert.match(readingStyles, /-webkit-user-select: text/);
 assert.doesNotMatch(readingStyles, /\.preview-block-wrapper:active \{ cursor: grabbing; \}/);
+
+const preview = read('APP', 'editor', 'MarkdownPreview.tsx');
+assert.match(preview, /onContentChange=\{onContentChange\}/);
 assert.match(editorHook, /getVerticalNavigationTarget/);
 assert.match(editorHook, /pendingEditorFocusRef\.current = \{[\s\S]*?Math\.min\(preferredColumn, targetValue\.length\)/);
 assert.match(editorHook, /editor\.setSelectionRange\(target, target\)/);
