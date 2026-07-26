@@ -28,6 +28,7 @@ interface UseReadingInteractionsOptions {
   setSelectedBlockRange: (range: ReadingBlockRange | null) => void;
   setSelectedMedia: (media: SelectedMedia | null) => void;
   revealPastedMedia?: (content: string, caretIndex: number, insertedText: string) => boolean;
+  finishEditingForSelection?: () => void;
 }
 
 interface PointerGesture {
@@ -38,6 +39,10 @@ interface PointerGesture {
   blockCandidate: boolean;
   anchorLine: number | null;
   selectionAnchor: { node: Node; offset: number } | null;
+  editingOrigin: boolean;
+  convertingEditorSelection: boolean;
+  latestX: number;
+  latestY: number;
 }
 
 const emptyGesture = (): PointerGesture => ({
@@ -48,6 +53,10 @@ const emptyGesture = (): PointerGesture => ({
   blockCandidate: false,
   anchorLine: null,
   selectionAnchor: null,
+  editingOrigin: false,
+  convertingEditorSelection: false,
+  latestX: 0,
+  latestY: 0,
 });
 
 function blockLineFromTarget(target: EventTarget | null): number | null {
@@ -79,7 +88,7 @@ function blockLineFromPoint(container: HTMLElement, clientY: number): number | n
 export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   const {
     beginEditingLine, blocks, content, onContentChange, selectedBlockRange, selectedMedia,
-    setSelectedBlockRange, setSelectedMedia, revealPastedMedia,
+    setSelectedBlockRange, setSelectedMedia, revealPastedMedia, finishEditingForSelection,
   } = options;
   const gestureRef = useRef<PointerGesture>(emptyGesture());
 
@@ -112,6 +121,10 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
       selectionAnchor: canSelectText
         ? getDomCaretPointFromCoordinates(event.currentTarget, event.clientX, event.clientY)
         : null,
+      editingOrigin: Boolean(target.closest('textarea[data-dnote-reading-editor]')),
+      convertingEditorSelection: false,
+      latestX: event.clientX,
+      latestY: event.clientY,
     };
     if (blockMode && line !== null) {
       event.preventDefault();
@@ -126,7 +139,24 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   const onPointerMoveCapture = (event: React.PointerEvent<HTMLDivElement>) => {
     const gesture = gestureRef.current;
     if ((event.buttons & 1) === 0) return;
+    gesture.latestX = event.clientX;
+    gesture.latestY = event.clientY;
     if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4) gesture.moved = true;
+    if (gesture.moved && gesture.editingOrigin && !gesture.convertingEditorSelection) {
+      gesture.convertingEditorSelection = true;
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      finishEditingForSelection?.();
+      const container = event.currentTarget;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const anchor = getDomCaretPointFromCoordinates(container, gesture.startX, gesture.startY);
+        const focus = getDomCaretPointFromCoordinates(container, gesture.latestX, gesture.latestY);
+        if (!anchor || !focus) return;
+        gesture.selectionAnchor = anchor;
+        container.focus({ preventScroll: true });
+        window.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
+      }));
+    }
     if (gesture.moved && gesture.blockCandidate && !gesture.blockMode && gesture.anchorLine !== null) {
       gesture.blockMode = true;
       event.currentTarget.setPointerCapture(event.pointerId);

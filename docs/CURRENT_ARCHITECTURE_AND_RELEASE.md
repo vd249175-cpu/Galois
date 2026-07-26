@@ -406,6 +406,10 @@ expands the range to its complete image/audio/video/clip Markdown token, so an
 in-app paste recreates the media instead of pasting the rendered `alt` label.
 Reading pointer drags explicitly preserve their DOM anchor with
 `Selection.setBaseAndExtent`, making upward and downward selection symmetric.
+If a drag starts in an active Reading textarea, crossing the drag threshold
+commits that draft, restores the rendered block, and promotes the still-active
+pointer gesture to the same cross-block DOM selection path. A click without a
+drag remains normal inline editing.
 Live media bodies route primary pointerdown to the token start so the widget is
 removed and raw Markdown appears. Non-empty Live selections use inclusive
 replacement boundaries, so reaching either edge of a media widget while

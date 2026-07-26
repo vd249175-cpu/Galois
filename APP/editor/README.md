@@ -17,6 +17,7 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 - Live Preview 与 Reading 的媒体叉号在主键 `pointerdown` 阶段直接删除正文中的 Markdown 媒体引用并保存，Reading 表面显式接收与普通编辑共用的 `onContentChange` 源文本事务；该事务早于媒体拖拽/右键菜单，后续鼠标与 click 事件只负责阻断
 - Reading 中点击普通块会进入局部 textarea 编辑；编辑框继承原区块排版且不显示额外边框/底色；在行首或空格后输入 `/` 可唤起与 Live Preview 共用的 slash commands
 - Reading 中第一次直接按住文字拖动就保留浏览器原生选择，不需要先单击进入编辑；选择可跨段落、标题、列表、引用等 Markdown 区块类型（从左向右、从右向左均可），并可直接 Delete/Backspace、剪切、粘贴或输入替换后写回 Markdown；正文尾部空白单击把光标放到行尾，只有实际拖动超过阈值才进入区块选择
+- Reading 已处于局部 textarea 编辑时，继续按住拖动超过阈值会先保存当前草稿并退出 textarea，再把同一次指针手势迁移为渲染层原生选区，因此可以从正在编辑的行直接跨行、跨类型选择；普通单击和未超过阈值的操作仍留在行内编辑
 - Reading 的原生选区复制使用映射后的 Markdown 源范围；选区与图片、音频、视频或时间线片段相交时，会把对应媒体扩展为完整 Markdown token，避免剪贴板退化为图片 `alt` 文本（例如 `media`）
 - Reading 的文字拖选通过显式 DOM 锚点维护，向上和向下跨区块使用同一套 `setBaseAndExtent` 路径，不依赖 Chromium 在 Flex 区块间的方向推断
 - Live 与 Reading 粘贴后都会把光标或目标区块滚动到可视区域；异步归档媒体返回插入后的绝对位置，避免长内容粘贴后视口留在原处

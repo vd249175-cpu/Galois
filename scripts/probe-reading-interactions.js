@@ -99,6 +99,8 @@ assert.match(readingHook, /content\.slice\(range\.start, range\.end\)/);
 assert.match(readingHook, /gesture\.moved && gesture\.blockCandidate/);
 assert.match(readingHook, /setBaseAndExtent/);
 assert.match(readingHook, /getDomCaretPointFromCoordinates/);
+assert.match(readingHook, /editingOrigin/);
+assert.match(readingHook, /finishEditingForSelection\?\.\(\)/);
 const readingInteractionSource = read('APP', 'editor', 'readingInteraction.ts');
 assert.match(readingInteractionSource, /selectedMediaSourceRange/);
 assert.match(readingInteractionSource, /intersectsNode\(media\)/);

@@ -114,6 +114,8 @@ const commitEditingDraft = (clearEditing = true) => {
   if (clearEditing) setEditingLineIdx(null);
 };
 
+const finishEditingForSelection = () => commitEditingDraft(true);
+
 const beginEditingLine = (lineIdx: number, caretPosition?: number | null) => {
   if (editingDraftRef.current?.lineIdx !== lineIdx) {
     commitEditingDraft(false);
@@ -555,6 +557,6 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
     toggleTaskCheckbox, beginEditingLine, getAbsoluteIndex, handleAddTableRow, handleAddTableColumn,
     handleDeleteTableRow, handleDeleteTableColumn, handleTableCellEdit, filteredPreviewCommands, executePreviewSlashCommand,
     openTrailingEditableLine, countTrailingEmptyLines, focusTableCell, handleTableCellKeyDown, renderBlockEditor,
-    revealPastedMedia,
+    revealPastedMedia, finishEditingForSelection,
   };
 }
