@@ -4,6 +4,7 @@ import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } fro
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
 import { getVerticalNavigationTarget, isTextareaCaretOnVerticalBoundary, type ReadingBlockRange } from './readingInteraction';
+import { useReadingPasteReveal } from './useReadingPasteReveal';
 
 export function useMarkdownPreviewEditing(props: any) {
   const { content, currentFile, handlePasteAtIndex, onContentChange, onExecuteSlashCommand, projectPath, slashCommands } = props;
@@ -32,6 +33,12 @@ const suppressClickAfterDragRef = useRef(false);
 const readingScrollKey = projectPath && currentFile
   ? `galois_reading_scroll:${projectPath}:${currentFile}`
   : '';
+const { commitMediaTextPaste, revealPastedMedia } = useReadingPasteReveal({
+  content,
+  onContentChange,
+  previewContainerRef,
+  setEditingLineIdx,
+});
 
 useEffect(() => {
   // Source-line/token indexes are intentionally ephemeral. A save, drag move,
@@ -296,8 +303,12 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.clipboardData?.files || []);
     const textarea = e.currentTarget;
+    if (commitMediaTextPaste(e, lineIdx, textarea)) {
+      editingDraftRef.current = null;
+      return;
+    }
     if (!files.some((file) => file.type.startsWith('image/'))) {
-      requestAnimationFrame(() => textarea.scrollIntoView({ block: 'nearest' }));
+      requestAnimationFrame(() => textarea.scrollIntoView({ block: 'end' }));
       return;
     }
     const selectionStart = textarea.selectionStart ?? textarea.value.length;
@@ -544,5 +555,6 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
     toggleTaskCheckbox, beginEditingLine, getAbsoluteIndex, handleAddTableRow, handleAddTableColumn,
     handleDeleteTableRow, handleDeleteTableColumn, handleTableCellEdit, filteredPreviewCommands, executePreviewSlashCommand,
     openTrailingEditableLine, countTrailingEmptyLines, focusTableCell, handleTableCellKeyDown, renderBlockEditor,
+    revealPastedMedia,
   };
 }

@@ -21,6 +21,7 @@ export function MarkdownPreviewSurface(props: any) {
     suppressClickAfterDragRef, toggleTaskCheckbox, updateBloodKey, updateMarkdownLines,
     draggedBlockKey, filteredPreviewCommands, onContentChange, setEditingLineIdx,
     selectedBlockRange, setSelectedBlockRange, selectedMedia, setSelectedMedia,
+    revealPastedMedia,
   } = props;
 
 const blocks = parseMarkdownIntoBlocks(content);
@@ -33,6 +34,7 @@ const readingInteractions = useReadingInteractions({
   selectedMedia,
   setSelectedBlockRange,
   setSelectedMedia,
+  revealPastedMedia,
 });
 
 const handleDeleteBlock = (block: ParsedBlock) => {

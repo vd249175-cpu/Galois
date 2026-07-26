@@ -75,6 +75,7 @@ const editorHook = read('APP', 'editor', 'useMarkdownPreviewEditing.tsx');
 const readingStyles = read('APP', 'editor', 'readingPreviewStyles.ts');
 const liveEditor = read('APP', 'editor', 'LiveMarkdownEditor.tsx');
 const mediaDropSource = read('APP', 'editor', 'hooks', 'useMediaDrop.ts');
+const readingPasteReveal = read('APP', 'editor', 'useReadingPasteReveal.ts');
 
 assert.match(surface, /onPointerDownCapture=\{readingInteractions\.onPointerDownCapture\}/);
 assert.match(surface, /onCopy=\{readingInteractions\.onCopy\}/);
@@ -115,5 +116,8 @@ assert.match(editorHook, /background: 'transparent'/);
 assert.match(editorHook, /border: 0/);
 assert.match(liveEditor, /EditorView\.scrollIntoView\(head, \{ y: 'nearest' \}\)/);
 assert.match(mediaDropSource, /caretIndex/);
+assert.match(readingPasteReveal, /isMediaMarkdownPaste/);
+assert.match(readingPasteReveal, /setEditingLineIdx\(null\)/);
+assert.match(readingPasteReveal, /image\.addEventListener\('load', reveal/);
 
 console.log('reading interaction probe: ok');

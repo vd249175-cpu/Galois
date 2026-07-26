@@ -411,7 +411,10 @@ removed and raw Markdown appears. Non-empty Live selections use inclusive
 replacement boundaries, so reaching either edge of a media widget while
 dragging forward or backward also reveals its raw Markdown immediately; delete
 and playback controls retain their own events. Text and asynchronous media paste paths reveal the resulting caret or
-inserted block instead of restoring the pre-paste viewport.
+inserted block instead of restoring the pre-paste viewport. Reading-mode paste
+recognizes clipboard payloads made only of media Markdown, commits them as
+source, exits the temporary textarea, and reveals the rebuilt media block both
+before and after image loading changes its height.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

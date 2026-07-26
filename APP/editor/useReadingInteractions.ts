@@ -27,6 +27,7 @@ interface UseReadingInteractionsOptions {
   selectedMedia: SelectedMedia | null;
   setSelectedBlockRange: (range: ReadingBlockRange | null) => void;
   setSelectedMedia: (media: SelectedMedia | null) => void;
+  revealPastedMedia?: (content: string, caretIndex: number, insertedText: string) => boolean;
 }
 
 interface PointerGesture {
@@ -78,7 +79,7 @@ function blockLineFromPoint(container: HTMLElement, clientY: number): number | n
 export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   const {
     beginEditingLine, blocks, content, onContentChange, selectedBlockRange, selectedMedia,
-    setSelectedBlockRange, setSelectedMedia,
+    setSelectedBlockRange, setSelectedMedia, revealPastedMedia,
   } = options;
   const gestureRef = useRef<PointerGesture>(emptyGesture());
 
@@ -230,8 +231,9 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     const lineIdx = beforeCaret.split('\n').length - 1;
     const lineStart = beforeCaret.lastIndexOf('\n') + 1;
     selection?.removeAllRanges();
+    const renderedPaste = revealPastedMedia?.(nextContent, nextCaret, replacement) || false;
     onContentChange(nextContent);
-    beginEditingLine(lineIdx, nextCaret - lineStart);
+    if (!renderedPaste) beginEditingLine(lineIdx, nextCaret - lineStart);
     return true;
   };
 
