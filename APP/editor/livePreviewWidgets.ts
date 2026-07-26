@@ -93,11 +93,8 @@ class MediaWidget extends WidgetType {
       event.preventDefault();
       event.stopPropagation();
     };
-    removeButton.onpointerdown = preserveMediaWidget;
-    removeButton.onmousedown = preserveMediaWidget;
-    removeButton.onclick = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
+    const removeMediaReference = (event: Event) => {
+      preserveMediaWidget(event);
       view.dispatch({
         changes: { from: this.from, to: this.to, insert: '' },
         selection: { anchor: this.from },
@@ -105,6 +102,13 @@ class MediaWidget extends WidgetType {
       });
       view.focus();
     };
+    removeButton.onpointerdown = (event) => {
+      if (event.button === 0) removeMediaReference(event);
+      else preserveMediaWidget(event);
+    };
+    removeButton.onmousedown = preserveMediaWidget;
+    removeButton.onclick = preserveMediaWidget;
+    removeButton.oncontextmenu = preserveMediaWidget;
 
     if (this.kind === 'image') {
       const img = document.createElement('img');

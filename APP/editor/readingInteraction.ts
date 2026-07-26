@@ -102,6 +102,46 @@ export function getVerticalNavigationTarget(
   return null;
 }
 
+export function isTextareaCaretOnVerticalBoundary(
+  textarea: HTMLTextAreaElement,
+  direction: -1 | 1
+): boolean {
+  if (textarea.selectionStart !== textarea.selectionEnd) return false;
+  const style = textarea.ownerDocument.defaultView?.getComputedStyle(textarea);
+  if (!style) return true;
+  const mirror = textarea.ownerDocument.createElement('div');
+  const properties = [
+    'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+    'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'lineHeight',
+    'textTransform', 'textIndent', 'wordSpacing', 'tabSize',
+  ] as const;
+  for (const property of properties) (mirror.style as any)[property] = style[property];
+  mirror.style.position = 'fixed';
+  mirror.style.left = '-10000px';
+  mirror.style.top = '0';
+  mirror.style.visibility = 'hidden';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.overflowWrap = 'break-word';
+  mirror.style.wordBreak = style.wordBreak;
+
+  const before = textarea.value.slice(0, textarea.selectionStart);
+  const after = textarea.value.slice(textarea.selectionStart);
+  mirror.append(textarea.ownerDocument.createTextNode(before));
+  const marker = textarea.ownerDocument.createElement('span');
+  marker.textContent = '\u200b';
+  mirror.append(marker, textarea.ownerDocument.createTextNode(after || '\u200b'));
+  textarea.ownerDocument.body.appendChild(mirror);
+  const markerTop = marker.offsetTop;
+  const lineHeight = Number.parseFloat(style.lineHeight) || Number.parseFloat(style.fontSize) * 1.2 || 16;
+  const contentTop = Number.parseFloat(style.paddingTop) || 0;
+  const contentBottom = mirror.scrollHeight - (Number.parseFloat(style.paddingBottom) || 0);
+  mirror.remove();
+  return direction < 0
+    ? markerTop <= contentTop + lineHeight * 0.35
+    : markerTop + lineHeight >= contentBottom - lineHeight * 0.35;
+}
+
 export function normalizedBlockRange(range: ReadingBlockRange): [number, number] {
   return [Math.min(range.anchorLine, range.focusLine), Math.max(range.anchorLine, range.focusLine)];
 }
@@ -226,8 +266,21 @@ export function mergeMarkdownImageLines(
 }
 
 export function getRenderedTextBounds(root: HTMLElement): DOMRect | null {
-  const range = root.ownerDocument.createRange();
-  range.selectNodeContents(root);
-  const rect = range.getBoundingClientRect();
-  return rect.width > 0 || rect.height > 0 ? rect : null;
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const rects: DOMRect[] = [];
+  let node = walker.nextNode();
+  while (node) {
+    if (node.textContent?.trim()) {
+      const range = root.ownerDocument.createRange();
+      range.selectNodeContents(node);
+      rects.push(...Array.from(range.getClientRects()));
+    }
+    node = walker.nextNode();
+  }
+  if (rects.length === 0) return null;
+  const left = Math.min(...rects.map((rect) => rect.left));
+  const right = Math.max(...rects.map((rect) => rect.right));
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const bottom = Math.max(...rects.map((rect) => rect.bottom));
+  return new DOMRect(left, top, right - left, bottom - top);
 }

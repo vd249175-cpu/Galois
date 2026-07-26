@@ -35,45 +35,39 @@ if (block.type === 'hr') {
 }
 
 if (block.type === 'h1') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <h1
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
       style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', margin: '18px 0 10px 0', fontSize: '1.55em', fontWeight: '700', cursor: 'text' }}
     >
-      {renderInline(contentVal.substring(2), block.startLine)}
+      {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(2), block.startLine)}
     </h1>
   );
   return wrapBlock(blockEl, block);
 }
 
 if (block.type === 'h2') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <h2
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
       style={{ borderBottom: '1px solid rgba(0,0,0,0.03)', paddingBottom: '4px', margin: '16px 0 8px 0', fontSize: '1.3em', fontWeight: '600', cursor: 'text' }}
     >
-      {renderInline(contentVal.substring(3), block.startLine)}
+      {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(3), block.startLine)}
     </h2>
   );
   return wrapBlock(blockEl, block);
 }
 
 if (block.type === 'h3') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <h3
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
       style={{ margin: '14px 0 6px 0', fontSize: '1.12em', fontWeight: '600', cursor: 'text' }}
     >
-      {renderInline(contentVal.substring(4), block.startLine)}
+      {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(4), block.startLine)}
     </h3>
   );
   return wrapBlock(blockEl, block);
@@ -86,16 +80,14 @@ if (block.type === 'h4' || block.type === 'h5' || block.type === 'h6') {
     5: { fontSize: '0.98em', fontWeight: '650', margin: '10px 0 4px 0' },
     6: { fontSize: '0.92em', fontWeight: '650', margin: '9px 0 4px 0', color: 'var(--text-muted)' },
   };
-  const blockEl = isEditing
-    ? renderBlockEditor(block.startLine, contentVal)
-    : React.createElement(
+  const blockEl = React.createElement(
         `h${level}`,
         {
           key: idx,
           onClick: (e: React.MouseEvent) => beginEditingLineFromClick(e, block.startLine),
           style: { ...headingStyles[level], cursor: 'text' },
         },
-        renderInline(contentVal.substring(level + 1), block.startLine)
+        isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(level + 1), block.startLine)
       );
   return wrapBlock(blockEl, block);
 }
@@ -104,9 +96,7 @@ if (block.type === 'todo' || block.type === 'quoteTodo') {
   const isQuotedTask = block.type === 'quoteTodo';
   const taskMatch = contentVal.match(/^(\s*(?:>\s*)*)[-*+]\s+\[( |x|X)\]\s+/);
   const isChecked = taskMatch?.[2].toLowerCase() === 'x';
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <div
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
@@ -134,8 +124,8 @@ if (block.type === 'todo' || block.type === 'quoteTodo') {
         onChange={() => toggleTaskCheckbox(block.startLine, isChecked)}
         style={{ cursor: 'pointer' }}
       />
-      <span style={{ textDecoration: isChecked ? 'line-through' : 'none' }}>
-        {renderInline(contentVal.substring(block.listContentStart || 6), block.startLine)}
+      <span style={{ textDecoration: isChecked ? 'line-through' : 'none', flex: 1, minWidth: 0 }}>
+        {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(block.listContentStart || 6), block.startLine)}
       </span>
     </div>
   );
@@ -143,24 +133,20 @@ if (block.type === 'todo' || block.type === 'quoteTodo') {
 }
 
 if (block.type === 'li') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <li
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
       style={{ margin: '4px 0', marginLeft: `${16 + (block.listIndent || 0) * 18}px`, fontSize: 'inherit', cursor: 'text' }}
     >
-      {renderInline(contentVal.substring(block.listContentStart || 2), block.startLine)}
+      {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(block.listContentStart || 2), block.startLine)}
     </li>
   );
   return wrapBlock(blockEl, block);
 }
 
 if (block.type === 'oli') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <div
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
@@ -169,31 +155,29 @@ if (block.type === 'oli') {
       <span style={{ minWidth: '20px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 650 }}>
         {block.listMarker || '1'}.
       </span>
-      <span>{renderInline(contentVal.substring(block.listContentStart || 3), block.startLine)}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(block.listContentStart || 3), block.startLine)}
+      </span>
     </div>
   );
   return wrapBlock(blockEl, block);
 }
 
 if (block.type === 'blockquote') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <blockquote
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
       style={{ borderLeft: '3px solid var(--accent-color)', paddingLeft: '12px', color: 'var(--text-muted)', margin: '10px 0', fontStyle: 'italic', backgroundColor: 'rgba(0,0,0,0.01)', padding: '6px 12px', borderRadius: '0 4px 4px 0', cursor: 'text' }}
     >
-      {renderInline(contentVal.substring(2), block.startLine)}
+      {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal.substring(2), block.startLine)}
     </blockquote>
   );
   return wrapBlock(blockEl, block);
 }
 
 if (block.type === 'empty') {
-  const blockEl = isEditing ? (
-    renderBlockEditor(block.startLine, contentVal)
-  ) : (
+  const blockEl = (
     <div
       key={idx}
       onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
@@ -220,7 +204,9 @@ if (block.type === 'empty') {
         e.currentTarget.style.backgroundColor = 'transparent';
       }}
       title="点击在此输入新内容..."
-    />
+    >
+      {isEditing ? renderBlockEditor(block.startLine, contentVal) : null}
+    </div>
   );
   return wrapBlock(blockEl, block);
 }
@@ -230,15 +216,13 @@ const isMediaParagraph = shouldTreatBlockAsMedia(block.rawText);
 const imageTokens = getMarkdownImageTokens(block.rawText);
 const isImageRow = imageTokens.length > 0 && stripMarkdownImageTokens(block.rawText).trim() === '';
 const isReactiveMarkdownBlock = /^\s*\{\{[\s\S]+\}\}\s*$/.test(contentVal);
-const blockEl = isEditing ? (
-  renderBlockEditor(block.startLine, contentVal)
-) : isReactiveMarkdownBlock ? (
+const blockEl = isReactiveMarkdownBlock ? (
   <div
     key={idx}
     onClick={(e) => beginEditingLineFromClick(e, block.startLine)}
     style={{ margin: '6px 0', lineHeight: 'inherit', fontSize: 'inherit', width: '100%' }}
   >
-    {renderInline(contentVal, block.startLine)}
+    {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal, block.startLine)}
   </div>
 ) : (
   <p
@@ -253,7 +237,7 @@ const blockEl = isEditing ? (
     }}
     style={{ margin: '6px 0', lineHeight: 'inherit', fontSize: 'inherit', cursor: isMediaParagraph ? 'default' : 'text' }}
   >
-    {renderInline(contentVal, block.startLine)}
+    {isEditing ? renderBlockEditor(block.startLine, contentVal) : renderInline(contentVal, block.startLine)}
   </p>
 );
 return wrapBlock(blockEl, block);

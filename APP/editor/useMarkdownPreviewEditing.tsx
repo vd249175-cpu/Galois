@@ -3,7 +3,7 @@ import { parseMarkdownIntoBlocks, type ParsedBlock } from './markdownBlockParser
 import { addTableColumn, deleteTableColumn, deleteTableRow, insertTableRow } from './tableEditing';
 import { handleSmartEnter, handleSmartTab } from './markdownEditing';
 import { filterAndRankSlashCommands } from './slashCommandSearch';
-import { getVerticalNavigationTarget, type ReadingBlockRange } from './readingInteraction';
+import { getVerticalNavigationTarget, isTextareaCaretOnVerticalBoundary, type ReadingBlockRange } from './readingInteraction';
 
 export function useMarkdownPreviewEditing(props: any) {
   const { content, currentFile, handlePasteAtIndex, onContentChange, onExecuteSlashCommand, projectPath, slashCommands } = props;
@@ -23,7 +23,7 @@ const [previewSlashMenu, setPreviewSlashMenu] = useState<{
   end: number;
 }>({ show: false, query: '', index: 0, coords: { left: 0, top: 0 }, start: -1, end: -1 });
 const isJumpingToNextLineRef = useRef(false);
-const pendingCaretPosRef = useRef<number | null>(null);
+const pendingEditorFocusRef = useRef<{ lineIdx: number; position: number } | null>(null);
 const previewSlashDraftRef = useRef<string | null>(null);
 const isExecutingPreviewSlashRef = useRef(false);
 const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +49,22 @@ useEffect(() => {
     container.scrollTop = Number.isFinite(saved) ? saved : 0;
   });
 }, [readingScrollKey]);
+
+useEffect(() => {
+  const request = pendingEditorFocusRef.current;
+  if (!request || request.lineIdx !== editingLineIdx) return;
+  const frame = requestAnimationFrame(() => {
+    const editor = previewContainerRef.current?.querySelector<HTMLTextAreaElement>(
+      `[data-dnote-reading-editor="${request.lineIdx}"]`
+    );
+    pendingEditorFocusRef.current = null;
+    if (!editor) return;
+    const target = Math.max(0, Math.min(request.position, editor.value.length));
+    editor.focus({ preventScroll: true });
+    editor.setSelectionRange(target, target);
+  });
+  return () => cancelAnimationFrame(frame);
+}, [editingLineIdx, content]);
 
 const persistReadingScroll = () => {
   const container = previewContainerRef.current;
@@ -94,7 +110,11 @@ const beginEditingLine = (lineIdx: number, caretPosition?: number | null) => {
   if (editingDraftRef.current?.lineIdx !== lineIdx) {
     commitEditingDraft(false);
   }
-  if (caretPosition !== undefined) pendingCaretPosRef.current = caretPosition;
+  const sourceLine = content.split('\n')[lineIdx] || '';
+  pendingEditorFocusRef.current = {
+    lineIdx,
+    position: caretPosition === undefined || caretPosition === null ? sourceLine.length : caretPosition,
+  };
   setSelectedBlockRange(null);
   setSelectedMedia(null);
   setEditingLineIdx(lineIdx);
@@ -126,7 +146,10 @@ const moveEditingToAdjacentBlock = (
   const targetValue = nextContent.split('\n')[targetLine] || '';
   editingDraftRef.current = null;
   isJumpingToNextLineRef.current = true;
-  pendingCaretPosRef.current = Math.min(preferredColumn, targetValue.length);
+  pendingEditorFocusRef.current = {
+    lineIdx: targetBlock.startLine,
+    position: Math.min(preferredColumn, targetValue.length),
+  };
   onContentChange(nextContent);
   setEditingLineIdx(targetBlock.startLine);
 };
@@ -319,7 +342,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
         e.currentTarget.selectionEnd ?? 0,
         e.key
       );
-      if (verticalTarget) {
+      if (verticalTarget && isTextareaCaretOnVerticalBoundary(e.currentTarget, verticalTarget.direction)) {
         e.preventDefault();
         moveEditingToAdjacentBlock(
           lineIdx,
@@ -352,6 +375,8 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
           isJumpingToNextLineRef.current = true;
           onContentChange(smart.text);
           const nextLineIdx = smart.text.substring(0, smart.newStart).split('\n').length - 1;
+          const nextLineStart = smart.text.lastIndexOf('\n', Math.max(0, smart.newStart - 1)) + 1;
+          pendingEditorFocusRef.current = { lineIdx: nextLineIdx, position: smart.newStart - nextLineStart };
           setEditingLineIdx(nextLineIdx);
           return;
         }
@@ -374,6 +399,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
         }
 
         onContentChange(allLines.join('\n'));
+        pendingEditorFocusRef.current = { lineIdx: nextLineIdx, position: 0 };
         setEditingLineIdx(nextLineIdx);
       }
     } else if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -388,6 +414,8 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
       if (smart.handled) {
         onContentChange(smart.text);
         const nextLineIdx = smart.text.substring(0, smart.newStart).split('\n').length - 1;
+        const nextLineStart = smart.text.lastIndexOf('\n', Math.max(0, smart.newStart - 1)) + 1;
+        pendingEditorFocusRef.current = { lineIdx: nextLineIdx, position: smart.newStart - nextLineStart };
         setEditingLineIdx(nextLineIdx);
       }
     } else if (e.key === 'Backspace') {
@@ -400,7 +428,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
         const prevText = currentLines[lineIdx - 1] || '';
 
         isJumpingToNextLineRef.current = true;
-        pendingCaretPosRef.current = prevText.length;
+        pendingEditorFocusRef.current = { lineIdx: lineIdx - 1, position: prevText.length };
 
         currentLines[lineIdx - 1] = prevText + currentText;
         currentLines.splice(lineIdx, 1);
@@ -435,6 +463,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
   return (
     <textarea
       key={`editor_${lineIdx}_${rawText}`}
+      data-dnote-reading-editor={lineIdx}
       defaultValue={rawText}
       placeholder="输入文字..."
       rows={1}
@@ -455,15 +484,17 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
       style={{
         fontFamily: 'inherit',
         fontSize: 'inherit',
+        fontWeight: 'inherit',
+        fontStyle: 'inherit',
+        letterSpacing: 'inherit',
         lineHeight: 'inherit',
         color: 'var(--text-main)',
-        background: 'color-mix(in srgb, var(--accent-color, #7000ff) 9%, transparent)',
-        border: '1.2px solid color-mix(in srgb, var(--accent-color, #7000ff) 55%, transparent)',
-        borderLeft: '3px solid var(--accent-color, #7000ff)',
+        background: 'transparent',
+        border: 0,
         outline: 'none',
-        padding: '6px 10px',
-        borderRadius: '4px',
-        margin: '6px 0',
+        padding: 0,
+        borderRadius: 0,
+        margin: 0,
         width: '100%',
         boxSizing: 'border-box',
         resize: 'none',
@@ -472,11 +503,7 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
       }}
       ref={(el) => {
         if (el) {
-          el.focus();
           editingDraftRef.current = { lineIdx, value: el.value };
-          const targetPos = pendingCaretPosRef.current !== null ? pendingCaretPosRef.current : el.value.length;
-          el.selectionStart = el.selectionEnd = targetPos;
-          pendingCaretPosRef.current = null;
           el.style.height = 'auto';
           el.style.height = `${el.scrollHeight + 3}px`;
         }

@@ -188,10 +188,18 @@ const wrapBlock = (element: React.ReactNode, block: ParsedBlock) => {
       {isDeletable && (
         <button type="button" draggable={false}
           className="media-delete-btn"
-          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          onClick={(e) => {
+          onPointerDown={(e) => {
+            e.preventDefault();
             e.stopPropagation();
-            handleDeleteBlock(block);
+            if (e.button === 0) handleDeleteBlock(block);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
           title={block.type === 'table' ? "删除此表格" : block.type === 'code' ? "删除此代码块" : "清除此媒体文件"}
         >

@@ -45,6 +45,24 @@ function blockLineFromTarget(target: EventTarget | null): number | null {
   return Number.isFinite(line) ? line : null;
 }
 
+function blockLineFromPoint(container: HTMLElement, clientY: number): number | null {
+  const wrappers = Array.from(container.querySelectorAll<HTMLElement>('[data-dnote-block-start]'));
+  if (wrappers.length === 0) return null;
+  const containing = wrappers.find((wrapper) => {
+    const rect = wrapper.getBoundingClientRect();
+    return clientY >= rect.top && clientY <= rect.bottom;
+  });
+  const closest = containing || wrappers.reduce((best, wrapper) => {
+    const rect = wrapper.getBoundingClientRect();
+    const distance = clientY < rect.top ? rect.top - clientY : clientY - rect.bottom;
+    const bestRect = best.getBoundingClientRect();
+    const bestDistance = clientY < bestRect.top ? bestRect.top - clientY : clientY - bestRect.bottom;
+    return distance < bestDistance ? wrapper : best;
+  });
+  const line = Number(closest.dataset.dnoteBlockStart);
+  return Number.isFinite(line) ? line : null;
+}
+
 export function useReadingInteractions(options: UseReadingInteractionsOptions) {
   const {
     beginEditingLine, blocks, content, onContentChange, selectedBlockRange, selectedMedia,
@@ -75,6 +93,7 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     if (blockMode && line !== null) {
       event.preventDefault();
       event.currentTarget.focus({ preventScroll: true });
+      event.currentTarget.setPointerCapture(event.pointerId);
       window.getSelection()?.removeAllRanges();
       setSelectedMedia(null);
       setSelectedBlockRange({ anchorLine: line, focusLine: line });
@@ -91,11 +110,14 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     if (!gesture.blockMode || gesture.anchorLine === null) return;
     event.preventDefault();
     window.getSelection()?.removeAllRanges();
-    const focusLine = blockLineFromTarget(event.target);
+    const focusLine = blockLineFromPoint(event.currentTarget, event.clientY);
     if (focusLine !== null) setSelectedBlockRange({ anchorLine: gesture.anchorLine, focusLine });
   };
 
-  const onPointerUpCapture = () => {
+  const onPointerUpCapture = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     window.setTimeout(() => {
       gestureRef.current = emptyGesture();
     }, 0);

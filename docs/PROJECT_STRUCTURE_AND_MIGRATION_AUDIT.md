@@ -93,8 +93,10 @@ inline renderer, IME protection and preview slash state.
 
 The later Reading interaction migration adds deterministic sentinels in
 `scripts/probe-reading-interactions.js` for caret mapping, vertical navigation,
-source-range copy, and persisted multi-image token insertion/removal. It is part
-of `npm run validate:interactions`.
+source-range copy, pointer-captured cross-block selection, one-shot caret focus,
+transparent inline editing, and persisted multi-image token insertion/removal.
+The window/media probe also verifies that Live and Reading removal starts on
+primary pointerdown. Both probes are part of `npm run validate:interactions`.
 
 This is a structural and static-equivalence audit. It does not replace manual
 interaction testing of browser/media decoding or OS permission dialogs; those

@@ -82,7 +82,12 @@ assert.match(mediaDrop, /text\/x-dnote-media-token/);
 assert.match(mediaDrop, /setStatusMessage\('图片排布已保存'\)/);
 assert.match(readingHook, /selection && !selection\.isCollapsed/);
 assert.match(readingHook, /gestureRef\.current\.moved/);
+assert.match(readingHook, /setPointerCapture\(event\.pointerId\)/);
+assert.match(readingHook, /blockLineFromPoint\(event\.currentTarget, event\.clientY\)/);
 assert.match(editorHook, /getVerticalNavigationTarget/);
-assert.match(editorHook, /pendingCaretPosRef\.current = Math\.min\(preferredColumn, targetValue\.length\)/);
+assert.match(editorHook, /pendingEditorFocusRef\.current = \{[\s\S]*?Math\.min\(preferredColumn, targetValue\.length\)/);
+assert.match(editorHook, /editor\.setSelectionRange\(target, target\)/);
+assert.match(editorHook, /background: 'transparent'/);
+assert.match(editorHook, /border: 0/);
 
 console.log('reading interaction probe: ok');

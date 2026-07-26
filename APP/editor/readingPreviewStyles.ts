@@ -13,7 +13,7 @@ export const readingPreviewStyles = `
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent-color, #7000ff) 62%, transparent);
 }
 .preview-block-wrapper[data-dnote-block-editing="true"] {
-  background: color-mix(in srgb, var(--accent-color, #7000ff) 7%, transparent);
+  background: transparent;
 }
 .markdown-preview-container {
   font-size: var(--editor-font-size, 14px);

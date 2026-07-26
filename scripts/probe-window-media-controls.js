@@ -17,13 +17,14 @@ assert.match(poppedTypeSource, /Blood\.subscribe\([\s\S]*?changedKeys\.has\(chan
 assert.match(poppedTypeSource, /BC\.layout\.poppedAreas\(areaId\), requestedType/);
 
 const mediaWidget = liveWidgetsSource.match(/class MediaWidget[\s\S]*?class VideoClipWidget/)?.[0] || '';
-assert.match(mediaWidget, /removeButton\.onpointerdown = preserveMediaWidget/);
+assert.match(mediaWidget, /removeButton\.onpointerdown = \(event\)[\s\S]*?removeMediaReference\(event\)/);
+assert.match(mediaWidget, /removeMediaReference[\s\S]*?view\.dispatch/);
 assert.match(mediaWidget, /removeButton\.onmousedown = preserveMediaWidget/);
 assert.match(mediaWidget, /ignoreEvent\(\)\s*\{[\s\S]*?return true/);
 
 const readingDeleteButton = readingSurfaceSource.match(/<button\s+type="button"[\s\S]*?className="media-delete-btn"[\s\S]*?<\/button>/)?.[0] || '';
 assert.match(readingDeleteButton, /draggable=\{false\}/);
-assert.match(readingDeleteButton, /onPointerDown=\{\(e\)[\s\S]*?e\.preventDefault\(\); e\.stopPropagation\(\)/);
-assert.match(readingDeleteButton, /onClick=\{\(e\)[\s\S]*?handleDeleteBlock\(block\)/);
+assert.match(readingDeleteButton, /onPointerDown=\{\(e\)[\s\S]*?e\.button === 0\) handleDeleteBlock\(block\)/);
+assert.match(readingDeleteButton, /onContextMenu=\{\(e\)[\s\S]*?e\.preventDefault\(\)/);
 
 console.log('window and media controls validated: popped type switching + direct media deletion');

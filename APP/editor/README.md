@@ -13,11 +13,11 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 - **本地音频**：推荐写作 `![audio](media/file.mp3)`；为兼容 Agent 生成的旧内容，指向 `mp3/wav/aac/m4a/ogg/flac` 的普通链接 `[播放音频](...)` 在 Live 与 Reading 模式也会自动显示播放器
 - Live Preview 中任务 checkbox 可直接点击切换完成状态，保持 Markdown 源码为唯一真实数据
 - **Reading**：阅读渲染 + 局部交互式编辑，继续使用 `MarkdownPreview` 展示 WikiLink、媒体、代码块、反应式表达式等内容
-- Live Preview 与 Reading 的媒体叉号都会直接删除正文中的 Markdown 媒体引用并保存；指针事件不会先展开或聚焦媒体源码行
-- Reading 中点击普通块会进入局部 textarea 编辑；在行首或空格后输入 `/` 可唤起与 Live Preview 共用的 slash commands
+- Live Preview 与 Reading 的媒体叉号在主键 `pointerdown` 阶段直接删除正文中的 Markdown 媒体引用并保存，早于媒体拖拽/右键菜单；后续鼠标与 click 事件只负责阻断，不会先展开或聚焦媒体源码行
+- Reading 中点击普通块会进入局部 textarea 编辑；编辑框继承原区块排版且不显示额外边框/底色；在行首或空格后输入 `/` 可唤起与 Live Preview 共用的 slash commands
 - Reading 中拖动文字保留浏览器原生跨行选择（从左向右、从右向左均可）；只有没有发生拖动的单击才进入编辑，并把光标映射到点击文字的位置
 - Reading 局部编辑器中的 ↑/↓ 先在段内换行间移动，到首行/末行后保存当前草稿并进入相邻 Markdown 区块，同时尽量保持横向列位置
-- 从区块左侧手柄区或正文右侧空白反向拖动可选择整段区块；复制时写入对应的原始 Markdown，编辑态和区块选中态均有独立高亮
+- 从区块左侧手柄区或正文右侧空白反向拖动会立即捕获指针并跨区块选择；复制时写入对应的原始 Markdown，只有区块选中态使用独立高亮，普通点击进入编辑不会改变区块外观
 - Reading 中 Markdown 表格支持直接编辑单元格，鼠标悬停表格时显示 `+ 行` / `+ 列` 工具条，并写回标准 Markdown 表格
 - Source 源码编辑路径保留为内部保底能力，不作为普通用户的主切换模式
 - Markdown 语言支持按需异步加载，Live Preview 通过 decorations/widgets 渲染，不额外维护第二份文档模型

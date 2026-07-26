@@ -115,8 +115,9 @@ editable files inside hidden application support folders.
   organ in the main window's activity bar therefore changes the floating
   window in place and updates `layout.poppedAreas.{areaId}` for later merging.
 - Media remove controls own their pointer events in both Live Preview and
-  Reading mode. Activating the cross removes the Markdown reference and saves
-  the note instead of first exposing/focusing the media source line.
+  Reading mode. Primary `pointerdown` on the cross removes the Markdown
+  reference and saves the note before native media drag/context-menu handling
+  can expose or focus the source line; later mouse/click events are consumed.
 - The installed `.app` bundle and `Contents/Resources/APP/` are treated as
   read-only application assets.
 
@@ -395,8 +396,10 @@ browser's native text selection in either direction; a true click opens the
 source line and maps the clicked rendered glyph back to its Markdown caret.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
-column. Dragging from the block gutter or blank space to the right creates a
-Notion-style block range; copying that range writes the exact source Markdown.
+column. The inline textarea inherits the rendered block typography and has no
+editing-only border or background. Dragging from the block gutter or blank space
+to the right captures the pointer and creates a Notion-style block range across
+wrapper boundaries; copying that range writes the exact source Markdown.
 
 Horizontal image layout is persisted as multiple image tokens on one Markdown
 line, for example `![a](media/a.png) ![b](media/b.png)`. Dragging one image onto
