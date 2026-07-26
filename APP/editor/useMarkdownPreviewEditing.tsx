@@ -34,6 +34,14 @@ const readingScrollKey = projectPath && currentFile
   : '';
 
 useEffect(() => {
+  // Source-line/token indexes are intentionally ephemeral. A save, drag move,
+  // external edit, or file switch invalidates them and must not leave a stale
+  // highlight pointing at a different block.
+  setSelectedBlockRange(null);
+  setSelectedMedia(null);
+}, [content, currentFile]);
+
+useEffect(() => {
   const container = previewContainerRef.current;
   if (!container || !readingScrollKey) return;
   const saved = Number(localStorage.getItem(readingScrollKey) || 0);
