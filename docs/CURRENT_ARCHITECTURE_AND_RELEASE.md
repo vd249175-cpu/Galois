@@ -418,7 +418,10 @@ and playback controls retain their own events. Text and asynchronous media paste
 inserted block instead of restoring the pre-paste viewport. Reading-mode paste
 recognizes clipboard payloads made only of media Markdown, commits them as
 source, exits the temporary textarea, and reveals the rebuilt media block both
-before and after image loading changes its height.
+before and after image loading changes its height. Clipboard image-file
+archiving returns the generated Markdown as part of its insertion result and
+uses the same blur/rebuild/end-alignment transaction after the async work
+finishes.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

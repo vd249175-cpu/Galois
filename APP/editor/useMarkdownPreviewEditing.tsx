@@ -315,19 +315,13 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
     }
     const selectionStart = textarea.selectionStart ?? textarea.value.length;
     const draft = replaceLineInDraft(textarea.value);
-    void Promise.resolve(handlePasteAtIndex(e, getAbsoluteIndex(lineIdx, selectionStart), draft)).then((result: any) => {
-      if (!result?.content || !Number.isFinite(result.caretIndex)) return;
-      const targetLine = result.content.slice(0, result.caretIndex).split('\n').length - 1;
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const wrappers = Array.from(
-          previewContainerRef.current?.querySelectorAll<HTMLElement>('[data-dnote-block-start]') || []
-        );
-        wrappers.find((wrapper) => {
-          const start = Number(wrapper.dataset.dnoteBlockStart);
-          const end = Number(wrapper.dataset.dnoteBlockEnd);
-          return targetLine >= start && targetLine <= end;
-        })?.scrollIntoView({ block: 'nearest' });
-      }));
+    const insertion = handlePasteAtIndex(e, getAbsoluteIndex(lineIdx, selectionStart), draft);
+    editingDraftRef.current = null;
+    setEditingLineIdx(null);
+    requestAnimationFrame(() => previewContainerRef.current?.focus({ preventScroll: true }));
+    void Promise.resolve(insertion).then((result: any) => {
+      if (!result?.content || !Number.isFinite(result.caretIndex) || !result.insertedMarkdown) return;
+      revealPastedMedia(result.content, result.caretIndex, result.insertedMarkdown);
     });
   };
 

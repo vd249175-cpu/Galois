@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type ClipboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type RefObject } from 'react';
 
 interface ReadingPasteRevealOptions {
   content: string;
@@ -28,11 +28,13 @@ export function useReadingPasteReveal({
   setEditingLineIdx,
 }: ReadingPasteRevealOptions) {
   const pendingLineRef = useRef<number | null>(null);
+  const [revealRequest, setRevealRequest] = useState(0);
 
   const revealPastedMedia = useCallback((nextContent: string, caretIndex: number, insertedText: string) => {
     if (!isMediaMarkdownPaste(insertedText)) return false;
     pendingLineRef.current = targetLineForInsertion(nextContent, caretIndex, insertedText);
     setEditingLineIdx(null);
+    setRevealRequest((request) => request + 1);
     return true;
   }, [setEditingLineIdx]);
 
@@ -53,6 +55,7 @@ export function useReadingPasteReveal({
         if (!wrapper) return;
 
         const reveal = () => wrapper.scrollIntoView({ block: 'end', inline: 'nearest' });
+        container.focus({ preventScroll: true });
         reveal();
         wrapper.querySelectorAll<HTMLImageElement>('img').forEach((image) => {
           if (!image.complete) image.addEventListener('load', reveal, { once: true });
@@ -64,7 +67,7 @@ export function useReadingPasteReveal({
       cancelAnimationFrame(firstFrame);
       if (secondFrame) cancelAnimationFrame(secondFrame);
     };
-  }, [content, previewContainerRef]);
+  }, [content, previewContainerRef, revealRequest]);
 
   const commitMediaTextPaste = useCallback((
     event: ClipboardEvent<HTMLTextAreaElement>,

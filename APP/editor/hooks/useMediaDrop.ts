@@ -22,6 +22,7 @@ type PasteEvent = React.ClipboardEvent | ClipboardEvent;
 export interface MediaInsertionResult {
   content: string;
   caretIndex: number;
+  insertedMarkdown: string;
 }
 
 export function useMediaDrop({
@@ -153,7 +154,7 @@ export function useMediaDrop({
           ? `Imported ${mediaFiles.length} media file(s), skipped ${skippedCount} unsupported file(s).`
           : `Imported ${mediaFiles.length} media file(s).`
       );
-      return { content: nextContent, caretIndex };
+      return { content: nextContent, caretIndex, insertedMarkdown: blockText };
     } catch (err: any) {
       console.error('[useMediaDrop] archive failed:', err);
       setStatusMessage(`Failed to archive media: ${err.message}`);

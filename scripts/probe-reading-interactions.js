@@ -118,8 +118,11 @@ assert.match(editorHook, /background: 'transparent'/);
 assert.match(editorHook, /border: 0/);
 assert.match(liveEditor, /EditorView\.scrollIntoView\(head, \{ y: 'nearest' \}\)/);
 assert.match(mediaDropSource, /caretIndex/);
+assert.match(mediaDropSource, /insertedMarkdown: blockText/);
 assert.match(readingPasteReveal, /isMediaMarkdownPaste/);
 assert.match(readingPasteReveal, /setEditingLineIdx\(null\)/);
+assert.match(readingPasteReveal, /setRevealRequest/);
+assert.match(readingPasteReveal, /container\.focus\(\{ preventScroll: true \}\)/);
 assert.match(readingPasteReveal, /image\.addEventListener\('load', reveal/);
 
 console.log('reading interaction probe: ok');
