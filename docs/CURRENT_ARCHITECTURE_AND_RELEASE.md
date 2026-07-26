@@ -407,8 +407,10 @@ in-app paste recreates the media instead of pasting the rendered `alt` label.
 Reading pointer drags explicitly preserve their DOM anchor with
 `Selection.setBaseAndExtent`, making upward and downward selection symmetric.
 Live media bodies route primary pointerdown to the token start so the widget is
-removed and raw Markdown appears; delete and playback controls retain their own
-events. Text and asynchronous media paste paths reveal the resulting caret or
+removed and raw Markdown appears. Non-empty Live selections use inclusive
+replacement boundaries, so reaching either edge of a media widget while
+dragging forward or backward also reveals its raw Markdown immediately; delete
+and playback controls retain their own events. Text and asynchronous media paste paths reveal the resulting caret or
 inserted block instead of restoring the pre-paste viewport.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved

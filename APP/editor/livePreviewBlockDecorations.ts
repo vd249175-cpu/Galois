@@ -14,7 +14,7 @@ interface HiddenRange {
 function selectionTouches(view: EditorView, from: number, to: number): boolean {
   return view.state.selection.ranges.some((range) => {
     if (range.empty) return range.from >= from && range.from <= to;
-    return range.from < to && range.to > from;
+    return range.from <= to && range.to >= from;
   });
 }
 

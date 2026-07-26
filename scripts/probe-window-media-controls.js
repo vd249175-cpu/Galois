@@ -17,6 +17,7 @@ assert.match(poppedTypeSource, /Blood\.subscribe\([\s\S]*?changedKeys\.has\(chan
 assert.match(poppedTypeSource, /BC\.layout\.poppedAreas\(areaId\), requestedType/);
 
 const mediaWidget = liveWidgetsSource.match(/class MediaWidget[\s\S]*?class VideoClipWidget/)?.[0] || '';
+assert.match(liveWidgetsSource, /range\.from <= to && range\.to >= from/);
 assert.match(mediaWidget, /removeButton\.onpointerdown = \(event\)[\s\S]*?removeMediaReference\(event\)/);
 assert.match(mediaWidget, /removeMediaReference[\s\S]*?view\.dispatch/);
 assert.match(mediaWidget, /wrapper\.onpointerdown/);

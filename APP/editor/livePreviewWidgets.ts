@@ -10,7 +10,11 @@ interface LivePreviewOptions {
 function selectionTouches(view: EditorView, from: number, to: number): boolean {
   return view.state.selection.ranges.some((range) => {
     if (range.empty) return range.from >= from && range.from <= to;
-    return range.from < to && range.to > from;
+    // CodeMirror can visually include a replacement widget while the native
+    // selection endpoint is still exactly on the widget boundary. Treat both
+    // boundaries as touched so forward and backward drags reveal the source as
+    // soon as the media is selected, without requiring movement past it.
+    return range.from <= to && range.to >= from;
   });
 }
 

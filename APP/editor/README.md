@@ -10,7 +10,7 @@ Lattice Editor 是 Galois 的**核心编辑器官**。它支持 Markdown 双栏�
 - `meta+e`（`editor.toggleMode`）在 **Live Preview** ↔ **Reading** 之间切换
 - 模式状态持久化到 `localStorage dnote_editor_mode`，旧的 Source/编辑模式配置会迁移到 Live Preview
 - **Live Preview**：CodeMirror 6 编辑态预览，`#` 标题、`**bold**`、`*italic*`、`` `code` ``、`[link](url)`、`[[WikiLink]]`、任务 checkbox、`{{ reactive }}`、`![media](path)`、`@video[](...)` 在光标离开时渲染为 widget/decoration，光标进入时显示原始 Markdown
-- Live Preview 的媒体正文（删除按钮和播放器控件除外）在主键按下时把 CodeMirror 光标定位到 token 头部并撤销 widget，因此点击媒体头部/正文能立即显示原始 Markdown
+- Live Preview 的媒体正文（删除按钮和播放器控件除外）在主键按下时把 CodeMirror 光标定位到 token 头部并撤销 widget；拖拽选区的任一端点刚接触媒体 Markdown 边界也视为已选中，因此从上向下或从下向上选择媒体都会立即显示原始 Markdown，无需越过整个媒体
 - **本地音频**：推荐写作 `![audio](media/file.mp3)`；为兼容 Agent 生成的旧内容，指向 `mp3/wav/aac/m4a/ogg/flac` 的普通链接 `[播放音频](...)` 在 Live 与 Reading 模式也会自动显示播放器
 - Live Preview 中任务 checkbox 可直接点击切换完成状态，保持 Markdown 源码为唯一真实数据
 - **Reading**：阅读渲染 + 局部交互式编辑，继续使用 `MarkdownPreview` 展示 WikiLink、媒体、代码块、反应式表达式等内容
