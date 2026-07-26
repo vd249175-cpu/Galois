@@ -19,6 +19,8 @@ assert.match(poppedTypeSource, /BC\.layout\.poppedAreas\(areaId\), requestedType
 const mediaWidget = liveWidgetsSource.match(/class MediaWidget[\s\S]*?class VideoClipWidget/)?.[0] || '';
 assert.match(mediaWidget, /removeButton\.onpointerdown = \(event\)[\s\S]*?removeMediaReference\(event\)/);
 assert.match(mediaWidget, /removeMediaReference[\s\S]*?view\.dispatch/);
+assert.match(mediaWidget, /wrapper\.onpointerdown/);
+assert.match(mediaWidget, /selection: \{ anchor: this\.from \}/);
 assert.match(mediaWidget, /removeButton\.onmousedown = preserveMediaWidget/);
 assert.match(mediaWidget, /ignoreEvent\(\)\s*\{[\s\S]*?return true/);
 

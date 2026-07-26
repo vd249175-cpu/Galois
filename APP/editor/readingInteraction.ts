@@ -24,6 +24,11 @@ export interface ReadingSourceRange {
   end: number;
 }
 
+export interface DomCaretPoint {
+  node: Node;
+  offset: number;
+}
+
 const isComparableWhitespace = (value: string) => /\s/.test(value);
 
 /**
@@ -68,6 +73,15 @@ export function mapRenderedOffsetToMarkdown(
 }
 
 export function getRenderedCaretOffset(root: HTMLElement, clientX: number, clientY: number): number | null {
+  const point = getDomCaretPointFromCoordinates(root, clientX, clientY);
+  return point ? getRenderedOffsetForDomPosition(root, point.node, point.offset) : null;
+}
+
+export function getDomCaretPointFromCoordinates(
+  root: HTMLElement,
+  clientX: number,
+  clientY: number
+): DomCaretPoint | null {
   const doc = root.ownerDocument;
   let node: Node | null = null;
   let offset = 0;
@@ -84,8 +98,8 @@ export function getRenderedCaretOffset(root: HTMLElement, clientX: number, clien
       offset = caretRange.startOffset;
     }
   }
-  if (!node) return null;
-  return getRenderedOffsetForDomPosition(root, node, offset);
+  if (!node || (node !== root && !root.contains(node))) return null;
+  return { node, offset };
 }
 
 export function getRenderedOffsetForDomPosition(

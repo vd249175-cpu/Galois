@@ -83,6 +83,15 @@ class MediaWidget extends WidgetType {
     const wrapper = document.createElement('span');
     wrapper.className = `cm-dnote-media cm-dnote-media-${this.kind}`;
     wrapper.title = this.kind === 'image' ? '媒体。点击叉号可从正文移除引用。' : this.url;
+    wrapper.onpointerdown = (event) => {
+      if (event.button !== 0) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('button, audio, video, input, select')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      view.dispatch({ selection: { anchor: this.from }, scrollIntoView: true });
+      view.focus();
+    };
 
     const removeButton = document.createElement('button');
     removeButton.className = 'cm-dnote-media-remove';
@@ -149,9 +158,8 @@ class MediaWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    // Media controls own their pointer events. Letting CodeMirror handle the
-    // initial pointerdown reveals the source range and destroys the button
-    // before its click handler can remove the Markdown reference.
+    // The widget routes its own pointerdown: media body reveals the source,
+    // while remove/playback controls keep ownership of their events.
     return true;
   }
 }

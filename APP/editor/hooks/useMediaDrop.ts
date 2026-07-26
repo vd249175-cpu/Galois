@@ -19,6 +19,11 @@ interface UseMediaDropOptions {
 type DropEvent = React.DragEvent | DragEvent;
 type PasteEvent = React.ClipboardEvent | ClipboardEvent;
 
+export interface MediaInsertionResult {
+  content: string;
+  caretIndex: number;
+}
+
 export function useMediaDrop({
   projectPath,
   currentFile,
@@ -97,7 +102,7 @@ export function useMediaDrop({
     insertAtLine?: number,
     insertAtIndex?: number,
     sourceContent?: string
-  ) => {
+  ): Promise<MediaInsertionResult | undefined> => {
     if (!projectPath || !currentFile) {
       setStatusMessage('Open a notebook directory and select a note first.');
       return;
@@ -120,16 +125,24 @@ export function useMediaDrop({
       const baseContent = sourceContent ?? contentRef.current;
 
       let nextContent = '';
+      let caretIndex = baseContent.length;
       if (insertAtLine !== undefined) {
         const lines = baseContent.split('\n');
+        const beforeInsertion = lines.slice(0, insertAtLine + 1).join('\n');
         lines.splice(insertAtLine + 1, 0, ...markups);
         nextContent = lines.join('\n');
+        caretIndex = beforeInsertion.length + (beforeInsertion ? 1 : 0) + blockText.length;
       } else if (insertAtIndex !== undefined) {
         nextContent = insertBlockAtIndex(baseContent, insertAtIndex, blockText);
+        const safeIndex = Math.max(0, Math.min(insertAtIndex, baseContent.length));
+        const prefixLength = safeIndex > 0 && baseContent.charAt(safeIndex - 1) !== '\n' ? 1 : 0;
+        caretIndex = safeIndex + prefixLength + blockText.length;
       } else if (isPreviewMode) {
         nextContent = appendBlock(baseContent, blockText);
+        caretIndex = nextContent.endsWith('\n') ? nextContent.length - 1 : nextContent.length;
       } else {
         nextContent = appendBlock(baseContent, blockText);
+        caretIndex = nextContent.endsWith('\n') ? nextContent.length - 1 : nextContent.length;
       }
 
       setContent(nextContent);
@@ -140,9 +153,11 @@ export function useMediaDrop({
           ? `Imported ${mediaFiles.length} media file(s), skipped ${skippedCount} unsupported file(s).`
           : `Imported ${mediaFiles.length} media file(s).`
       );
+      return { content: nextContent, caretIndex };
     } catch (err: any) {
       console.error('[useMediaDrop] archive failed:', err);
       setStatusMessage(`Failed to archive media: ${err.message}`);
+      return undefined;
     }
   };
 
@@ -218,8 +233,8 @@ export function useMediaDrop({
   const handlePasteAtIndex = async (e: PasteEvent, insertIndex: number, sourceContent?: string) => {
     e.preventDefault();
     const files = Array.from(e.clipboardData?.files || []).filter(isSupportedMediaFile);
-    if (files.length === 0) return;
-    await archiveAndInsert(files, undefined, insertIndex, sourceContent);
+    if (files.length === 0) return undefined;
+    return archiveAndInsert(files, undefined, insertIndex, sourceContent);
   };
 
   const handleLineDrop = async (e: React.DragEvent, lineIdx: number) => {

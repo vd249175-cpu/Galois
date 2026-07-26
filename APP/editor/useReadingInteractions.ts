@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import type { ParsedBlock } from './markdownBlockParser';
 import {
+  getDomCaretPointFromCoordinates,
   getRenderedCaretOffset,
   getMarkdownSourceRangeFromSelection,
   getRenderedTextBounds,
@@ -35,6 +36,7 @@ interface PointerGesture {
   blockMode: boolean;
   blockCandidate: boolean;
   anchorLine: number | null;
+  selectionAnchor: { node: Node; offset: number } | null;
 }
 
 const emptyGesture = (): PointerGesture => ({
@@ -44,6 +46,7 @@ const emptyGesture = (): PointerGesture => ({
   blockMode: false,
   blockCandidate: false,
   anchorLine: null,
+  selectionAnchor: null,
 });
 
 function blockLineFromTarget(target: EventTarget | null): number | null {
@@ -92,6 +95,9 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
     const canSelectBlock = line !== null && !target.closest(
       'button, input, textarea, select, a, video, audio, .drag-handle, [contenteditable="true"]'
     );
+    const canSelectText = !target.closest(
+      'button, input, textarea, select, video, audio, .drag-handle, [contenteditable="true"]'
+    );
     const blockMode = canSelectBlock && startsInGutter;
     const blockCandidate = canSelectBlock && startsAfterContent;
 
@@ -102,6 +108,9 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
       blockMode,
       blockCandidate,
       anchorLine: line,
+      selectionAnchor: canSelectText
+        ? getDomCaretPointFromCoordinates(event.currentTarget, event.clientX, event.clientY)
+        : null,
     };
     if (blockMode && line !== null) {
       event.preventDefault();
@@ -124,6 +133,21 @@ export function useReadingInteractions(options: UseReadingInteractionsOptions) {
       window.getSelection()?.removeAllRanges();
       setSelectedMedia(null);
       setSelectedBlockRange({ anchorLine: gesture.anchorLine, focusLine: gesture.anchorLine });
+    }
+    if (gesture.moved && !gesture.blockMode && gesture.selectionAnchor) {
+      const focus = getDomCaretPointFromCoordinates(event.currentTarget, event.clientX, event.clientY);
+      if (focus) {
+        event.preventDefault();
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
+        window.getSelection()?.setBaseAndExtent(
+          gesture.selectionAnchor.node,
+          gesture.selectionAnchor.offset,
+          focus.node,
+          focus.offset
+        );
+      }
     }
     if (!gesture.blockMode || gesture.anchorLine === null) return;
     event.preventDefault();

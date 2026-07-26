@@ -404,6 +404,12 @@ does not activate until the pointer actually moves past the drag threshold.
 Copy and cut use that same source range. Any intersected rendered media element
 expands the range to its complete image/audio/video/clip Markdown token, so an
 in-app paste recreates the media instead of pasting the rendered `alt` label.
+Reading pointer drags explicitly preserve their DOM anchor with
+`Selection.setBaseAndExtent`, making upward and downward selection symmetric.
+Live media bodies route primary pointerdown to the token start so the widget is
+removed and raw Markdown appears; delete and playback controls retain their own
+events. Text and asynchronous media paste paths reveal the resulting caret or
+inserted block instead of restoring the pre-paste viewport.
 Arrow Up/Down stays inside multiline textarea content until its first/last row,
 then commits the draft and enters the adjacent Markdown block at the preserved
 column. The inline textarea inherits the rendered block typography and has no

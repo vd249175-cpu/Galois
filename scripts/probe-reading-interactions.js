@@ -73,6 +73,8 @@ const mediaDrop = read('APP', 'editor', 'hooks', 'useMediaDrop.ts');
 const readingHook = read('APP', 'editor', 'useReadingInteractions.ts');
 const editorHook = read('APP', 'editor', 'useMarkdownPreviewEditing.tsx');
 const readingStyles = read('APP', 'editor', 'readingPreviewStyles.ts');
+const liveEditor = read('APP', 'editor', 'LiveMarkdownEditor.tsx');
+const mediaDropSource = read('APP', 'editor', 'hooks', 'useMediaDrop.ts');
 
 assert.match(surface, /onPointerDownCapture=\{readingInteractions\.onPointerDownCapture\}/);
 assert.match(surface, /onCopy=\{readingInteractions\.onCopy\}/);
@@ -94,6 +96,8 @@ assert.match(readingHook, /getMarkdownSourceRangeFromSelection/);
 assert.match(readingHook, /replaceNativeSelection/);
 assert.match(readingHook, /content\.slice\(range\.start, range\.end\)/);
 assert.match(readingHook, /gesture\.moved && gesture\.blockCandidate/);
+assert.match(readingHook, /setBaseAndExtent/);
+assert.match(readingHook, /getDomCaretPointFromCoordinates/);
 const readingInteractionSource = read('APP', 'editor', 'readingInteraction.ts');
 assert.match(readingInteractionSource, /selectedMediaSourceRange/);
 assert.match(readingInteractionSource, /intersectsNode\(media\)/);
@@ -106,7 +110,10 @@ assert.match(preview, /onContentChange=\{onContentChange\}/);
 assert.match(editorHook, /getVerticalNavigationTarget/);
 assert.match(editorHook, /pendingEditorFocusRef\.current = \{[\s\S]*?Math\.min\(preferredColumn, targetValue\.length\)/);
 assert.match(editorHook, /editor\.setSelectionRange\(target, target\)/);
+assert.match(editorHook, /editor\.scrollIntoView\(\{ block: 'nearest' \}\)/);
 assert.match(editorHook, /background: 'transparent'/);
 assert.match(editorHook, /border: 0/);
+assert.match(liveEditor, /EditorView\.scrollIntoView\(head, \{ y: 'nearest' \}\)/);
+assert.match(mediaDropSource, /caretIndex/);
 
 console.log('reading interaction probe: ok');

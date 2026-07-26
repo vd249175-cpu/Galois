@@ -266,7 +266,15 @@ export const LiveMarkdownEditor = forwardRef<EditorTextHandle, LiveMarkdownEdito
               paste: (event, currentView) => {
                 const files = Array.from(event.clipboardData?.files || []);
                 const hasImage = files.some((file) => file.type.startsWith('image/'));
-                if (!hasImage) return false;
+                if (!hasImage) {
+                  requestAnimationFrame(() => {
+                    const head = currentView.state.selection.main.head;
+                    currentView.dispatch({
+                      effects: EditorView.scrollIntoView(head, { y: 'nearest' }),
+                    });
+                  });
+                  return false;
+                }
                 event.preventDefault();
                 callbacksRef.current.onPasteAtPosition?.(event, currentView.state.selection.main.head);
                 return true;

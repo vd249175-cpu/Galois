@@ -62,6 +62,7 @@ useEffect(() => {
     const target = Math.max(0, Math.min(request.position, editor.value.length));
     editor.focus({ preventScroll: true });
     editor.setSelectionRange(target, target);
+    editor.scrollIntoView({ block: 'nearest' });
   });
   return () => cancelAnimationFrame(frame);
 }, [editingLineIdx, content]);
@@ -294,11 +295,27 @@ const renderBlockEditor = (lineIdx: number, rawText: string) => {
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.clipboardData?.files || []);
-    if (!files.some((file) => file.type.startsWith('image/'))) return;
     const textarea = e.currentTarget;
+    if (!files.some((file) => file.type.startsWith('image/'))) {
+      requestAnimationFrame(() => textarea.scrollIntoView({ block: 'nearest' }));
+      return;
+    }
     const selectionStart = textarea.selectionStart ?? textarea.value.length;
     const draft = replaceLineInDraft(textarea.value);
-    handlePasteAtIndex(e, getAbsoluteIndex(lineIdx, selectionStart), draft);
+    void Promise.resolve(handlePasteAtIndex(e, getAbsoluteIndex(lineIdx, selectionStart), draft)).then((result: any) => {
+      if (!result?.content || !Number.isFinite(result.caretIndex)) return;
+      const targetLine = result.content.slice(0, result.caretIndex).split('\n').length - 1;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const wrappers = Array.from(
+          previewContainerRef.current?.querySelectorAll<HTMLElement>('[data-dnote-block-start]') || []
+        );
+        wrappers.find((wrapper) => {
+          const start = Number(wrapper.dataset.dnoteBlockStart);
+          const end = Number(wrapper.dataset.dnoteBlockEnd);
+          return targetLine >= start && targetLine <= end;
+        })?.scrollIntoView({ block: 'nearest' });
+      }));
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

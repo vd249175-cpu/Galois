@@ -202,7 +202,7 @@ export function EditorView({
     handleDragOver,
     handleDrop,
     handleDropAtIndex,
-    handlePasteAtIndex,
+    handlePasteAtIndex: handleMediaPasteAtIndex,
     handleLineDrop,
   } = useMediaDrop({
     projectPath,
@@ -213,6 +213,17 @@ export function EditorView({
     saveNodeFile,
     setStatusMessage,
   });
+
+  const handlePasteAtIndex = async (...args: Parameters<typeof handleMediaPasteAtIndex>) => {
+    const result = await handleMediaPasteAtIndex(...args);
+    if (result && !isReadingMode) {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(result.caretIndex, result.caretIndex);
+      }));
+    }
+    return result;
+  };
 
   // ── LinkNavigator ─────────────────────────────────────────────────────────
   const { handleLinkClick } = useLinkNavigator({ projectPath, areaId, updateBloodKey });
